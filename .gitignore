@@ -10,6 +10,8 @@ backup/
 nohup.out
 .windsurfrules
 upload/
+skills/
+dist/
 .agent
 .gemini
 .claude
