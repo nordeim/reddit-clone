@@ -1,4 +1,4 @@
-import type { Database } from "./client";
+import type { Database } from "./client.js";
 
 /**
  * FTS5 virtual table + sync triggers for full-text search over posts

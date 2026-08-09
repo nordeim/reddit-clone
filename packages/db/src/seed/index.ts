@@ -1,10 +1,10 @@
-import type { DrizzleDB } from "../client";
+import type { DrizzleDB } from "../client.js";
 import { sql } from "drizzle-orm";
-import { seedUsers } from "./users";
-import { seedCommunities } from "./communities";
-import { seedPosts } from "./posts";
-import { seedComments } from "./comments";
-import { seedNotifications } from "./notifications";
+import { seedUsers } from "./users.js";
+import { seedCommunities } from "./communities.js";
+import { seedPosts } from "./posts.js";
+import { seedComments } from "./comments.js";
+import { seedNotifications } from "./notifications.js";
 
 export interface SeedResult {
   userCount: number;

@@ -1,4 +1,4 @@
-import { openDb } from "../src/client";
+import { openDb } from "../src/client.js";
 
 /**
  * Apply pending Drizzle migrations to the configured database.

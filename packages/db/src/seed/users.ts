@@ -1,7 +1,7 @@
-import type { DrizzleDB } from "../client";
-import { users } from "../schema/index";
-import { createRng, gradientFor } from "./random";
-import { FIRST_NAMES, LAST_NAMES, SUFFIXES, BIOS } from "./data";
+import type { DrizzleDB } from "../client.js";
+import { users } from "../schema/index.js";
+import { createRng, gradientFor } from "./random.js";
+import { FIRST_NAMES, LAST_NAMES, SUFFIXES, BIOS } from "./data.js";
 
 export interface GeneratedUser {
   id: string;

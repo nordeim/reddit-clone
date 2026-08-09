@@ -9,6 +9,6 @@
  *   - Generic envelope schemas (`paginateOutputSchema`, `errorResponseSchema`)
  */
 
-export * from "./ids";
-export * from "./schemas/index";
-export * from "./api/index";
+export * from "./ids.js";
+export * from "./schemas/index.js";
+export * from "./api/index.js";

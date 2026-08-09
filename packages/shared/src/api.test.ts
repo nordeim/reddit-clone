@@ -12,7 +12,7 @@ import {
   listNotificationsQuerySchema,
   paginateOutputSchema,
   errorResponseSchema,
-} from "./api/index";
+} from "./api/index.js";
 import { z } from "zod";
 
 describe("auth API schemas", () => {

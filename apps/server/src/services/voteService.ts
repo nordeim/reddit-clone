@@ -1,6 +1,6 @@
 import type { DrizzleDB } from "@embers/db";
-import type { VoteRepository, TargetType } from "../repositories/voteRepository";
-import type { PostRepository, CommentRepository } from "../repositories/postRepository";
+import type { VoteRepository, TargetType } from "../repositories/voteRepository.js";
+import type { PostRepository, CommentRepository } from "../repositories/postRepository.js";
 
 export interface CastVoteInput {
   userId: string;

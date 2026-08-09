@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { openDb, runSeed } from "@embers/db";
-import { createUserRepository } from "../repositories/userRepository";
-import { createSessionRepository } from "../repositories/sessionRepository";
-import { buildAuthRoutes } from "./auth";
+import { createUserRepository } from "../repositories/userRepository.js";
+import { createSessionRepository } from "../repositories/sessionRepository.js";
+import { buildAuthRoutes } from "./auth.js";
 
 const ACCESS_SECRET = "test-access-secret-32-chars-minimum-length!";
 const REFRESH_SECRET = "test-refresh-secret-32-chars-minimum-length!";

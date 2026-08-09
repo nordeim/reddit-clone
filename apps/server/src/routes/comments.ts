@@ -1,9 +1,9 @@
 import type { FastifyInstance } from "fastify";
 import { randomUUID } from "node:crypto";
 import { createCommentInputSchema } from "@embers/shared";
-import type { CommentRepository, PostRepository } from "../repositories/postRepository";
-import { buildCommentTree } from "../services/commentTreeService";
-import type { NotificationRepository } from "../repositories/notificationRepository";
+import type { CommentRepository, PostRepository } from "../repositories/postRepository.js";
+import { buildCommentTree } from "../services/commentTreeService.js";
+import type { NotificationRepository } from "../repositories/notificationRepository.js";
 
 export interface CommentRouteDeps {
   commentRepo: CommentRepository;

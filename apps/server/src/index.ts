@@ -1,5 +1,6 @@
-import { buildApp } from "./app";
-import { loadEnv } from "./config";
+import { buildApp } from "./app.js";
+import { loadEnv } from "./config.js";
+import { openDb } from "@embers/db";
 
 /**
  * Server entrypoint — boots the Fastify app on the configured PORT/HOST.
@@ -10,7 +11,8 @@ import { loadEnv } from "./config";
  */
 async function main(): Promise<void> {
   const env = loadEnv();
-  const app = await buildApp({ env: process.env });
+  const { raw, db } = openDb({ path: env.DATABASE_URL });
+  const app = await buildApp({ env: process.env, db, rawDb: raw });
 
   try {
     await app.listen({

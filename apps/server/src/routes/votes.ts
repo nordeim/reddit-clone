@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { castVoteInputSchema } from "@embers/shared";
-import type { VoteService } from "../services/voteService";
+import type { VoteService } from "../services/voteService.js";
 
 export interface VoteRouteDeps {
   voteService: VoteService;

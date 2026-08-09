@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { signAccessToken, signRefreshToken, verifyAccessToken, verifyRefreshToken, decodeRefreshToken } from "./jwt";
+import { signAccessToken, signRefreshToken, verifyAccessToken, verifyRefreshToken, decodeRefreshToken } from "./jwt.js";
 
 const ACCESS_SECRET = "test-access-secret-32-chars-minimum-length!";
 const REFRESH_SECRET = "test-refresh-secret-32-chars-minimum-length!";

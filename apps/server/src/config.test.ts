@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { envSchema, type Env } from "./config";
+import { envSchema, type Env } from "./config.js";
 
 describe("env config", () => {
   it("provides safe dev defaults when NODE_ENV != production", () => {

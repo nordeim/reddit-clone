@@ -1,7 +1,7 @@
-import type { DrizzleDB } from "../client";
-import { communities } from "../schema/index";
-import { createRng } from "./random";
-import { COMMUNITY_SEEDS } from "./data";
+import type { DrizzleDB } from "../client.js";
+import { communities } from "../schema/index.js";
+import { createRng } from "./random.js";
+import { COMMUNITY_SEEDS } from "./data.js";
 
 export interface GeneratedCommunity {
   id: string;

@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { searchQuerySchema } from "@embers/shared";
 import type { Database } from "@embers/db";
 import { searchPosts, communities, users } from "@embers/db";
-import type { CommunityRepository } from "../repositories/postRepository";
+import type { CommunityRepository } from "../repositories/postRepository.js";
 import { or, like } from "drizzle-orm";
 
 type CommunitySelectRow = typeof communities.$inferSelect;

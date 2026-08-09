@@ -1,9 +1,9 @@
-import type { DrizzleDB } from "../client";
-import { notifications } from "../schema/index";
-import { createRng } from "./random";
-import type { GeneratedPost } from "./posts";
-import type { GeneratedUser } from "./users";
-import type { GeneratedCommunity } from "./communities";
+import type { DrizzleDB } from "../client.js";
+import { notifications } from "../schema/index.js";
+import { createRng } from "./random.js";
+import type { GeneratedPost } from "./posts.js";
+import type { GeneratedUser } from "./users.js";
+import type { GeneratedCommunity } from "./communities.js";
 
 export interface GeneratedNotification {
   id: string;

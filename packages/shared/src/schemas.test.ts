@@ -10,8 +10,8 @@ import {
   sortModeSchema,
   imageCategorySchema,
   notificationTypeSchema,
-} from "./schemas/index";
-import type { User, Community, Post, Comment, AppNotification } from "./schemas/index";
+} from "./schemas/index.js";
+import type { User, Community, Post, Comment, AppNotification } from "./schemas/index.js";
 
 describe("entity schemas", () => {
   const validUser = {

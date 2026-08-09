@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import type { CommunityRepository } from "../repositories/postRepository";
+import type { CommunityRepository } from "../repositories/postRepository.js";
 
 export interface CommunityRouteDeps {
   communityRepo: CommunityRepository;

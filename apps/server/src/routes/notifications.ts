@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { listNotificationsQuerySchema } from "@embers/shared";
-import type { NotificationRepository } from "../repositories/notificationRepository";
+import type { NotificationRepository } from "../repositories/notificationRepository.js";
 
 export interface NotificationRouteDeps {
   notificationRepo: NotificationRepository;

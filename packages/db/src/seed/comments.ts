@@ -1,9 +1,9 @@
-import type { DrizzleDB } from "../client";
-import { comments as commentsTable } from "../schema/index";
-import { createRng } from "./random";
-import { OPENERS, REPLIES } from "./data";
-import type { GeneratedPost } from "./posts";
-import type { GeneratedUser } from "./users";
+import type { DrizzleDB } from "../client.js";
+import { comments as commentsTable } from "../schema/index.js";
+import { createRng } from "./random.js";
+import { OPENERS, REPLIES } from "./data.js";
+import type { GeneratedPost } from "./posts.js";
+import type { GeneratedUser } from "./users.js";
 
 export interface GeneratedComment {
   id: string;

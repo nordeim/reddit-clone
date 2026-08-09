@@ -4,7 +4,7 @@ import {
   postTypeSchema,
   imageCategorySchema,
   voteValueSchema,
-} from "../schemas/index";
+} from "../schemas/index.js";
 
 /**
  * API input/output schemas — every endpoint validates its request body /

@@ -1,9 +1,9 @@
-import type { DrizzleDB } from "../client";
-import { posts } from "../schema/index";
-import { createRng, hashString } from "./random";
-import { TITLE_BANK, SELF_TEXT_POOL, LINK_DOMAINS, FLAIRS } from "./data";
-import type { GeneratedCommunity } from "./communities";
-import type { GeneratedUser } from "./users";
+import type { DrizzleDB } from "../client.js";
+import { posts } from "../schema/index.js";
+import { createRng, hashString } from "./random.js";
+import { TITLE_BANK, SELF_TEXT_POOL, LINK_DOMAINS, FLAIRS } from "./data.js";
+import type { GeneratedCommunity } from "./communities.js";
+import type { GeneratedUser } from "./users.js";
 
 export interface GeneratedPost {
   id: string;

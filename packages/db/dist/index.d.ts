@@ -1,0 +1,16 @@
+/**
+ * @embers/db — Drizzle ORM + better-sqlite3 + FTS5.
+ *
+ * Exports:
+ *   - openDb(): open a hardened connection (WAL, busy_timeout, FK on)
+ *   - listTables(): introspection helper
+ *   - Drizzle schema tables: users, communities, posts, comments,
+ *     votes, notifications, sessions
+ *   - FTS5: applyFts5(), searchPosts()
+ */
+export * from "./client.js";
+export * from "./schema/index.js";
+export * as schema from "./schema/index.js";
+export { applyFts5, searchPosts, FTS5_SCHEMA_SQL, FTS5_TRIGGERS_SQL } from "./fts5.js";
+export { runSeed, type SeedResult, type SeedOptions } from "./seed/index.js";
+export { hashString, seededRandom, createRng, gradientFor } from "./seed/random.js";

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildApp } from "../app";
+import { buildApp } from "../app.js";
 
 /**
  * Phase J — Helmet + rate-limit hardening tests.

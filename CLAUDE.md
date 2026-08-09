@@ -29,7 +29,7 @@ The original client-only React SPA lives at `apps/web/` (`@embers/web`): **no ba
 | Routing | react-router-dom | 7.18.2 (`HashRouter`) |
 | State | zustand | 5.0.14 (`persist` middleware) |
 | Animation | framer-motion | 13.x |
-| Icons | lucide-react | 1.30.x |
+| Icons | lucide-react | 1.31.0 |
 | Utilities | clsx + tailwind-merge | 2.1.1 / 3.4.0 |
 | Testing | vitest + @testing-library/react | 2.1.9 / 16.x |
 | Test env | jsdom | 25.x |
@@ -130,8 +130,8 @@ The backend uses **Drizzle ORM** with `better-sqlite3` — a completely differen
 
 7 tables: `users`, `communities`, `posts`, `comments`, `votes`, `notifications`, `sessions`.
 
-- All IDs are `text` (UUIDs generated app-side via `crypto.randomUUID()`)
-- Timestamps are ISO 8601 `text` (UTC, `toISOString()`)
+- All IDs are `text`. API-created rows use UUIDs (`p-${uuid}`, `u-${uuid}`), but seed data uses deterministic IDs (`u1`…`u48`, `p1`…`p320`, `c1`…`cN`)
+- Timestamps are `text`. All `created_at` columns default to SQLite `CURRENT_TIMESTAMP` (`YYYY-MM-DD HH:MM:SS`). Only seed data and session-expiry writes use `toISOString()` (ISO 8601)
 - `votes` has a composite PK `(user_id, target_id, target_type)` — one vote per user per target
 - `sessions` stores refresh-token JTIs for revocation
 
@@ -141,7 +141,7 @@ The backend uses **Drizzle ORM** with `better-sqlite3` — a completely differen
 - Sync triggers: `posts_ai` (insert), `posts_ad` (delete), `posts_au` (update)
 - BM25 ranking via `searchPosts(db, query, limit, offset)`
 
-### Branded IDs (`packages/db/src/ids.ts`)
+### Branded IDs (`packages/shared/src/ids.ts`)
 
 Nominal-typed string aliases (`UserId`, `PostId`, etc.) that prevent passing the wrong ID type. Erased at runtime, enforced at compile time. Use `asUserId()` to lift a raw string.
 
@@ -276,7 +276,7 @@ reddit-clone/
 │           ├── index.ts     # Entry point (listen + graceful shutdown)
 │           ├── config.ts    # loadEnv() zod-validated env
 │           ├── auth/        # jwt.ts, password.ts (Argon2id)
-│           ├── plugins/     # helmet, cors, cookie, rateLimit, requestId, auth, errorHandler
+│           ├── plugins/     # requestId, auth, errorHandler (local files); helmet/cors/cookie/rateLimit are @fastify/* registered inline in app.ts
 │           ├── repositories/ # userRepository, postRepository, voteRepository, etc.
 │           ├── services/    # voteService (transactional), commentTreeService
 │           └── routes/      # health, auth, posts, communities, votes, comments, search, notifications
@@ -325,10 +325,10 @@ reddit-clone/
 | PATCH | `/api/posts/:id` | Yes (author) | Partial update |
 | DELETE | `/api/posts/:id` | Yes (author) | Delete post |
 | GET | `/api/communities` | No | List communities |
-| GET | `/api/communities/:id` | No | Single community |
+| GET | `/api/communities/:slug` | No | Single community |
 | PUT | `/api/votes/:targetId` | Yes | Cast/toggle/flip vote |
-| GET | `/api/comments/:postId` | No | Comment tree |
-| POST | `/api/comments/:postId` | Yes | Create comment |
+| GET | `/api/posts/:id/comments` | No | Comment tree |
+| POST | `/api/posts/:id/comments` | Yes | Create comment |
 | GET | `/api/search` | No | FTS5 search (posts/communities/users) |
 | GET | `/api/notifications` | Yes | List notifications |
 

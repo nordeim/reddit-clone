@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import fp from "fastify-plugin";
-import { verifyAccessToken } from "../auth/jwt";
+import { verifyAccessToken } from "../auth/jwt.js";
 
 export interface AuthUser {
   id: string;

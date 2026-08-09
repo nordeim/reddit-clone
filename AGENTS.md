@@ -46,7 +46,7 @@
 
 ## Build & toolchain quirks
 
-- **`vite-plugin-singlefile`** inlines all JS and CSS into a single `dist/index.html` (~508 kB). Do **not** add `React.lazy`, dynamic `import()`, or manual chunks — code splitting defeats the plugin.
+- **`vite-plugin-singlefile`** inlines all JS and CSS into a single `dist/index.html` (~525 kB). Do **not** add `React.lazy`, dynamic `import()`, or manual chunks — code splitting defeats the plugin.
 - The build is **not** fully self-contained. `public/images/*.jpg` are copied to `dist/images/` and referenced by absolute URL `/images/...` (`src/data/images.ts`), and `src/index.css` `@import`s Inter from Google Fonts. Serve `dist/` from a web root; opening it over `file://` breaks images and fonts.
 - **`HashRouter`**, not `BrowserRouter` (`src/App.tsx`) — deliberate, so the single-file build works on any static host with no rewrite rules. Don't switch it.
 - **Tailwind CSS v4** via the `@tailwindcss/vite` plugin. There is no `tailwind.config.js` and no PostCSS config; the theme lives in `src/index.css` under `@theme`.
@@ -102,10 +102,10 @@ The server follows a **composition root** pattern — `buildApp(opts)` in `src/a
 | PATCH | `/api/posts/:id` | Yes (author) | Partial update |
 | DELETE | `/api/posts/:id` | Yes (author) | Delete post |
 | GET | `/api/communities` | No | List communities |
-| GET | `/api/communities/:id` | No | Single community |
+| GET | `/api/communities/:slug` | No | Single community |
 | PUT | `/api/votes/:targetId` | Yes | Cast/toggle/flip vote |
-| GET | `/api/comments/:postId` | No | Comment tree |
-| POST | `/api/comments/:postId` | Yes | Create comment |
+| GET | `/api/posts/:id/comments` | No | Comment tree |
+| POST | `/api/posts/:id/comments` | Yes | Create comment |
 | GET | `/api/search` | No | FTS5 search (posts/communities/users) |
 | GET | `/api/notifications` | Yes | List notifications |
 
@@ -116,7 +116,7 @@ The server follows a **composition root** pattern — `buildApp(opts)` in `src/a
 - **`authenticate` decorator** — routes opt in via `preHandler: [app.authenticate]`. Reads `Authorization: Bearer <token>`, sets `req.user = { id, username }`
 - **Author-only enforcement**: routes check `existing.authorId !== user.id` → 403 (not 401)
 - **Rate limiting on auth endpoints**: 5 req/min/IP (stricter than the 100/min global limit)
-- **Refresh token rotation**: each refresh revokes the old token (session row `revocedAt` set) and issues a new one
+- **Refresh token rotation**: each refresh revokes the old token (session row `revokedAt` set) and issues a new one
 
 ### Database & FTS5
 
@@ -135,7 +135,7 @@ The server follows a **composition root** pattern — `buildApp(opts)` in `src/a
 - `buildApp({ env, db, rawDb })` wires repositories + routes for integration tests
 - **Helmet/rate-limit** can be skipped via `skipHelmet`/`skipRateLimit` options (rate-limit auto-disabled in `NODE_ENV=test`)
 - **Auth tests** use the seeded demo user; **vote concurrency tests** seed 100 users directly via Drizzle insert (bypassing Argon2id for speed)
-- Test files: 8 in `apps/server/src/routes/` and `src/auth/`, 2 in `packages/db/src/`, 3 in `packages/shared/src/`
+- Test files: 8 in `apps/server/src/` (5 in `routes/`, 2 in `auth/`, 1 `config.test.ts` in root), 2 in `packages/db/src/`, 3 in `packages/shared/src/`
 
 ### Backend Pitfalls
 

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { openDb, runSeed, type Database, type DrizzleDB } from "@embers/db";
-import { buildApp } from "../app";
+import { buildApp } from "../app.js";
 
 const ACCESS_SECRET = "test-access-secret-32-chars-minimum-length!";
 const REFRESH_SECRET = "test-refresh-secret-32-chars-minimum-length!";

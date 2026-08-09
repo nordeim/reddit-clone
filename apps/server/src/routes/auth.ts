@@ -5,10 +5,10 @@ import {
   loginInputSchema,
   type AuthUser,
 } from "@embers/shared";
-import { hashPassword, verifyPassword } from "../auth/password";
-import { signAccessToken, signRefreshToken, verifyRefreshToken, newJti } from "../auth/jwt";
-import type { UserRepository } from "../repositories/userRepository";
-import type { SessionRepository } from "../repositories/sessionRepository";
+import { hashPassword, verifyPassword } from "../auth/password.js";
+import { signAccessToken, signRefreshToken, verifyRefreshToken, newJti } from "../auth/jwt.js";
+import type { UserRepository } from "../repositories/userRepository.js";
+import type { SessionRepository } from "../repositories/sessionRepository.js";
 import { gradientFor } from "@embers/db";
 import { z } from "zod";
 

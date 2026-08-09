@@ -1,4 +1,4 @@
-import { buildApp } from "./src/app";
+import { buildApp } from "./src/app.js";
 import { openDb, runSeed } from "@embers/db";
 
 async function main() {

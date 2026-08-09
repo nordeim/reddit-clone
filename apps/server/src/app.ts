@@ -4,11 +4,11 @@ import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
 
-import { loadEnv, type Env } from "./config";
-import requestIdPlugin from "./plugins/requestId";
-import errorHandlerPlugin from "./plugins/errorHandler";
-import authPlugin from "./plugins/auth";
-import { healthRoutes } from "./routes/health";
+import { loadEnv, type Env } from "./config.js";
+import requestIdPlugin from "./plugins/requestId.js";
+import errorHandlerPlugin from "./plugins/errorHandler.js";
+import authPlugin from "./plugins/auth.js";
+import { healthRoutes } from "./routes/health.js";
 import type { DrizzleDB } from "@embers/db";
 
 export interface BuildAppOptions {
@@ -124,23 +124,23 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
 
   // When a DB connection is provided, register all API routes.
   if (opts.db && opts.rawDb) {
-    const { createUserRepository } = await import("./repositories/userRepository");
-    const { createSessionRepository } = await import("./repositories/sessionRepository");
+    const { createUserRepository } = await import("./repositories/userRepository.js");
+    const { createSessionRepository } = await import("./repositories/sessionRepository.js");
     const {
       createPostRepository,
       createCommunityRepository,
       createCommentRepository,
-    } = await import("./repositories/postRepository");
-    const { createVoteRepository } = await import("./repositories/voteRepository");
-    const { createNotificationRepository } = await import("./repositories/notificationRepository");
-    const { createVoteService } = await import("./services/voteService");
-    const { buildAuthRoutes } = await import("./routes/auth");
-    const { buildPostRoutes } = await import("./routes/posts");
-    const { buildCommunityRoutes } = await import("./routes/communities");
-    const { buildVoteRoutes } = await import("./routes/votes");
-    const { buildCommentRoutes } = await import("./routes/comments");
-    const { buildSearchRoutes } = await import("./routes/search");
-    const { buildNotificationRoutes } = await import("./routes/notifications");
+    } = await import("./repositories/postRepository.js");
+    const { createVoteRepository } = await import("./repositories/voteRepository.js");
+    const { createNotificationRepository } = await import("./repositories/notificationRepository.js");
+    const { createVoteService } = await import("./services/voteService.js");
+    const { buildAuthRoutes } = await import("./routes/auth.js");
+    const { buildPostRoutes } = await import("./routes/posts.js");
+    const { buildCommunityRoutes } = await import("./routes/communities.js");
+    const { buildVoteRoutes } = await import("./routes/votes.js");
+    const { buildCommentRoutes } = await import("./routes/comments.js");
+    const { buildSearchRoutes } = await import("./routes/search.js");
+    const { buildNotificationRoutes } = await import("./routes/notifications.js");
 
     const userRepo = createUserRepository(opts.db);
     const sessionRepo = createSessionRepository(opts.db);

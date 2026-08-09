@@ -1,5 +1,5 @@
-import { openDb } from "../src/client";
-import { runSeed } from "../src/seed";
+import { openDb } from "../src/client.js";
+import { runSeed } from "../src/seed/index.js";
 
 /**
  * Production seed runner.

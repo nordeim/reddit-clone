@@ -2,8 +2,8 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { openDb, runSeed } from "@embers/db";
 import { users } from "@embers/db/schema";
-import { buildApp } from "../app";
-import { signAccessToken } from "../auth/jwt";
+import { buildApp } from "../app.js";
+import { signAccessToken } from "../auth/jwt.js";
 
 const ACCESS_SECRET = "test-access-secret-32-chars-minimum-length!";
 const REFRESH_SECRET = "test-refresh-secret-32-chars-minimum-length!";

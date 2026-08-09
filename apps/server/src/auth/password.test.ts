@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { hashPassword, verifyPassword } from "./password";
+import { hashPassword, verifyPassword } from "./password.js";
 
 describe("password hashing (Argon2id)", () => {
   // Argon2id at default cost is ~50-100ms per hash — tests here are intentionally

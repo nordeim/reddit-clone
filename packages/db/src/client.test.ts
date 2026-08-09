@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { openDb, listTables } from "./client";
-import { applyFts5, searchPosts } from "./fts5";
-import { posts, users, communities, votes } from "./schema/index";
+import { openDb, listTables } from "./client.js";
+import { applyFts5, searchPosts } from "./fts5.js";
+import { posts, users, communities, votes } from "./schema/index.js";
 import { eq } from "drizzle-orm";
 import { rmSync } from "node:fs";
 

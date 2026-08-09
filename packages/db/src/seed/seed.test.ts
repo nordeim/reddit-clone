@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { openDb } from "../client";
-import { runSeed } from "./index";
-import { hashString, createRng, gradientFor } from "./random";
+import { openDb } from "../client.js";
+import { runSeed } from "./index.js";
+import { hashString, createRng, gradientFor } from "./random.js";
 
 /**
  * Fake password hasher — replaces argon2 in tests so we don't pay the

@@ -12,7 +12,7 @@ import {
   asCommentId,
   asNotificationId,
   isUserId,
-} from "./ids";
+} from "./ids.js";
 
 describe("branded IDs", () => {
   it("asUserId creates a UserId from a string", () => {

@@ -4,8 +4,8 @@ import { migrate as drizzleMigrate } from "drizzle-orm/better-sqlite3/migrator";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { existsSync } from "node:fs";
-import * as schema from "./schema/index";
-import { applyFts5 } from "./fts5";
+import * as schema from "./schema/index.js";
+import { applyFts5 } from "./fts5.js";
 
 export type Database = Database.Database;
 export type DrizzleDB = BetterSQLite3Database<typeof schema>;

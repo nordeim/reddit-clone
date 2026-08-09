@@ -7,7 +7,7 @@ import {
   paginateOutputSchema,
   type Post,
 } from "@embers/shared";
-import type { PostRepository, CommunityRepository } from "../repositories/postRepository";
+import type { PostRepository, CommunityRepository } from "../repositories/postRepository.js";
 
 export interface PostRouteDeps {
   postRepo: PostRepository;

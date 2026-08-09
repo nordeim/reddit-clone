@@ -12,6 +12,10 @@ Do not create any new git branch. All git commits must be to the main branch.
 
 please meticulously review @AGENTS.md and @CLAUDE.md to have a deep understanding of the project and its codebase design and architecture. next, meticulously validate your deep understanding against the codebase to check for alignment.
 
+please meticulously review @docs/documentation_audit_report.md and validate the findings against the codebase to check for alignment 
+
+your last tool call failed. please check your tool call and try again. then meticulously continue.
+
 please meticulously plan to review and validate @AGENTS.md , @CLAUDE.md and @README.md against the codebase to check for alignment
 
 please meticulously plan to apply precise edits to the relevant documents to align them with the current codebase. but first re-evaluate and re-validate your findings again to ensure alignment.
