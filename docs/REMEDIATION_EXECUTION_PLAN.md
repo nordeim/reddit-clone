@@ -611,3 +611,110 @@ so the next pass picks up cleanly.
 | §6 B17–B24 frontend + deployment | DEFERRED (§5) | — | Deferred |
 
 End of plan.
+
+---
+
+## 8. Round 2 — Build-Error Remediation (2026-08-09, round 2)
+
+After the Round 1 push (B0–B16), running `npm run build` from a clean
+state (`rm -rf packages/*/dist apps/*/dist`) failed with 40 TypeScript
+errors in `apps/server`. The build log is preserved at
+`docs/REMEDIATION_ROUND_2_PLAN.md`.
+
+### 8.1 Root Cause Analysis
+
+**Category A — Build-ordering failures (32 of 40 errors):**
+
+The root `package.json` `build` script was:
+```json
+"build": "npm run build --workspaces --if-present"
+```
+npm runs this in workspace-array order (`apps/*` first, then `packages/*`),
+so `@embers/server` started its `tsc` before `@embers/shared` and
+`@embers/db` had emitted their `dist/` folders. Since both packages
+declare `"types": "./dist/index.d.ts"`, TypeScript couldn't resolve them.
+
+**Fix:** Updated root `package.json` `build` and `typecheck` scripts to
+run in topological order:
+```json
+"build": "npm run build --workspace @embers/shared && npm run build --workspace @embers/db && npm run build --workspace @embers/server && npm run build --workspace @embers/web"
+```
+
+Also added the missing `"@embers/db": "*"` to `apps/server/package.json`
+`dependencies` (it was imported by every repository + service file but
+only `@embers/shared` was declared).
+
+**Category B — Real TypeScript source bugs (8 of 40 errors):**
+
+1. `services/commentTreeService.ts:1` — `import type { comments }` was
+   wrong (Drizzle table is a value, not a type). Fixed to `import { comments }`.
+2. `services/voteService.ts:45` — `db.transaction((_tx) => ...)` had an
+   untyped `_tx` parameter. Since better-sqlite3 is synchronous and
+   single-connection, operations on the outer `db` execute within the
+   transaction automatically, so the `tx` parameter is unused. Fixed by
+   omitting the parameter entirely.
+3. `repositories/notificationRepository.ts:64` — `.map((r) => ...)` had
+   implicit `any`. Fixed by typing `r: NotificationSelectRow` (sourced
+   via `typeof notifications.$inferSelect`).
+4. `routes/search.ts:32,55,80` — three `.map()` callbacks with implicit
+   `any`. Fixed by typing each callback parameter explicitly.
+
+### 8.2 Gaps Closed (B10 + B11 acceptance criteria)
+
+**Gap G-1 — B10 PATCH/DELETE with authorization:**
+
+Round 1 implemented only POST (create) + GET (read). The plan's acceptance
+criterion ("Integration tests verify 403 Forbidden on unauthorized edits")
+was unmet.
+
+Round 2 added:
+- `updatePostInputSchema` in `@embers/shared` (partial-update Zod schema
+  with same URL-safety refine as `createPostInputSchema`)
+- `postRepository.update(id, patch)` + `postRepository.delete(id)` methods
+- `PATCH /api/posts/:id` route — auth + author check (403 if not author)
+- `DELETE /api/posts/:id` route — auth + author check; FTS5 trigger fires
+  automatically to remove from `posts_fts`
+- 12 integration tests covering: 401 without auth, 200 when author,
+  403 when non-author, 404 unknown post, 422 empty title,
+  422 javascript: URL, linkDomain update on linkUrl change,
+  204 delete + GET returns 404, FTS5 trigger removes from search
+
+**Gap G-2 — B11 concurrency test:**
+
+Round 1 implemented atomic SQL `UPDATE … SET col = col + delta` but never
+wrote the explicit "100 simultaneous votes → +100" test called for in
+the plan.
+
+Round 2 added `voteConcurrency.test.ts` (3 tests):
+- 100 upvotes from 100 different users → final score exactly +100
+- 100 toggles from one user (even count) → final score 0 (toggled off)
+- Flip from -1 to +1 → score changes by +2 (downvote removed + upvote added)
+
+The test pre-seeds 100 voter users directly in the DB (bypassing the
+HTTP auth flow to avoid the ~10s Argon2id cost) and signs access tokens
+directly via the JWT helpers. Each vote request only does JWT verification
++ atomic SQL UPDATE — fast and isolates the vote-counter logic.
+
+### 8.3 Verification (Round 2)
+
+| Check | Result |
+|---|---|
+| `rm -rf packages/*/dist apps/*/dist && npm run build` | All 4 workspaces emit `dist/`, exit 0 |
+| `npm run typecheck` (topological order) | Exit 0 for all 4 workspaces |
+| `npm test --workspaces --if-present` | 367 tests pass (was 346 in Round 1) |
+| `@embers/web` single-file build intact | `apps/web/dist/index.html` 525 KB |
+| New PATCH/DELETE tests | 12 green |
+| New concurrency tests | 3 green |
+| New `updatePostInputSchema` tests | 6 green |
+
+### 8.4 Test count delta
+
+| Workspace | Round 1 | Round 2 | Delta |
+|---|---|---|---|
+| `@embers/web` | 176 | 176 | 0 |
+| `@embers/shared` | 61 | 67 | +6 (updatePostInputSchema tests) |
+| `@embers/db` | 29 | 29 | 0 |
+| `@embers/server` | 80 | 95 | +15 (12 PATCH/DELETE + 3 concurrency) |
+| **Total** | **346** | **367** | **+21** |
+
+End of Round 2.

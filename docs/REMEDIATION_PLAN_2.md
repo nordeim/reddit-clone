@@ -132,8 +132,8 @@ Each phase requires passing automated tests before proceeding.
 **Phase B8-B12: Auth & Core Domain API (TDD)**
 *   [x] **B8: Auth Repositories.** Implement User CRUD and Argon2id hashing. *Test: Unit tests verify password hashing and comparison.*
 *   [x] **B9: Auth Endpoints.** Implement Login/Refresh/Logout. *Test: Integration tests verify cookie issuance, JWT rotation, and rejection of expired tokens.*
-*   [x] **B10: Post/Community API.** Implement CRUD with authorization checks (only author can edit). *Test: Integration tests verify 403 Forbidden on unauthorized edits.*
-*   [x] **B11: Transactional Votes.** Implement `PUT /votes`. *Test: Concurrent load test (100 simultaneous votes) results in exactly 100 incremented upvotes without race conditions.* (Verified via atomic SQL `UPDATE … SET col = col + delta`.)
+*   [x] **B10: Post/Community API.** Implement CRUD with authorization checks (only author can edit). *Test: Integration tests verify 403 Forbidden on unauthorized edits.* (PATCH + DELETE routes with author-only authorization added in Round 2; 12 integration tests cover 200/403/404/422 paths.)
+*   [x] **B11: Transactional Votes.** Implement `PUT /votes`. *Test: Concurrent load test (100 simultaneous votes) results in exactly 100 incremented upvotes without race conditions.* (Atomic SQL `UPDATE … SET col = col + delta` inside a transaction; verified by `voteConcurrency.test.ts` — 100 upvotes from 100 different users produce exactly +100 score; 100 toggles from one user produce 0 net; flip from -1 to +1 produces +2.)
 *   [x] **B12: Comment Tree.** Implement recursive CTEs or application-level tree building for nested comments. *Test: Deep nested comment structures are correctly retrieved and ordered.*
 
 **Phase B13-B16: Advanced Features & Hardening**

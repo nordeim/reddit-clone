@@ -157,6 +157,49 @@ export function createPostRepository(db: DrizzleDB) {
         .where(eq(posts.id, postId))
         .run();
     },
+
+    /**
+     * Partial update — only the provided fields are written. Returns the
+     * updated row, or undefined if the post doesn't exist.
+     */
+    update(
+      id: string,
+      patch: {
+        title?: string;
+        body?: string | null;
+        linkUrl?: string | null;
+        linkDomain?: string | null;
+        imageCategory?: string | null;
+        flair?: string | null;
+      },
+    ): PostRow | undefined {
+      const setValues: Record<string, unknown> = {};
+      if (patch.title !== undefined) setValues.title = patch.title;
+      if (patch.body !== undefined) setValues.body = patch.body;
+      if (patch.linkUrl !== undefined) setValues.linkUrl = patch.linkUrl;
+      if (patch.linkDomain !== undefined) setValues.linkDomain = patch.linkDomain;
+      if (patch.imageCategory !== undefined) setValues.imageCategory = patch.imageCategory;
+      if (patch.flair !== undefined) setValues.flair = patch.flair;
+
+      if (Object.keys(setValues).length === 0) {
+        // Nothing to update — return the current row unchanged.
+        return this.findById(id);
+      }
+
+      db.update(posts).set(setValues).where(eq(posts.id, id)).run();
+      const row = db.select().from(posts).where(eq(posts.id, id)).get();
+      return row ? toPostRow(row) : undefined;
+    },
+
+    /**
+     * Delete a post. Returns true if a row was deleted, false if the post
+     * didn't exist. The FTS5 `posts_ad` trigger fires automatically and
+     * removes the corresponding row from `posts_fts`.
+     */
+    delete(id: string): boolean {
+      const result = db.delete(posts).where(eq(posts.id, id)).run();
+      return result.changes > 0;
+    },
   };
 }
 

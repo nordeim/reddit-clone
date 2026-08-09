@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@embers/db": "*",
     "@embers/shared": "*",
     "@fastify/cookie": "^10.0.1",
     "@fastify/cors": "^10.0.1",

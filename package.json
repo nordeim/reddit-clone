@@ -8,9 +8,9 @@
   ],
   "scripts": {
     "dev": "npm run dev --workspaces --if-present",
-    "build": "npm run build --workspaces --if-present",
+    "build": "npm run build --workspace @embers/shared && npm run build --workspace @embers/db && npm run build --workspace @embers/server && npm run build --workspace @embers/web",
     "test": "npm run test --workspaces --if-present",
-    "typecheck": "npm run typecheck --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspace @embers/shared && npm run typecheck --workspace @embers/db && npm run typecheck --workspace @embers/server && npm run typecheck --workspace @embers/web",
     "db:migrate": "npm run migrate --workspace @embers/db --if-present",
     "db:seed": "npm run seed --workspace @embers/db --if-present",
     "server:dev": "npm run dev --workspace @embers/server --if-present"

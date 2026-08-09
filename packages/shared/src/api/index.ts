@@ -87,6 +87,30 @@ export const createPostInputSchema = z
   );
 export type CreatePostInput = z.infer<typeof createPostInputSchema>;
 
+/**
+ * PATCH /api/posts/:id — partial update. All fields optional.
+ * Same URL-safety refine as createPostInputSchema applies to linkUrl.
+ */
+export const updatePostInputSchema = z
+  .object({
+    title: z.string().min(1).max(300).optional(),
+    body: z.string().max(40000).optional(),
+    linkUrl: z.string().url().optional(),
+    imageCategory: imageCategorySchema.optional(),
+    flair: z.string().max(50).optional(),
+  })
+  .refine(
+    (data) => {
+      if (typeof data.linkUrl === "string") {
+        const u = data.linkUrl.toLowerCase();
+        return u.startsWith("http://") || u.startsWith("https://");
+      }
+      return true;
+    },
+    { message: "linkUrl must be http(s):// scheme" },
+  );
+export type UpdatePostInput = z.infer<typeof updatePostInputSchema>;
+
 export const listPostsQuerySchema = z.object({
   cursor: z.string().optional(),
   limit: z.coerce.number().int().positive().max(100).default(20),

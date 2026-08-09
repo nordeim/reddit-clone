@@ -4,6 +4,7 @@ import {
   loginInputSchema,
   refreshTokenOutputSchema,
   createPostInputSchema,
+  updatePostInputSchema,
   listPostsQuerySchema,
   castVoteInputSchema,
   createCommentInputSchema,
@@ -114,6 +115,45 @@ describe("posts API schemas", () => {
         type: "link",
         linkUrl: "javascript:alert(1)",
       }).success,
+    ).toBe(false);
+  });
+
+  it("updatePostInputSchema accepts a partial title-only update", () => {
+    expect(
+      updatePostInputSchema.safeParse({ title: "Updated title" }).success,
+    ).toBe(true);
+  });
+
+  it("updatePostInputSchema accepts an empty object (no-op update)", () => {
+    expect(updatePostInputSchema.safeParse({}).success).toBe(true);
+  });
+
+  it("updatePostInputSchema accepts body, linkUrl, imageCategory, flair together", () => {
+    expect(
+      updatePostInputSchema.safeParse({
+        body: "New body",
+        linkUrl: "https://example.com/new",
+        imageCategory: "tech",
+        flair: "News",
+      }).success,
+    ).toBe(true);
+  });
+
+  it("updatePostInputSchema rejects empty title", () => {
+    expect(
+      updatePostInputSchema.safeParse({ title: "" }).success,
+    ).toBe(false);
+  });
+
+  it("updatePostInputSchema rejects javascript: URL", () => {
+    expect(
+      updatePostInputSchema.safeParse({ linkUrl: "javascript:alert(1)" }).success,
+    ).toBe(false);
+  });
+
+  it("updatePostInputSchema rejects unknown imageCategory", () => {
+    expect(
+      updatePostInputSchema.safeParse({ imageCategory: "flying" }).success,
     ).toBe(false);
   });
 

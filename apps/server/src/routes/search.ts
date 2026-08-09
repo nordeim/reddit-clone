@@ -1,10 +1,13 @@
 import type { FastifyInstance } from "fastify";
 import { searchQuerySchema } from "@embers/shared";
 import type { Database } from "@embers/db";
-import { searchPosts } from "@embers/db";
+import { searchPosts, communities, users } from "@embers/db";
 import type { CommunityRepository } from "../repositories/postRepository";
-import { eq, or, like } from "drizzle-orm";
-import { communities, users } from "@embers/db";
+import { or, like } from "drizzle-orm";
+
+type CommunitySelectRow = typeof communities.$inferSelect;
+type UserSelectRow = typeof users.$inferSelect;
+type SearchPostResult = { id: string; title: string; body: string | null; rank: number };
 
 export interface SearchRouteDeps {
   rawDb: Database;
@@ -29,7 +32,7 @@ export function buildSearchRoutes(deps: SearchRouteDeps) {
       if (type === "posts") {
         const results = searchPosts(deps.rawDb, q, limit, 0);
         return reply.send({
-          data: results.map((r) => ({
+          data: results.map((r: SearchPostResult) => ({
             id: r.id,
             title: r.title,
             body: r.body,
@@ -52,7 +55,7 @@ export function buildSearchRoutes(deps: SearchRouteDeps) {
           .limit(limit)
           .all();
         return reply.send({
-          data: rows.map((c) => ({
+          data: rows.map((c: CommunitySelectRow) => ({
             id: c.id,
             slug: c.slug,
             name: c.name,
@@ -77,7 +80,7 @@ export function buildSearchRoutes(deps: SearchRouteDeps) {
         .limit(limit)
         .all();
       return reply.send({
-        data: rows.map((u) => ({
+        data: rows.map((u: UserSelectRow) => ({
           id: u.id,
           username: u.username,
           displayName: u.displayName,
@@ -90,7 +93,3 @@ export function buildSearchRoutes(deps: SearchRouteDeps) {
     });
   };
 }
-
-// Suppress unused-import warning
-void eq;
-void communities;

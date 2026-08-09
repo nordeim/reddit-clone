@@ -42,7 +42,11 @@ export function createVoteService(
 ) {
   return {
     castVote(input: CastVoteInput): CastVoteResult {
-      return db.transaction((_tx) => {
+      // better-sqlite3 is synchronous and single-connection: any query on
+      // `db` (via the repositories) inside this transaction callback executes
+      // within the BEGIN/COMMIT block automatically. The `tx` parameter is
+      // therefore unused — omitted to keep the type signature clean.
+      return db.transaction(() => {
         // Read existing vote inside the transaction.
         const existing = deps.voteRepo.find(
           input.userId,

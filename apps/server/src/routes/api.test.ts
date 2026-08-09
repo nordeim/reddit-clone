@@ -192,6 +192,280 @@ describe("POST /api/posts", () => {
   });
 });
 
+describe("PATCH /api/posts/:id", () => {
+  it("requires authentication (401 without token)", async () => {
+    // First create a post as the demo user to get a valid id
+    const createRes = await app.inject({
+      method: "POST",
+      url: "/api/posts",
+      headers: authHeaders(),
+      payload: { communityId: "c1", title: "Original title", type: "text", body: "Body" },
+    });
+    const postId = createRes.json().id;
+
+    const res = await app.inject({
+      method: "PATCH",
+      url: `/api/posts/${postId}`,
+      payload: { title: "Updated title" },
+    });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it("updates title with 200 when caller is the author", async () => {
+    const createRes = await app.inject({
+      method: "POST",
+      url: "/api/posts",
+      headers: authHeaders(),
+      payload: { communityId: "c1", title: "Original title", type: "text", body: "Body" },
+    });
+    const postId = createRes.json().id;
+
+    const res = await app.inject({
+      method: "PATCH",
+      url: `/api/posts/${postId}`,
+      headers: authHeaders(),
+      payload: { title: "Updated title" },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.title).toBe("Updated title");
+    expect(body.id).toBe(postId);
+    expect(body.authorId).toBe("u-me");
+  });
+
+  it("returns 403 when caller is not the author", async () => {
+    // Register a second user
+    const registerRes = await app.inject({
+      method: "POST",
+      url: "/api/auth/register",
+      payload: { username: "other_user", password: "supersecret123" },
+    });
+    expect(registerRes.statusCode).toBe(201);
+
+    // Login as the second user to get their access token
+    const loginRes = await app.inject({
+      method: "POST",
+      url: "/api/auth/login",
+      payload: { username: "other_user", password: "supersecret123" },
+    });
+    const otherToken = loginRes.json().accessToken;
+
+    // Create a post as the demo user
+    const createRes = await app.inject({
+      method: "POST",
+      url: "/api/posts",
+      headers: authHeaders(),
+      payload: { communityId: "c1", title: "Demo user's post", type: "text" },
+    });
+    const postId = createRes.json().id;
+
+    // Try to PATCH as the other user → 403
+    const res = await app.inject({
+      method: "PATCH",
+      url: `/api/posts/${postId}`,
+      headers: { Authorization: `Bearer ${otherToken}` },
+      payload: { title: "Hijacked title" },
+    });
+    expect(res.statusCode).toBe(403);
+    const body = res.json();
+    expect(body.error.code).toBe("FORBIDDEN");
+    expect(body.error.message).toContain("author");
+  });
+
+  it("returns 404 for unknown post id", async () => {
+    const res = await app.inject({
+      method: "PATCH",
+      url: "/api/posts/nonexistent-id",
+      headers: authHeaders(),
+      payload: { title: "Updated title" },
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it("returns 422 for empty title", async () => {
+    const createRes = await app.inject({
+      method: "POST",
+      url: "/api/posts",
+      headers: authHeaders(),
+      payload: { communityId: "c1", title: "Original", type: "text" },
+    });
+    const postId = createRes.json().id;
+
+    const res = await app.inject({
+      method: "PATCH",
+      url: `/api/posts/${postId}`,
+      headers: authHeaders(),
+      payload: { title: "" },
+    });
+    expect(res.statusCode).toBe(422);
+  });
+
+  it("rejects javascript: URL via linkUrl", async () => {
+    const createRes = await app.inject({
+      method: "POST",
+      url: "/api/posts",
+      headers: authHeaders(),
+      payload: { communityId: "c1", title: "Original", type: "text" },
+    });
+    const postId = createRes.json().id;
+
+    const res = await app.inject({
+      method: "PATCH",
+      url: `/api/posts/${postId}`,
+      headers: authHeaders(),
+      payload: { linkUrl: "javascript:alert(1)" },
+    });
+    expect(res.statusCode).toBe(422);
+  });
+
+  it("updates linkDomain when linkUrl changes", async () => {
+    const createRes = await app.inject({
+      method: "POST",
+      url: "/api/posts",
+      headers: authHeaders(),
+      payload: { communityId: "c1", title: "Link post", type: "link", linkUrl: "https://example.com/old" },
+    });
+    const postId = createRes.json().id;
+
+    const res = await app.inject({
+      method: "PATCH",
+      url: `/api/posts/${postId}`,
+      headers: authHeaders(),
+      payload: { linkUrl: "https://other-domain.com/new" },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.linkUrl).toBe("https://other-domain.com/new");
+    expect(body.linkDomain).toBe("other-domain.com");
+  });
+});
+
+describe("DELETE /api/posts/:id", () => {
+  it("requires authentication (401 without token)", async () => {
+    const createRes = await app.inject({
+      method: "POST",
+      url: "/api/posts",
+      headers: authHeaders(),
+      payload: { communityId: "c1", title: "To be deleted", type: "text" },
+    });
+    const postId = createRes.json().id;
+
+    const res = await app.inject({
+      method: "DELETE",
+      url: `/api/posts/${postId}`,
+    });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it("deletes with 204 when caller is the author", async () => {
+    const createRes = await app.inject({
+      method: "POST",
+      url: "/api/posts",
+      headers: authHeaders(),
+      payload: { communityId: "c1", title: "To be deleted", type: "text" },
+    });
+    const postId = createRes.json().id;
+
+    const res = await app.inject({
+      method: "DELETE",
+      url: `/api/posts/${postId}`,
+      headers: authHeaders(),
+    });
+    expect(res.statusCode).toBe(204);
+
+    // Verify the post is gone
+    const getRes = await app.inject({
+      method: "GET",
+      url: `/api/posts/${postId}`,
+    });
+    expect(getRes.statusCode).toBe(404);
+  });
+
+  it("returns 403 when caller is not the author", async () => {
+    // Register + login as a second user
+    await app.inject({
+      method: "POST",
+      url: "/api/auth/register",
+      payload: { username: "delete_other_user", password: "supersecret123" },
+    });
+    const loginRes = await app.inject({
+      method: "POST",
+      url: "/api/auth/login",
+      payload: { username: "delete_other_user", password: "supersecret123" },
+    });
+    const otherToken = loginRes.json().accessToken;
+
+    // Create a post as the demo user
+    const createRes = await app.inject({
+      method: "POST",
+      url: "/api/posts",
+      headers: authHeaders(),
+      payload: { communityId: "c1", title: "Not yours to delete", type: "text" },
+    });
+    const postId = createRes.json().id;
+
+    // Try to DELETE as the other user → 403
+    const res = await app.inject({
+      method: "DELETE",
+      url: `/api/posts/${postId}`,
+      headers: { Authorization: `Bearer ${otherToken}` },
+    });
+    expect(res.statusCode).toBe(403);
+    const body = res.json();
+    expect(body.error.code).toBe("FORBIDDEN");
+  });
+
+  it("returns 404 for unknown post id", async () => {
+    const res = await app.inject({
+      method: "DELETE",
+      url: "/api/posts/nonexistent-id",
+      headers: authHeaders(),
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it("removes the post from posts_fts (trigger fires)", async () => {
+    // Create a post with a distinctive body containing a unique searchable word
+    const uniqueMarker = "supercalifragilisticexpialidocious";
+    const createRes = await app.inject({
+      method: "POST",
+      url: "/api/posts",
+      headers: authHeaders(),
+      payload: {
+        communityId: "c1",
+        title: "Searchable title for delete test",
+        type: "text",
+        body: `This post contains the word ${uniqueMarker} so it is findable via FTS5.`,
+      },
+    });
+    const postId = createRes.json().id;
+
+    // Verify it appears in FTS5 search
+    const searchBefore = await app.inject({
+      method: "GET",
+      url: `/api/search?q=${uniqueMarker}&type=posts`,
+    });
+    const beforeBody = searchBefore.json();
+    expect(beforeBody.data.some((p: { id: string }) => p.id === postId)).toBe(true);
+
+    // Delete the post
+    const deleteRes = await app.inject({
+      method: "DELETE",
+      url: `/api/posts/${postId}`,
+      headers: authHeaders(),
+    });
+    expect(deleteRes.statusCode).toBe(204);
+
+    // Verify it no longer appears in FTS5 search
+    const searchAfter = await app.inject({
+      method: "GET",
+      url: `/api/search?q=${uniqueMarker}&type=posts`,
+    });
+    const afterBody = searchAfter.json();
+    expect(afterBody.data.some((p: { id: string }) => p.id === postId)).toBe(false);
+  });
+});
+
 describe("GET /api/communities", () => {
   it("returns all 18 communities", async () => {
     const res = await app.inject({ method: "GET", url: "/api/communities" });

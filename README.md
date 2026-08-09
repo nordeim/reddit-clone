@@ -49,10 +49,10 @@ npm run dev        --workspace @embers/server   # http://localhost:4000
 | Workspace | Tests | Command |
 |-----------|-------|---------|
 | `@embers/web` | 176 | `npm test --workspace @embers/web` |
-| `@embers/shared` | 61 | `npm test --workspace @embers/shared` |
+| `@embers/shared` | 67 | `npm test --workspace @embers/shared` |
 | `@embers/db` | 29 | `npm test --workspace @embers/db` |
-| `@embers/server` | 80 | `npm test --workspace @embers/server` |
-| **Total** | **346** | `npm test --workspaces --if-present` |
+| `@embers/server` | 95 | `npm test --workspace @embers/server` |
+| **Total** | **367** | `npm test --workspaces --if-present` |
 
 ## Architecture Decision Records
 

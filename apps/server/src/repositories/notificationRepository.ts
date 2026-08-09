@@ -1,6 +1,8 @@
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 import type { DrizzleDB } from "@embers/db";
 import { notifications } from "@embers/db";
+
+type NotificationSelectRow = typeof notifications.$inferSelect;
 
 export interface NotificationRow {
   id: string;
@@ -61,7 +63,7 @@ export function createNotificationRepository(db: DrizzleDB) {
           ).orderBy(desc(notifications.createdAt)).limit(limit)
         : db.select().from(notifications).where(eq(notifications.userId, userId))
             .orderBy(desc(notifications.createdAt)).limit(limit);
-      return query.all().map((r) => ({
+      return query.all().map((r: NotificationSelectRow) => ({
         id: r.id,
         userId: r.userId,
         type: r.type as NotificationRow["type"],
@@ -75,8 +77,5 @@ export function createNotificationRepository(db: DrizzleDB) {
     },
   };
 }
-
-// Local import for the chained `and()` filter
-import { and } from "drizzle-orm";
 
 export type NotificationRepository = ReturnType<typeof createNotificationRepository>;
