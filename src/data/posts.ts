@@ -2,6 +2,8 @@ import type { ImageCategory, Post, PostType, SortMode } from "../types";
 import { COMMUNITIES } from "./communities";
 import { USERS } from "./users";
 import { createRng } from "../utils/random";
+import { sortPosts as sortPostsPure } from "../utils/score";
+import { getCommentsForPost, countComments } from "./comments";
 
 const TITLE_BANK: Record<ImageCategory, string[]> = {
   nature: [
@@ -196,35 +198,32 @@ function hashSlug(title: string): string {
 
 export const POSTS: Post[] = generatePosts(320);
 
+// Plan §7.7 ("Comment count consistency"): the post's `commentCount` field
+// must equal the number of comments the lazy generator actually produces.
+// The original `generatePosts` derived commentCount from a formula unrelated
+// to the actual tree, so cards displayed e.g. "42 comments" while the post
+// detail page rendered 5. We fix it here by walking each post's generated
+// tree once at module scope (comments are memoised in a Map by postId, so
+// this is cheap — ~5k comments total, ~50ms one-time cost).
+for (const post of POSTS) {
+  post.commentCount = countComments(getCommentsForPost(post.id));
+}
+
 const postsById = new Map(POSTS.map((p) => [p.id, p]));
 
 export function getPost(id: string): Post | undefined {
   return postsById.get(id);
 }
 
-function hotScore(post: Post): number {
-  const ageHours = (Date.now() - new Date(post.createdAt).getTime()) / 3_600_000;
-  return post.score / Math.pow(ageHours + 2, 1.35);
-}
-
-function risingScore(post: Post): number {
-  const ageHours = Math.max(1, (Date.now() - new Date(post.createdAt).getTime()) / 3_600_000);
-  if (ageHours > 30) return -Infinity;
-  return post.commentCount / ageHours + post.score / (ageHours * 4);
-}
-
+/**
+ * Sort wrapper that delegates to the pure `utils/score.ts` implementation.
+ * The previous hot/rising formulas lived inline here; they have been
+ * extracted so they can be unit-tested in isolation.
+ *
+ * Behavioural note: the new pure sorter adds stable id-ascending tie-breakers
+ * for deterministic ordering across reloads. This is a subtle improvement over
+ * the previous Array.prototype.sort which used unstable comparison results.
+ */
 export function sortPosts(posts: Post[], mode: SortMode): Post[] {
-  const copy = [...posts];
-  switch (mode) {
-    case "new":
-      return copy.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    case "top":
-      return copy.sort((a, b) => b.score - a.score);
-    case "rising":
-      return copy.sort((a, b) => risingScore(b) - risingScore(a));
-    case "hot":
-    case "best":
-    default:
-      return copy.sort((a, b) => hotScore(b) - hotScore(a));
-  }
+  return sortPostsPure(posts, mode);
 }
