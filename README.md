@@ -1,6 +1,108 @@
 # embers
 
-**A Reddit-style community feed — 100% client-side, zero backend.**
+**A Reddit-style community feed.** Client-only SPA + an enterprise backend
+monorepo.
+
+## Repository Layout (npm workspaces)
+
+```
+reddit-clone/
+├── apps/
+│   ├── web/          ← @embers/web — the original client-only React SPA
+│   │                   (HashRouter, vite-plugin-singlefile, 176 tests)
+│   └── server/       ← @embers/server — Fastify REST API + auth + FTS5 search
+│                       (80 tests, /health, /api/auth, /api/posts,
+│                        /api/communities, /api/votes, /api/comments,
+│                        /api/search, /api/notifications)
+├── packages/
+│   ├── shared/       ← @embers/shared — Zod schemas + branded IDs (61 tests)
+│   └── db/           ← @embers/db — Drizzle ORM + SQLite + FTS5 + seed (29 tests)
+├── docs/             ← REMEDIATION_EXECUTION_PLAN.md (B0–B16 status),
+│                       REMEDIATION_PLAN_2.md (B17–B24 deferred),
+│                       Project-Architecture-Document.md, AGENTS.md, etc.
+├── skills/           ← local skill library (198 skills, see skills-catalog.md)
+└── package.json      ← root workspaces config + fan-out scripts
+```
+
+## Quick Start
+
+```bash
+# 1. Install dependencies at the workspace root
+npm install
+
+# 2. Run the client SPA dev server (apps/web)
+npm run dev --workspace @embers/web
+
+# 3. (Backend) Apply migrations + seed dev.db, then start the server
+npm run db:migrate --workspace @embers/db
+npm run db:seed    --workspace @embers/db
+npm run dev        --workspace @embers/server   # http://localhost:4000
+```
+
+**Verify:**
+- Client: `http://localhost:5173` — the embers feed (320 posts across 18 communities)
+- Server: `curl http://localhost:4000/health` → `{"status":"ok",…}`
+- Demo login (server): `POST /api/auth/login` with `{"username":"you","password":"embers-demo"}`
+
+## Test Status
+
+| Workspace | Tests | Command |
+|-----------|-------|---------|
+| `@embers/web` | 176 | `npm test --workspace @embers/web` |
+| `@embers/shared` | 61 | `npm test --workspace @embers/shared` |
+| `@embers/db` | 29 | `npm test --workspace @embers/db` |
+| `@embers/server` | 80 | `npm test --workspace @embers/server` |
+| **Total** | **346** | `npm test --workspaces --if-present` |
+
+## Architecture Decision Records
+
+**Active for `apps/web` (the client SPA):**
+- ADR-001 — Deterministic PRNG data generation (no backend)
+- ADR-002 — Overlay pattern for user state (zustand persist)
+- ADR-003 — Single-file build (`vite-plugin-singlefile`)
+- ADR-004 — `HashRouter` for zero-config static hosting
+- ADR-005 — Zustand `persist` middleware
+
+**Active for `apps/server` + `packages/{shared,db}` (the backend):**
+- ADR-101 — REST + Zod API contract (`@embers/shared`)
+- ADR-102 — Fastify web framework
+- ADR-103 — SQLite + Drizzle ORM (`packages/db`, WAL mode, busy_timeout=5000)
+- ADR-104 — JWT auth (15m access + 7d refresh, HttpOnly cookies)
+- ADR-107 — npm-workspaces monorepo
+- ADR-108 — Transactional atomic vote counters (`UPDATE … SET col = col + delta`)
+- ADR-109 — SQLite FTS5 virtual tables for full-text search
+- ADR-110 — Pino structured logging + requestId correlation
+
+**Deferred (B17–B24, see `docs/REMEDIATION_EXECUTION_PLAN.md` §5):**
+- ADR-105 — React Query + Zustand split (requires breaking client refactor)
+- ADR-106 — BrowserRouter + chunked Vite build (requires removing single-file)
+- B23 — Docker, GitHub Actions
+- B24 — Playwright E2E
+
+## Documentation Map
+
+| Document | Purpose |
+|----------|---------|
+| `README.md` (this file) | Monorepo overview + quick start + test status |
+| `AGENTS.md` | Deep codebase reference (data layer, state, routes) |
+| `CLAUDE.md` | Daily implementation conventions (TS, build, testing) |
+| `docs/Project-Architecture-Document.md` | Master PAD — full architecture + ADRs |
+| `docs/REMEDIATION_EXECUTION_PLAN.md` | Active execution plan (B0–B16 done, B17–B24 deferred) |
+| `docs/REMEDIATION_PLAN_2.md` | Original 10-ADR remediation proposal (status annotations added) |
+| `docs/IMPLEMENTATION_PLAN.md` | Original greenfield plan that produced `apps/web` |
+| `docs/MANUAL_QA.md` | Manual QA matrix for the client SPA |
+
+## License
+
+No license file is included. All rights reserved by the author.
+
+---
+
+## Below: original client-SPA README (preserved for historical context)
+
+---
+
+
 
 ## Overview
 

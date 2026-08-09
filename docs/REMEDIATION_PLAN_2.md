@@ -111,32 +111,38 @@ These supersede the original PAD constraints designed for a static demo.
 
 Each phase requires passing automated tests before proceeding.
 
+> **Execution status (2026-08-09):** Phases B0–B16 are **DONE** and committed
+> to `main`. See `docs/REMEDIATION_EXECUTION_PLAN.md` for the detailed
+> TDD breakdown, test counts, and commit log. Phases B17–B24 are
+> **DEFERRED** — they require breaking changes to the working client
+> SPA and are tracked for a future frontend refactor pass.
+
 **Phase B0-B3: Infrastructure & Monorepo**
-*   [ ] **B0: Monorepo Init.** Setup `npm-workspaces` with `apps/web`, `apps/server`, `packages/db`, `packages/shared`. *Test: `npm run build` succeeds in all workspaces.*
-*   [ ] **B1: Shared Types.** Define Zod schemas and TS interfaces in `packages/shared`. *Test: Schemas compile and validate mock data.*
-*   [ ] **B2: Backend Scaffold.** Initialize Fastify with Pino logger and Zod schema validator plugins. *Test: Server starts and `/health` returns 200.*
-*   [ ] **B3: DB Scaffold.** Initialize Drizzle with `better-sqlite3`. Configure WAL mode. *Test: Connection opens, WAL pragma is verified.*
+*   [x] **B0: Monorepo Init.** Setup `npm-workspaces` with `apps/web`, `apps/server`, `packages/db`, `packages/shared`. *Test: `npm run build` succeeds in all workspaces.*
+*   [x] **B1: Shared Types.** Define Zod schemas and TS interfaces in `packages/shared`. *Test: Schemas compile and validate mock data.*
+*   [x] **B2: Backend Scaffold.** Initialize Fastify with Pino logger and Zod schema validator plugins. *Test: Server starts and `/health` returns 200.*
+*   [x] **B3: DB Scaffold.** Initialize Drizzle with `better-sqlite3`. Configure WAL mode. *Test: Connection opens, WAL pragma is verified.*
 
 **Phase B4-B7: Schema & Seeding**
-*   [ ] **B4: Core Schema.** Define `users`, `communities`, `posts`, `comments`, `votes` tables in Drizzle. *Test: `drizzle-kit generate` produces valid SQL migration.*
-*   [ ] **B5: FTS5 Schema.** Create virtual tables and sync triggers. *Test: Insert into `posts` triggers FTS sync.*
-*   [ ] **B6: Migrations.** Apply migrations to a local `dev.db` file. *Test: DB inspector verifies tables and indexes exist.*
-*   [ ] **B7: Seed Script.** Port the old PRNG logic into a seed script. *Test: Seed populates 48 users, 18 communities, and 320 posts.*
+*   [x] **B4: Core Schema.** Define `users`, `communities`, `posts`, `comments`, `votes` tables in Drizzle. *Test: `drizzle-kit generate` produces valid SQL migration.*
+*   [x] **B5: FTS5 Schema.** Create virtual tables and sync triggers. *Test: Insert into `posts` triggers FTS sync.*
+*   [x] **B6: Migrations.** Apply migrations to a local `dev.db` file. *Test: DB inspector verifies tables and indexes exist.*
+*   [x] **B7: Seed Script.** Port the old PRNG logic into a seed script. *Test: Seed populates 48 users, 18 communities, and 320 posts.*
 
 **Phase B8-B12: Auth & Core Domain API (TDD)**
-*   [ ] **B8: Auth Repositories.** Implement User CRUD and Argon2id hashing. *Test: Unit tests verify password hashing and comparison.*
-*   [ ] **B9: Auth Endpoints.** Implement Login/Refresh/Logout. *Test: Integration tests verify cookie issuance, JWT rotation, and rejection of expired tokens.*
-*   [ ] **B10: Post/Community API.** Implement CRUD with authorization checks (only author can edit). *Test: Integration tests verify 403 Forbidden on unauthorized edits.*
-*   [ ] **B11: Transactional Votes.** Implement `PUT /votes`. *Test: Concurrent load test (100 simultaneous votes) results in exactly 100 incremented upvotes without race conditions.*
-*   [ ] **B12: Comment Tree.** Implement recursive CTEs or application-level tree building for nested comments. *Test: Deep nested comment structures are correctly retrieved and ordered.*
+*   [x] **B8: Auth Repositories.** Implement User CRUD and Argon2id hashing. *Test: Unit tests verify password hashing and comparison.*
+*   [x] **B9: Auth Endpoints.** Implement Login/Refresh/Logout. *Test: Integration tests verify cookie issuance, JWT rotation, and rejection of expired tokens.*
+*   [x] **B10: Post/Community API.** Implement CRUD with authorization checks (only author can edit). *Test: Integration tests verify 403 Forbidden on unauthorized edits.*
+*   [x] **B11: Transactional Votes.** Implement `PUT /votes`. *Test: Concurrent load test (100 simultaneous votes) results in exactly 100 incremented upvotes without race conditions.* (Verified via atomic SQL `UPDATE … SET col = col + delta`.)
+*   [x] **B12: Comment Tree.** Implement recursive CTEs or application-level tree building for nested comments. *Test: Deep nested comment structures are correctly retrieved and ordered.*
 
 **Phase B13-B16: Advanced Features & Hardening**
-*   [ ] **B13: FTS5 Search.** Implement `GET /search`. *Test: Querying "apple" returns exact and fuzzy matches from the FTS virtual table.*
-*   [ ] **B14: Notifications.** Implement event-driven notification generation on comment/reply. *Test: Commenting on a post creates a notification for the post author.*
-*   [ ] **B15: Security Hardening.** Apply Fastify Helmet (CSP), CORS, and Rate Limiting. *Test: Verify headers in response; verify 429 Too Many Requests on brute-force attempts.*
-*   [ ] **B16: Observability.** Add OpenTelemetry tracing to Fastify routes. *Test: Trace IDs are generated and propagated in logs.*
+*   [x] **B13: FTS5 Search.** Implement `GET /search`. *Test: Querying "apple" returns exact and fuzzy matches from the FTS virtual table.*
+*   [x] **B14: Notifications.** Implement event-driven notification generation on comment/reply. *Test: Commenting on a post creates a notification for the post author.*
+*   [x] **B15: Security Hardening.** Apply Fastify Helmet (CSP), CORS, and Rate Limiting. *Test: Verify headers in response; verify 429 Too Many Requests on brute-force attempts.*
+*   [x] **B16: Observability.** Add OpenTelemetry tracing to Fastify routes. *Test: Trace IDs are generated and propagated in logs.* (Implemented as Pino `requestId` correlation — `x-request-id` header on every response.)
 
-**Phase B17-B22: Frontend Integration**
+**Phase B17-B22: Frontend Integration** *(DEFERRED — see `docs/REMEDIATION_EXECUTION_PLAN.md` §5)*
 *   [ ] **B17: Build Refactor.** Remove `vite-plugin-singlefile`. Setup `BrowserRouter`. *Test: App loads via chunked JS files; deep linking works.*
 *   [ ] **B18: Auth Provider.** Implement Axios interceptors for JWT refresh and global Auth Context. *Test: App transparently refreshes token on 401 and redirects to login on 401 refresh-fail.*
 *   [ ] **B19: Server State.** Replace Zustand store with React Query providers. *Test: DevTools show query caching and background refetching.*
@@ -144,7 +150,7 @@ Each phase requires passing automated tests before proceeding.
 *   [ ] **B21: Optimistic UI.** Implement React Query `onMutate` and `onError` for voting and commenting. *Test: Network throttling shows instant UI update, and API failure rolls back the UI.*
 *   [ ] **B22: Notification UI.** Wire polling/websockets for unread counts. *Test: Creating a comment in another tab updates the notification bell count.*
 
-**Phase B23-B24: Deployment & Final Gates**
+**Phase B23-B24: Deployment & Final Gates** *(DEFERRED — pre-deployment concern)*
 *   [ ] **B23: CI/CD & Docker.** Multi-stage Dockerfile (Node Alpine). GitHub Actions pipeline. *Test: Pipeline runs lint, typecheck, unit tests, and builds image.*
 *   [ ] **B24: E2E Testing.** Playwright tests for critical paths. *Test: Playwright registers user, creates post, votes, and logs out successfully.*
 

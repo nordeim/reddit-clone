@@ -1,5 +1,17 @@
 # embers — Reddit-style Community Feed
 
+> **Monorepo transition (2026-08-09):** This repo is now an npm-workspaces
+> monorepo. The client SPA documented below lives at `apps/web/` (workspace
+> `@embers/web`) and continues to follow every convention listed here. New
+> workspaces: `@embers/server` (Fastify backend), `@embers/shared` (Zod
+> schemas + branded IDs), `@embers/db` (Drizzle ORM + SQLite + FTS5).
+> Run workspace-scoped commands via `npm test --workspace @embers/web`,
+> `npm run typecheck --workspace @embers/web`, etc. See `README.md` for
+> the full monorepo layout and `docs/REMEDIATION_EXECUTION_PLAN.md` for
+> the execution log.
+
+---
+
 A client-only React SPA: **no backend, no API, no `fetch`**. All content (users, communities, posts, comments, notifications) is generated deterministically in the browser via seeded PRNGs.
 
 **Related docs:** `AGENTS.md` — comprehensive codebase reference (architecture, data layer contracts, full route table). Read it for deep context; this file focuses on daily implementation conventions.

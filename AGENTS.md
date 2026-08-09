@@ -1,5 +1,20 @@
 # AGENTS.md
 
+> **Monorepo transition (2026-08-09):** The repo is now an npm-workspaces
+> monorepo. The client SPA that this document originally described now
+> lives under `apps/web/` and is published as the `@embers/web` workspace.
+> Three new workspaces were added in the same pass:
+>   - `@embers/server` (`apps/server/`) — Fastify REST API + auth
+>   - `@embers/shared` (`packages/shared/`) — Zod schemas + branded IDs
+>   - `@embers/db` (`packages/db/`) — Drizzle ORM + SQLite + FTS5 + seed
+>
+> See `docs/REMEDIATION_EXECUTION_PLAN.md` for the full execution log
+> (Phases B0–B16 done, B17–B24 deferred). The architecture notes below
+> remain accurate for `apps/web/` unchanged — every path mentioned is
+> relative to `apps/web/` (e.g. `src/data/posts.ts` is `apps/web/src/data/posts.ts`).
+
+---
+
 **embers** — a Reddit-style community feed. A client-only React SPA: **no backend, no API, no `fetch` anywhere**. Every post, user, community, comment and notification is generated deterministically in the browser at module load.
 
 ## Commands

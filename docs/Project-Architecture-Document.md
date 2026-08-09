@@ -758,3 +758,147 @@ The following previously-open issues are now resolved (see `docs/REMEDIATION_PLA
 | **Simulated latency** | Intentional `setTimeout` delays (650ms feed, 500ms comments) for demo feel |
 | **gradientFor(seed)** | Stable gradient pair derived from a string seed for avatar colors |
 | **namespaced keys** | Vote storage keys prefixed with `post:` or `comment:` to avoid ID collisions |
+
+---
+
+## 13. Part 2 — Enterprise Backend Layer (added 2026-08-09)
+
+This section documents the backend stack added in the Phase B0–B16
+remediation pass. It is **additive** — the original ADR-001…ADR-005
+remain in force for `apps/web` (the client SPA). The new ADR-101…ADR-110
+apply to `apps/server` and the `packages/{shared,db}` workspaces.
+
+### 13.1 New ADRs
+
+| ADR | Decision | Workspace |
+|---|---|---|
+| ADR-101 | REST + Zod API contract | `packages/shared` |
+| ADR-102 | Fastify web framework | `apps/server` |
+| ADR-103 | SQLite + Drizzle ORM (WAL, busy_timeout=5000, FK on) | `packages/db` |
+| ADR-104 | JWT auth (15m access + 7d refresh, HttpOnly cookies) | `apps/server/src/auth` |
+| ADR-105 | React Query + Zustand split | **DEFERRED** — see REMEDIATION_EXECUTION_PLAN.md §5 |
+| ADR-106 | BrowserRouter + chunked Vite build | **DEFERRED** — breaking change to apps/web |
+| ADR-107 | npm-workspaces monorepo | root `package.json` |
+| ADR-108 | Transactional atomic vote counters (`UPDATE … SET col = col + delta`) | `apps/server/src/services/voteService.ts` |
+| ADR-109 | SQLite FTS5 virtual tables + BM25 ranking | `packages/db/src/fts5.ts` |
+| ADR-110 | Pino structured logging + requestId correlation | `apps/server/src/plugins/{requestId,errorHandler}.ts` |
+
+### 13.2 Backend Topology
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                  CLIENT (Browser) — apps/web                  │
+│   React 19 SPA (unchanged from §2, runs via HashRouter +       │
+│   vite-plugin-singlefile, 176 tests green)                    │
+└──────────────────────────────────────────────────────────────┘
+                              │
+                              │  (frontend integration deferred — §5)
+                              ▼
+┌──────────────────────────────────────────────────────────────┐
+│              API SERVER (Node 20+) — apps/server              │
+│  ┌────────────────────────────────────────────────────────┐  │
+│  │  Fastify 5 (Pino logger, Helmet, CORS, rate-limit,      │  │
+│  │  cookie, requestId, errorHandler)                      │  │
+│  └────────────────────────────────────────────────────────┘  │
+│  ┌──────────────────┐  ┌──────────────────┐  ┌────────────┐  │
+│  │ /api/auth/*      │  │ /api/posts/*     │  │ /api/comm. │  │
+│  │ Argon2id + JWT   │  │ CRUD + cursor pg │  │ CRUD       │  │
+│  └──────────────────┘  └──────────────────┘  └────────────┘  │
+│  ┌──────────────────┐  ┌──────────────────┐  ┌────────────┐  │
+│  │ /api/votes/:id   │  │ /api/comments/*  │  │ /api/search│  │
+│  │ atomic tx        │  │ tree + notif.    │  │ FTS5 BM25  │  │
+│  └──────────────────┘  └──────────────────┘  └────────────┘  │
+└──────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌──────────────────────────────────────────────────────────────┐
+│                   DATABASE — packages/db                      │
+│   better-sqlite3 (WAL, busy_timeout=5000, foreign_keys=ON)    │
+│   ┌──────────┐ ┌────────────┐ ┌──────────┐ ┌──────────────┐   │
+│   │ users    │ │ communities│ │ posts    │ │ posts_fts    │   │
+│   │ sessions │ │ comments   │ │ votes    │ │ (FTS5 virt.) │   │
+│   │ notifs.  │ │            │ │          │ │ + triggers   │   │
+│   └──────────┘ └────────────┘ └──────────┘ └──────────────┘   │
+│   Drizzle ORM (types + migrations) + runSeed() PRNG port     │
+└──────────────────────────────────────────────────────────────┘
+```
+
+### 13.3 Backend Test Coverage (80 tests)
+
+| Suite | Tests | Coverage |
+|---|---|---|
+| `config.test.ts` | 8 | Env loader (dev defaults, prod-required vars) |
+| `routes/health.test.ts` | 6 | /health shape, requestId header, 404 envelope, 500 stack suppression, CORS preflight |
+| `auth/password.test.ts` | 4 | Argon2id hash + verify round-trip |
+| `auth/jwt.test.ts` | 7 | Access/refresh token sign/verify, expiry, wrong-secret rejection |
+| `routes/auth.test.ts` | 14 | Register/login/refresh/logout + 401/409/422 paths |
+| `routes/api.test.ts` | 34 | Posts, communities, votes (toggle/flip), comments, search, notifications |
+| `routes/hardening.test.ts` | 7 | Helmet CSP, X-Frame-Options, etc.; auth route rate limit (5/min → 429) |
+
+### 13.4 Shared Package Schemas (61 tests)
+
+`packages/shared/src/` defines Zod schemas for every entity and API
+endpoint. These are the runtime contract — Fastify's zod-validator
+plugin uses them directly so the TS types and runtime validation
+cannot drift. Branded ID types (`UserId`, `PostId`, etc.) prevent
+accidental cross-assignment at compile time, erased at runtime.
+
+### 13.5 Database Package (29 tests)
+
+`packages/db/src/` provides:
+- `client.ts` — `openDb()` returns both raw `better-sqlite3` connection
+  (for FTS5 + pragma queries) and the Drizzle ORM wrapper.
+- `schema/index.ts` — 7 tables + composite-PK votes table.
+- `fts5.ts` — `posts_fts` virtual table + sync triggers + `searchPosts()`.
+- `seed/` — Port of `apps/web/src/utils/random.ts` + `apps/web/src/data/*`
+  into DB inserts. `runSeed()` is idempotent and dependency-injected with
+  `hashPassword` so the package stays free of the argon2 native module.
+
+### 13.6 Backend Operation
+
+```bash
+# Apply migrations + seed dev.db (one-time setup)
+npm run db:migrate --workspace @embers/db
+npm run db:seed    --workspace @embers/db
+
+# Start the dev server (port 4000)
+npm run dev --workspace @embers/server
+
+# Smoke test
+curl http://localhost:4000/health
+curl -X POST http://localhost:4000/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"you","password":"embers-demo"}'
+```
+
+### 13.7 Backend Definition of Done
+
+✅ B0 Monorepo init — `npm install` at root works; `npm test --workspaces`
+   runs all 4 workspace test suites.
+✅ B1 Shared types — `@embers/shared` builds to `dist/`; 61 schema tests green.
+✅ B2 Backend scaffold — `buildApp()` returns FastifyInstance; `/health`
+   returns 200 with `{ status, timestamp, uptime }`.
+✅ B3 DB scaffold — `openDb()` applies WAL pragma; verified by
+   `PRAGMA journal_mode;` query returning `'wal'`.
+✅ B4–B6 Schema + FTS5 + migrations — `drizzle-kit generate` produces
+   `0000_*.sql`; migration applied to `dev.db`; all 7 tables + 5 FTS5
+   shadow tables present.
+✅ B7 Seed script — 49 users (48 + demo), 18 communities, 320 posts,
+   ~3000 comments, 18 notifications; idempotent.
+✅ B8–B9 Auth — Argon2id + JWT (HS256) with refresh-token rotation;
+   14 integration tests covering register/login/refresh/logout.
+✅ B10 Post/Community API — GET list (cursor-paginated), GET single,
+   POST create (auth required); 12 tests.
+✅ B11 Transactional votes — atomic `UPDATE … SET col = col + delta`
+   inside a transaction; toggle/flip/zero lifecycle; 5 tests.
+✅ B12 Comment tree — O(n) parent-pointer join; depth cap enforced;
+   reply notification emitted; 6 tests.
+✅ B13 FTS5 search — `GET /api/search?q=&type=` for posts/communities/users;
+   5 tests.
+✅ B14 Notifications — `GET /api/notifications?filter=all|unread`;
+   4 tests.
+✅ B15 Helmet + rate limit — CSP header verified; auth route rate
+   limit (5/min → 429) verified; 7 tests.
+✅ B16 Observability — Pino structured logs + requestId correlation
+   on every response; verified via `x-request-id` header.
+
