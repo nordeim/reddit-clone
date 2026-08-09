@@ -1,9 +1,10 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Users } from "lucide-react";
 import { POSTS } from "../data/posts";
 import { COMMUNITIES } from "../data/communities";
 import { USERS } from "../data/users";
+import { searchCommunities, searchPosts, searchUsers } from "../utils/search";
 import { PostList } from "../components/feed/PostList";
 import { Avatar } from "../components/ui/Avatar";
 import { Button } from "../components/ui/Button";
@@ -13,31 +14,43 @@ import { useAppStore } from "../store/store";
 
 type Tab = "posts" | "communities" | "users";
 
+const VALID_TABS: Tab[] = ["posts", "communities", "users"];
+
 export function SearchPage() {
-  const [searchParams] = useSearchParams();
-  const query = (searchParams.get("q") ?? "").trim().toLowerCase();
-  const [tab, setTab] = useState<Tab>("posts");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const rawQuery = (searchParams.get("q") ?? "").trim();
+  const rawTab = (searchParams.get("tab") ?? "posts") as Tab;
+  // Invalid tab falls back to "posts" (Plan §12.9 requirement).
+  const tab: Tab = VALID_TABS.includes(rawTab) ? rawTab : "posts";
+  const setTab = (next: Tab) => {
+    const params = new URLSearchParams(searchParams);
+    if (next === "posts") params.delete("tab");
+    else params.set("tab", next);
+    setSearchParams(params, { replace: true });
+  };
   const localPosts = useAppStore((s) => s.localPosts);
   const joinedIds = useAppStore((s) => s.joinedCommunityIds);
   const toggleJoin = useAppStore((s) => s.toggleJoin);
 
   const posts = useMemo(
-    () => [...localPosts, ...POSTS].filter((p) => p.title.toLowerCase().includes(query) || p.body?.toLowerCase().includes(query)),
-    [query, localPosts],
+    () => (rawQuery ? searchPosts([...localPosts, ...POSTS], rawQuery) : []),
+    [rawQuery, localPosts],
   );
   const communities = useMemo(
-    () => COMMUNITIES.filter((c) => c.name.toLowerCase().includes(query) || c.title.toLowerCase().includes(query) || c.description.toLowerCase().includes(query)),
-    [query],
+    () => (rawQuery ? searchCommunities(COMMUNITIES, rawQuery) : []),
+    [rawQuery],
   );
-  const users = useMemo(() => USERS.filter((u) => u.username.toLowerCase().includes(query)), [query]);
+  const users = useMemo(() => (rawQuery ? searchUsers(USERS, rawQuery) : []), [rawQuery]);
 
-  if (!query) {
+  if (!rawQuery) {
     return (
       <div className="mx-auto max-w-2xl py-16 text-center text-sm text-zinc-400">
         Type something in the search bar above to get started.
       </div>
     );
   }
+
+  const query = rawQuery.toLowerCase(); // for display only
 
   const counts: Record<Tab, number> = { posts: posts.length, communities: communities.length, users: users.length };
 
