@@ -1,4 +1,3 @@
-import { strict as assert } from "node:assert";
 import Fastify, { type FastifyInstance } from "fastify";
 import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
@@ -8,7 +7,9 @@ import rateLimit from "@fastify/rate-limit";
 import { loadEnv, type Env } from "./config";
 import requestIdPlugin from "./plugins/requestId";
 import errorHandlerPlugin from "./plugins/errorHandler";
+import authPlugin from "./plugins/auth";
 import { healthRoutes } from "./routes/health";
+import type { DrizzleDB } from "@embers/db";
 
 export interface BuildAppOptions {
   /** Partial env overrides (primarily for tests). */
@@ -17,6 +18,14 @@ export interface BuildAppOptions {
   skipHelmet?: boolean;
   /** Skip rate limit in tests (default: false in NODE_ENV=test). */
   skipRateLimit?: boolean;
+  /**
+   * Open database connection to use for repositories. If omitted, the app
+   * registers only health + error handler (used by health tests). When
+   * provided, all API routes (auth, posts, communities, votes, comments,
+   * search, notifications) are wired up.
+   */
+  db?: DrizzleDB;
+  rawDb?: import("@embers/db").Database;
 }
 
 /**
@@ -30,7 +39,9 @@ export interface BuildAppOptions {
  *   3. cookie   — auth refresh cookie parsing
  *   4. rateLimit — guards all routes (with route-level overrides later)
  *   5. requestId — assigns req.id before error handler uses it
- *   6. errorHandler — last, so it can wrap everything
+ *   6. auth (decorator) — registers `app.authenticate`
+ *   7. routes — health + (when db provided) all API routes
+ *   8. errorHandler — last, so it can wrap everything
  */
 export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInstance> {
   const env: Env = loadEnv(opts.env);
@@ -91,19 +102,79 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
     });
   }
 
-  // 5. Request ID — must precede error handler so the id is available
-  //    in error responses.
+  // 5. Request ID — must precede error handler so the id is available.
   await app.register(requestIdPlugin);
 
-  // 6. Routes
+  // 6. Auth decorator (registers app.authenticate for protected routes).
+  await app.register(authPlugin);
+
+  // 7. Routes — always register health.
   await app.register(healthRoutes);
 
-  // 7. Error handler — last so it wraps everything.
+  // When a DB connection is provided, register all API routes.
+  if (opts.db && opts.rawDb) {
+    const { createUserRepository } = await import("./repositories/userRepository");
+    const { createSessionRepository } = await import("./repositories/sessionRepository");
+    const {
+      createPostRepository,
+      createCommunityRepository,
+      createCommentRepository,
+    } = await import("./repositories/postRepository");
+    const { createVoteRepository } = await import("./repositories/voteRepository");
+    const { createNotificationRepository } = await import("./repositories/notificationRepository");
+    const { createVoteService } = await import("./services/voteService");
+    const { buildAuthRoutes } = await import("./routes/auth");
+    const { buildPostRoutes } = await import("./routes/posts");
+    const { buildCommunityRoutes } = await import("./routes/communities");
+    const { buildVoteRoutes } = await import("./routes/votes");
+    const { buildCommentRoutes } = await import("./routes/comments");
+    const { buildSearchRoutes } = await import("./routes/search");
+    const { buildNotificationRoutes } = await import("./routes/notifications");
+
+    const userRepo = createUserRepository(opts.db);
+    const sessionRepo = createSessionRepository(opts.db);
+    const postRepo = createPostRepository(opts.db);
+    const communityRepo = createCommunityRepository(opts.db);
+    const commentRepo = createCommentRepository(opts.db);
+    const voteRepo = createVoteRepository(opts.db);
+    const notificationRepo = createNotificationRepository(opts.db);
+    const voteService = createVoteService(opts.db, {
+      voteRepo,
+      postRepo,
+      commentRepo,
+    });
+
+    const authEnv = {
+      JWT_ACCESS_SECRET: env.JWT_ACCESS_SECRET ?? "dev-access-secret-not-for-prod-32+chars",
+      JWT_REFRESH_SECRET: env.JWT_REFRESH_SECRET ?? "dev-refresh-secret-not-for-prod-32+chars",
+      JWT_ACCESS_TTL: env.JWT_ACCESS_TTL,
+      JWT_REFRESH_TTL: env.JWT_REFRESH_TTL,
+      NODE_ENV: env.NODE_ENV,
+      COOKIE_DOMAIN: env.COOKIE_DOMAIN,
+    };
+
+    await app.register(buildAuthRoutes({ userRepo, sessionRepo, env: authEnv }));
+    await app.register(buildPostRoutes({ postRepo, communityRepo }));
+    await app.register(buildCommunityRoutes({ communityRepo }));
+    await app.register(buildVoteRoutes({ voteService }));
+    await app.register(buildCommentRoutes({
+      commentRepo,
+      postRepo,
+      notificationRepo,
+    }));
+    await app.register(buildSearchRoutes({
+      rawDb: opts.rawDb,
+      db: opts.db,
+      communityRepo,
+    }));
+    await app.register(buildNotificationRoutes({ notificationRepo }));
+  }
+
+  // 8. Error handler — last so it wraps everything.
   await app.register(errorHandlerPlugin);
 
   // Decorate app with env for downstream plugins/routes
   app.decorate("env", env);
-  void assert; // reserved for future invariants
 
   return app;
 }

@@ -89,7 +89,7 @@ export type CreatePostInput = z.infer<typeof createPostInputSchema>;
 
 export const listPostsQuerySchema = z.object({
   cursor: z.string().optional(),
-  limit: z.number().int().positive().max(100).default(20),
+  limit: z.coerce.number().int().positive().max(100).default(20),
   sort: sortModeSchema.default("best"),
   communityId: z.string().optional(),
 });
@@ -136,7 +136,7 @@ export const searchQuerySchema = z.object({
   q: z.string().min(1).max(200),
   type: z.enum(["posts", "communities", "users"]).default("posts"),
   cursor: z.string().optional(),
-  limit: z.number().int().positive().max(50).default(20),
+  limit: z.coerce.number().int().positive().max(50).default(20),
 });
 export type SearchQuery = z.infer<typeof searchQuerySchema>;
 
@@ -145,7 +145,7 @@ export type SearchQuery = z.infer<typeof searchQuerySchema>;
 export const listNotificationsQuerySchema = z.object({
   filter: z.enum(["all", "unread"]).default("all"),
   cursor: z.string().optional(),
-  limit: z.number().int().positive().max(50).default(20),
+  limit: z.coerce.number().int().positive().max(50).default(20),
 });
 export type ListNotificationsQuery = z.infer<typeof listNotificationsQuerySchema>;
 
