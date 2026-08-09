@@ -1,4 +1,4 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import { randomUUID } from "node:crypto";
 import {
   registerInputSchema,
@@ -28,6 +28,13 @@ export interface AuthRouteDeps {
     JWT_REFRESH_TTL: string;
     NODE_ENV: string;
     COOKIE_DOMAIN?: string;
+    /**
+     * Auth rate-limit config. Defaults to 5 attempts per minute per IP
+     * (sufficient to allow legitimate typo-retries while blocking
+     * brute-force attacks). Set max=Infinity in tests to disable.
+     */
+    authRateLimitMax?: number;
+    authRateLimitWindow?: string;
   };
 }
 
@@ -37,14 +44,33 @@ export interface AuthRouteDeps {
  * or the production SQLite file.
  */
 export function buildAuthRoutes(deps: AuthRouteDeps) {
+  const authMax = deps.env.authRateLimitMax ?? 5;
+  const authWindow = deps.env.authRateLimitWindow ?? "1 minute";
+  const rateLimitConfig =
+    authMax === Infinity
+      ? {}
+      : {
+          config: {
+            rateLimit: {
+              max: authMax,
+              timeWindow: authWindow,
+              keyGenerator: (req: FastifyRequest) =>
+                // Rate-limit by IP — auth attempts should be tracked per
+                // client, not per access token (which doesn't exist yet).
+                req.ip,
+            },
+          },
+        };
+
   return async function authRoutes(app: FastifyInstance): Promise<void> {
     /**
      * POST /api/auth/register — create a new user account.
      * 201: returns { user } (without passwordHash)
      * 409: username taken
      * 422: invalid input (handled by zod validator / errorHandler)
+     * Rate-limited: 5 attempts/minute/IP (brute-force protection).
      */
-    app.post("/api/auth/register", async (req, reply) => {
+    app.post("/api/auth/register", rateLimitConfig, async (req, reply) => {
       const parsed = registerInputSchema.safeParse(req.body);
       if (!parsed.success) {
         reply.code(422);
@@ -87,7 +113,7 @@ export function buildAuthRoutes(deps: AuthRouteDeps) {
      * 200: { accessToken, user } + Set-Cookie: embers_refresh=<jwt>; HttpOnly; Secure; SameSite=Strict
      * 401: bad credentials
      */
-    app.post("/api/auth/login", async (req, reply) => {
+    app.post("/api/auth/login", rateLimitConfig, async (req, reply) => {
       const parsed = loginInputSchema.safeParse(req.body);
       if (!parsed.success) {
         reply.code(422);

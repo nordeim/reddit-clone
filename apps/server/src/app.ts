@@ -94,11 +94,22 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   });
 
   // 4. Rate limiting — disabled in test env by default.
+  //    Allowlist is intentionally empty: localhost gets rate-limited
+  //    like any other client (the secure default — overrides happen at
+  //    the route level for auth endpoints).
+  //    Custom errorResponseBuilder ensures the 429 body matches the
+  //    standard { error: { code, message, requestId } } envelope.
   if (!opts.skipRateLimit && env.NODE_ENV !== "test") {
     await app.register(rateLimit, {
       max: env.RATE_LIMIT_MAX,
       timeWindow: env.RATE_LIMIT_WINDOW,
-      allowList: ["127.0.0.1"],
+      errorResponseBuilder: (_req: unknown, context: { after: string }) => ({
+        statusCode: 429,
+        error: {
+          code: "RATE_LIMITED",
+          message: `Rate limit exceeded. Retry after ${context.after}.`,
+        },
+      }),
     });
   }
 
