@@ -84,16 +84,16 @@ Inter (loaded from Google Fonts). Fallback chain: `ui-sans-serif, system-ui, -ap
 |---|---|---|---|
 | Background | `zinc-50` | `zinc-950` | Page background |
 | Surface | `white` | `zinc-900` | Cards, modals, sidebar |
-| Text | `zinc-900` | `zinc-50` | Primary text |
+| Text | `zinc-900` | `zinc-100` | Primary text |
 | Accent | `orange-600` | `orange-500` | Active states, brand, upvotes |
-| Downvote | `indigo-600` | `indigo-500` | Downvote button |
+| Downvote | `indigo-600` | `indigo-600` | Downvote button |
 | Border | `zinc-200` | `zinc-800` | Card/section borders |
 
 Dark mode uses a custom variant: `@custom-variant dark (&:where(.dark, .dark *));`
 
 ### Component Primitives
 
-`Avatar` · `Button` (5 variants × 4 sizes) · `Modal` · `Dropdown` · `Skeleton` · `Toaster` · `VoteControl` · `Card`
+`Avatar` · `Button` (5 variants × 4 sizes) · `Modal` · `Dropdown` · `Skeleton` · `Toaster`
 
 ### Animation
 
@@ -155,6 +155,7 @@ npm run build
     ├── components/
     │   ├── ui/                 # Primitives: Avatar, Button, Modal, Dropdown, Skeleton, Toaster
     │   ├── layout/             # AppShell, Navbar, Sidebar, RightPanel, ErrorBoundary
+    │   ├── notifications/      # NotificationsPanel
     │   ├── feed/               # PostCard, PostList, SortTabs, VoteControl, CreatePostModal
     │   ├── post/               # CommentThread, CommentComposer
     │   ├── community/          # CommunityHeader

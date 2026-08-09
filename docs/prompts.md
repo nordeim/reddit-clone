@@ -10,6 +10,22 @@ Do not create any new git branch. All git commits must be to the main branch.
 
 ---
 
+please meticulously plan to review and validate @AGENTS.md , @CLAUDE.md and @README.md against the codebase to check for alignment
+
+please meticulously plan to apply precise edits to the relevant documents to align them with the current codebase. but first re-evaluate and re-validate your findings again to ensure alignment.
+
+yes, please proceed meticulously
+
+please meticulously plan to create `README.md` using skill 'readme-md'
+
+please meticulously plan to apply precise edits to @AGENTS.md to align it with the current codebase. but first meticulously re-evaluate and re-validate your findings
+
+please meticulously plan to create `CLAUDE.md` using skill 'claude-md'
+
+please meticulously plan to create `docs/Project-Architecture-Document.md` using skill 'project-architecture-document-md'
+
+please meticulously plan to create `README.md` using skill 'readme-md'
+
 please meticulously plan to review and validate @AGENTS.md , @CLAUDE.md and @README.md against the codebase to check for alignment.
 
 ---

@@ -54,7 +54,7 @@ This PAD serves as the single source of truth for:
 | Class merging | clsx + tailwind-merge | 2.1.1 / 3.4.0 | Conditional classes without specificity conflicts |
 | Single-file | vite-plugin-singlefile | 2.3.0 | Inlines all JS/CSS into one HTML for portable deployment |
 
-No test runner. No linter. No ESLint.
+Test runner: Vitest 2.1.9 + Testing Library + jsdom. No linter. No ESLint.
 
 ### 1.3 Architecture Decision Records (ADRs)
 
@@ -79,7 +79,7 @@ No test runner. No linter. No ESLint.
 - **Context:** The app is a demo that must be trivially deployable — drag-and-drop onto any static host, no server config.
 - **Decision:** `vite-plugin-singlefile` inlines all JS and CSS into a single `dist/index.html`. Code splitting is prohibited.
 - **Rationale:** One file = zero routing config, zero MIME issues, zero cache-busting complexity. Host it on GitHub Pages, Netlify, S3, or `python -m http.server` — all work.
-- **Consequences:** (+) Ultimate portability. (−) No `React.lazy` or dynamic imports. (−) Larger initial load (~508 KB). (−) No code splitting for performance.
+- **Consequences:** (+) Ultimate portability. (−) No `React.lazy` or dynamic imports. (−) Larger initial load (~528 KB). (−) No code splitting for performance.
 - **Alternatives Rejected:** Standard multi-chunk build (breaks single-file goal). Server-side rendering (defeats client-only architecture).
 
 #### ADR-004: HashRouter for Zero-Config Routing
@@ -195,15 +195,22 @@ src/
 │   └── images.ts               # ImageCategory → /images/*.jpg mapping
 │
 ├── store/
-│   └── store.ts                # ← LAYER 1: Zustand store + persist middleware
+│   ├── store.ts                # ← LAYER 1: Zustand store + persist middleware
+│   ├── storage.ts              # safe JSON parse + persisted-state validation + merge helpers
+│   ├── selectors.ts            # pure selectors (visible score, unread count, badge cap, etc.)
+│   └── themeBootstrap.ts       # synchronous theme application before React mounts
 │
 ├── hooks/
-│   └── index.ts                # useDebounce, useOnClickOutside, useInfiniteScroll
+│   ├── index.ts                # useDebounce, useOnClickOutside, useInfiniteScroll
+│   └── useFocusTrap.ts         # focus trap for Modal/Drawer overlays (Tab cycle, Escape, focus return)
 │
 ├── utils/
 │   ├── cn.ts                   # clsx + tailwind-merge
 │   ├── format.ts               # timeAgo, formatCount, formatFullDate
-│   └── random.ts               # hashString, seededRandom, createRng, gradientFor
+│   ├── random.ts               # hashString, seededRandom, createRng, gradientFor
+│   ├── score.ts                # getVisibleScore, hotScore, risingScore, sortPosts
+│   ├── search.ts               # normalizeQuery, matchScore, searchPosts/Communities/Users
+│   └── url.ts                  # isSafeUrl, extractDomain
 │
 ├── components/
 │   ├── ui/                     # ← Primitives (no business logic)
@@ -218,7 +225,8 @@ src/
 │   │   ├── AppShell.tsx        # Navbar + Sidebar + <Outlet /> + Toaster
 │   │   ├── Navbar.tsx          # Sticky header: logo, search, create, theme, notifications, account
 │   │   ├── Sidebar.tsx         # Nav links + joined communities + all communities; mobile drawer
-│   │   └── RightPanel.tsx      # Trending communities, about footer (hidden < xl)
+│   │   ├── RightPanel.tsx      # Trending communities, about footer (hidden < xl)
+│   └── ErrorBoundary.tsx    # Class component wrapping <Outlet />, catches render-time errors
 │   │
 │   ├── feed/                   # ← Post display + interaction
 │   │   ├── PostCard.tsx        # Post preview: vote, community, author, title, actions
@@ -234,6 +242,12 @@ src/
 │   ├── community/
 │   │   └── CommunityHeader.tsx # Community banner: icon, title, member count, join button
 │   │
+│   ├── search/
+│   │   └── SearchBar.tsx       # Full-text search with keyboard nav + race-fix
+│
+│   ├── notifications/
+│   │   └── NotificationsPanel.tsx # Notification list with All/Unread tabs + mark-read
+│
 ├── pages/
 │   ├── HomePage.tsx            # /, /popular, /all, /explore — scope from pathname
 │   ├── CommunityPage.tsx       # /r/:name — community feed + header
@@ -380,9 +394,9 @@ type ImageCategory = "nature" | "tech" | "gaming" | "food" |
 |---|---|
 | Mechanism | zustand `persist` middleware |
 | Storage | `localStorage` key `reddit-clone-state` |
-| Whitelist (partialize) | `theme`, `votes`, `joinedCommunityIds`, `savedPostIds`, `localPosts`, `localComments`, `notificationReadOverrides` |
+| Whitelist (partialize) | `schemaVersion`, `theme`, `votes`, `joinedCommunityIds`, `savedPostIds`, `localPosts`, `localComments`, `notificationReadOverrides` |
 | Excluded | `toasts` (ephemeral UI only) |
-| No migration | No `version`/`migrate` on persist — changed shapes hydrate stale data |
+| Schema version | `schemaVersion: 1` + custom `merge` + `migrate` hook on `persist` |
 | Debug tip | Clear `reddit-clone-state` key when state behaves oddly |
 
 ### 4.3 Data Generation Summary
@@ -419,13 +433,13 @@ Tailwind v4 CSS-first `@theme` in `index.css` uses Tailwind's built-in color sca
 |---|---|---|
 | Background | `bg-zinc-50` | `bg-zinc-950` |
 | Surface | `bg-white` | `bg-zinc-900` |
-| Text primary | `text-zinc-900` | `text-zinc-50` |
+| Text primary | `text-zinc-900` | `text-zinc-100` |
 | Text secondary | `text-zinc-600` | `text-zinc-300` |
 | Text muted | `text-zinc-500` | `text-zinc-400` |
 | Border | `border-zinc-200` | `border-zinc-800` |
 | Accent primary | `orange-600` | `orange-500` |
-| Accent upvote | `orange-600` | `orange-500` |
-| Accent downvote | `indigo-600` | `indigo-500` |
+| Accent upvote | `orange-600` | `orange-600` |
+| Accent downvote | `indigo-600` | `indigo-600` |
 | Active nav | `bg-orange-50` / `text-orange-700` | `bg-orange-500/10` / `text-orange-400` |
 
 Dark mode: Custom variant `@custom-variant dark (&:where(.dark, .dark *));` — toggled via `.dark` class on `<html>`.
@@ -600,8 +614,8 @@ npm install
 # Start dev server
 npm run dev      # → http://localhost:5173
 
-# Typecheck (manual — no script exists)
-npx tsc --noEmit
+# Typecheck
+npm run typecheck
 
 # Production build
 npm run build    # → dist/index.html
@@ -636,7 +650,7 @@ npm run preview  # → serves dist/ on a local port
 | Convention | Detail |
 |---|---|
 | `node_modules/` | Gitignored |
-| `dist/` | **NOT gitignored** — delete after building to avoid pollution |
+| `dist/` | Gitignored (along with `node_modules/`) |
 | Branching | Not specified — use feature branches |
 | Commit style | Not enforced |
 
@@ -648,7 +662,6 @@ npm run preview  # → serves dist/ on a local port
 |----------|-------|--------|--------|
 | MEDIUM | No linter installed | No enforced code style | Open |
 | LOW | Google Fonts loaded externally | Breaks when offline or blocked by CSP | Open |
-| LOW | `dist/` not gitignored | Pollutes `git status` after builds | Open |
 | LOW | Comment IDs (`${postId}-c${Date.now()}`) can theoretically collide if two comments are created in the same millisecond | Extremely unlikely but possible | Open |
 
 ### 10.1 Resolved in the latest remediation pass
@@ -699,7 +712,13 @@ The following previously-open issues are now resolved (see `docs/REMEDIATION_PLA
 | `src/utils/random.ts` | Seeded PRNG (FNV-1a → mulberry32) + gradientFor |
 | `src/utils/cn.ts` | clsx + tailwind-merge utility |
 | `src/utils/format.ts` | timeAgo, formatCount, formatFullDate |
-| `src/hooks/index.ts` | useDebounce, useOnClickOutside, useInfiniteScroll |
+| `src/utils/score.ts` | getVisibleScore, hotScore, risingScore, sortPosts |
+| `src/utils/search.ts` | normalizeQuery, matchScore, searchPosts/Communities/Users |
+| `src/utils/url.ts` | isSafeUrl, extractDomain |
+| `src/store/storage.ts` | safe JSON parse + persisted-state validation + merge helpers |
+| `src/store/selectors.ts` | pure selectors (visible score, unread count, badge cap) |
+| `src/store/themeBootstrap.ts` | synchronous theme application before React mounts |
+| `src/hooks/useFocusTrap.ts` | focus trap for Modal/Drawer overlays |
 | `src/components/feed/PostList.tsx` | Feed paging (PAGE_SIZE=8, infinite scroll) |
 | `src/components/feed/VoteControl.tsx` | Vote up/down with baseScore + vote |
 | `src/components/feed/PostCard.tsx` | Post preview card |
@@ -710,6 +729,9 @@ The following previously-open issues are now resolved (see `docs/REMEDIATION_PLA
 | `src/components/layout/AppShell.tsx` | Root layout: Navbar + Sidebar + Outlet |
 | `src/components/layout/Navbar.tsx` | Sticky header with search, create, theme, notifications |
 | `src/components/layout/Sidebar.tsx` | Navigation links + communities (desktop + mobile) |
+| `src/components/layout/ErrorBoundary.tsx` | Class component wrapping <Outlet /> |
+| `src/components/search/SearchBar.tsx` | Full-text search with keyboard nav + race-fix |
+| `src/components/notifications/NotificationsPanel.tsx` | Notification list with All/Unread tabs |
 | `src/pages/HomePage.tsx` | Feed with scope (home/popular/all/explore) |
 | `src/pages/PostPage.tsx` | Post detail + comment tree (500ms simulated load) |
 | `vite.config.ts` | Vite + React + Tailwind + singlefile |

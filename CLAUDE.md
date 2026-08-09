@@ -41,7 +41,7 @@ These are non-negotiable. Violating them breaks the build or runtime.
 
 1. **No code splitting.** `vite-plugin-singlefile` inlines everything into one `dist/index.html`. Never add `React.lazy`, dynamic `import()`, or manual chunks.
 2. **`HashRouter`, not `BrowserRouter`.** Deliberate — enables static hosting without rewrite rules. Don't switch it.
-3. **Dist is not gitignored.** `node_modules/` is, but `dist/` is not. Delete it after building or it pollutes `git status`.
+3. **Dist is gitignored.** Both `node_modules/` and `dist/` are in `.gitignore`, so neither pollutes `git status`.
 4. **Google Fonts + images load externally.** `index.css` `@import`s Inter from Google Fonts; `public/images/*.jpg` are referenced as `${import.meta.env.BASE_URL}images/...`. Opening `dist/` over `file://` breaks both. Serve from a web root.
 5. **Tailwind v4 has no config file.** Theme lives in `src/index.css` under `@theme`. No `tailwind.config.js`, no PostCSS config. Use CSS custom properties like `var(--color-orange-500)` in plain CSS — the `theme()` function syntax from v3 does NOT work.
 
@@ -169,17 +169,17 @@ src/
 ├── components/
 │   ├── community/       # CommunityHeader
 │   ├── feed/            # PostCard, PostList, SortTabs, VoteControl, CreatePostModal
-│   ├── layout/          # AppShell, Navbar, Sidebar, RightPanel
+│   ├── layout/          # AppShell, Navbar, Sidebar, RightPanel, ErrorBoundary
 │   ├── notifications/   # NotificationsPanel
 │   ├── post/            # CommentThread, CommentComposer
 │   ├── search/          # SearchBar
 │   └── ui/              # Avatar, Button, Dropdown, Modal, Skeleton, Toaster
 ├── data/                # Deterministic content generation (immutable)
-├── hooks/               # useDebounce, useOnClickOutside, useInfiniteScroll
+├── hooks/               # useDebounce, useOnClickOutside, useInfiniteScroll, useFocusTrap
 ├── pages/               # HomePage, CommunityPage, PostPage, ProfilePage, SearchPage, NotificationsPage, NotFoundPage
 ├── store/               # Single zustand store (useAppStore)
 ├── types/               # All TypeScript interfaces and union types
-└── utils/               # cn, format, random
+└── utils/               # cn, format, random, score, search, url
 ```
 
 ## Routes (HashRouter)

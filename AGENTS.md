@@ -15,7 +15,7 @@
 
 - `build` is **not** the standard Vite template's `tsc -b && vite build`. Type errors will not fail it. Always run `npm run typecheck` before claiming a change compiles.
 - **Tests run on Vitest + Testing Library + jsdom.** Config lives in `vitest.config.ts` (separate from `vite.config.ts` to avoid a type clash between the project's `vite` package and the `vite` bundled inside `vitest`). Test files live alongside source as `*.test.ts(x)`.
-- `node_modules/` is gitignored; **`dist/` is not** — delete it after building or it pollutes `git status`.
+- Both `node_modules/` and `dist/` are gitignored — neither pollutes `git status`.
 
 ## Build & toolchain quirks
 
