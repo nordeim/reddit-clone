@@ -4,6 +4,30 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>embers — a Reddit-style community feed</title>
+    <!--
+      Theme bootstrap — runs synchronously before React mounts so the
+      persisted `.dark` class is on <html> for the very first paint,
+      preventing a flash of light theme when dark mode is persisted.
+      The logic is mirrored from `src/store/themeBootstrap.ts` so it can
+      be unit-tested; this inline copy is what actually runs in the browser.
+      Any storage/parse/DOM error falls back silently to light mode.
+    -->
+    <script>
+      (function () {
+        try {
+          var raw = localStorage.getItem("reddit-clone-state");
+          if (!raw) return;
+          var parsed = JSON.parse(raw);
+          var theme = parsed && parsed.state && parsed.state.theme;
+          if (theme === "dark") {
+            document.documentElement.classList.add("dark");
+          }
+        } catch (e) {
+          // localStorage unavailable (privacy mode), corrupt JSON, or
+          // unexpected shape — fall back to light mode silently.
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
