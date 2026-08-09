@@ -16,3 +16,14 @@ dist/
 .gemini
 .claude
 .agents
+
+# Backend artifacts
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+apps/server/dist/
+packages/*/dist/
+.env
+.env.local
+.env.*.local
