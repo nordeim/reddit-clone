@@ -26,15 +26,15 @@
   },
   "dependencies": {
     "@embers/shared": "*",
-    "better-sqlite3": "^11.5.0",
+    "better-sqlite3": "^13.0.3",
     "drizzle-orm": "^0.36.4"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.12",
-    "@types/node": "22.19.17",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.19.17",
     "drizzle-kit": "^0.28.1",
-    "tsx": "^4.19.2",
-    "typescript": "5.9.3",
+    "tsx": "^4.23.11",
+    "typescript": "^5.9.3",
     "vitest": "^2.1.9"
   }
 }
