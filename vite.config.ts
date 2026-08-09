@@ -9,6 +9,10 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // https://vite.dev/config/
+// Vitest config lives in `vitest.config.ts` to avoid a type clash between
+// the project's `vite` package and the `vite` bundled inside `vitest`.
+// `vite build` ignores the test config entirely; the single-file production
+// output is unaffected.
 export default defineConfig({
   plugins: [react(), tailwindcss(), viteSingleFile()],
   resolve: {
