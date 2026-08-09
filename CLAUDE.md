@@ -12,11 +12,13 @@
 
 ---
 
-A client-only React SPA: **no backend, no API, no `fetch`**. All content (users, communities, posts, comments, notifications) is generated deterministically in the browser via seeded PRNGs.
+The original client-only React SPA lives at `apps/web/` (`@embers/web`): **no backend, no API, no `fetch`** — all content is generated deterministically in the browser via seeded PRNGs. Three backend workspaces (`@embers/server`, `@embers/db`, `@embers/shared`) provide a Fastify REST API, Drizzle ORM data layer, and shared Zod contracts.
 
-**Related docs:** `AGENTS.md` — comprehensive codebase reference (architecture, data layer contracts, full route table). Read it for deep context; this file focuses on daily implementation conventions.
+**Related docs:** `AGENTS.md` — comprehensive codebase reference (architecture, data layer contracts, full route table, backend patterns). Read it for deep context; this file focuses on daily implementation conventions.
 
 ## Tech Stack
+
+### Client (`apps/web`)
 
 | Layer | Technology | Version |
 |---|---|---|
@@ -32,18 +34,42 @@ A client-only React SPA: **no backend, no API, no `fetch`**. All content (users,
 | Testing | vitest + @testing-library/react | 2.1.9 / 16.x |
 | Test env | jsdom | 25.x |
 
-Tests are colocated with source as `*.test.ts(x)`. The vitest config lives in `vitest.config.ts` (separate from `vite.config.ts` to avoid a type clash between the project's `vite` package and the `vite` bundled inside `vitest`). No ESLint.
+### Backend (`apps/server`, `packages/{db,shared}`)
+
+| Layer | Technology | Version |
+|---|---|---|
+| API Framework | Fastify | 5.11.3 |
+| ORM | Drizzle ORM | 0.36.4 |
+| Database | better-sqlite3 | 13.0.3 (prebuilt binaries) |
+| Auth | jose (JWT) + argon2 (hashing) | 5.10.0 / 0.41.1 |
+| Validation | zod | 3.25.76 |
+| Logging | pino | 9.14.0 |
+| Testing | vitest + Fastify inject | 2.1.9 |
+| Runtime | Node.js | ≥20 |
+
+Tests are colocated with source as `*.test.ts(x)`. The vitest config lives in each workspace's `vitest.config.ts`. No ESLint.
 
 ## Commands
 
+### All workspaces (run from root)
+
 | Command | Purpose |
 |---------|---------|
-| `npm run dev` | Vite dev server (default `:5173`) |
-| `npm run build` | Production build — **does NOT typecheck** |
-| `npm run typecheck` | `tsc --noEmit` — runs the type checker |
-| `npm test` | Vitest in run mode (single shot) |
-| `npm run test:watch` | Vitest in watch mode |
-| `npm run preview` | Serve `dist/` over HTTP |
+| `npm run dev --workspace @embers/web` | Vite dev server (default `:5173`) |
+| `npm run dev --workspace @embers/server` | Fastify dev server (default `:4000`) |
+| `npm run build` | Build all — **topological**: `shared → db → server → web` |
+| `npm run typecheck` | Typecheck all — same order |
+| `npm test` | Test all via `--workspaces` (do NOT run `vitest run` from root) |
+| `npm run db:migrate --workspace @embers/db` | Apply Drizzle migrations |
+| `npm run db:seed --workspace @embers/db` | Seed dev.db (49 users, 320 posts, etc.) |
+
+### Per-workspace
+
+| Command | Purpose |
+|---------|---------|
+| `npm run build --workspace @embers/server` | Build one workspace |
+| `npm test --workspace @embers/db` | Test one workspace |
+| `npm run typecheck --workspace @embers/shared` | Typecheck one workspace |
 
 `build` is bare `vite build`, not `tsc -b && vite build`. Always run `npm run typecheck` before claiming a change compiles. Run `npm test` before claiming a change is correct — every code change should ship with tests (TDD: red → green → refactor).
 
@@ -51,11 +77,20 @@ Tests are colocated with source as `*.test.ts(x)`. The vitest config lives in `v
 
 These are non-negotiable. Violating them breaks the build or runtime.
 
+### Client (`apps/web`)
+
 1. **No code splitting.** `vite-plugin-singlefile` inlines everything into one `dist/index.html`. Never add `React.lazy`, dynamic `import()`, or manual chunks.
 2. **`HashRouter`, not `BrowserRouter`.** Deliberate — enables static hosting without rewrite rules. Don't switch it.
 3. **Dist is gitignored.** Both `node_modules/` and `dist/` are in `.gitignore`, so neither pollutes `git status`.
 4. **Google Fonts + images load externally.** `index.css` `@import`s Inter from Google Fonts; `public/images/*.jpg` are referenced as `${import.meta.env.BASE_URL}images/...`. Opening `dist/` over `file://` breaks both. Serve from a web root.
 5. **Tailwind v4 has no config file.** Theme lives in `src/index.css` under `@theme`. No `tailwind.config.js`, no PostCSS config. Use CSS custom properties like `var(--color-orange-500)` in plain CSS — the `theme()` function syntax from v3 does NOT work.
+
+### Backend (`apps/server`, `packages/{db,shared}`)
+
+6. **Prebuilt binaries, no compilation.** `better-sqlite3@13.0.3` ships prebuilt `.node` binaries in `prebuilds/`. Install scripts being blocked is **fine** — no `node-gyp` needed. The native module loads via platform subpath exports (`./linux-x64` → `prebuilds/linux-x64.node`).
+7. **ESM everywhere.** All backend workspaces are `"type": "module"`. Use `.js` extensions in relative imports (e.g., `import { foo } from "./bar.js"`).
+8. **`buildApp()` is the composition root.** Tests use `app.inject()` — no port binding. API routes only register when `db` + `rawDb` are passed.
+9. **Env via `loadEnv()` only.** Server reads config through zod-validated `loadEnv()` — never `process.env` directly. Production requires `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `DATABASE_URL`, `CORS_ORIGIN`.
 
 ## TypeScript
 
@@ -86,6 +121,57 @@ All content is generated at import time from `src/data/*` using seeded PRNGs (`s
 | `getCommunityByName(name)` | returns `undefined` |
 | `getCommunity(id)` | **throws** |
 | `getUser(id)` | silently returns `CURRENT_USER` |
+
+## Backend Data Layer
+
+The backend uses **Drizzle ORM** with `better-sqlite3` — a completely different data layer from the client's deterministic generation.
+
+### Schema (`packages/db/src/schema/index.ts`)
+
+7 tables: `users`, `communities`, `posts`, `comments`, `votes`, `notifications`, `sessions`.
+
+- All IDs are `text` (UUIDs generated app-side via `crypto.randomUUID()`)
+- Timestamps are ISO 8601 `text` (UTC, `toISOString()`)
+- `votes` has a composite PK `(user_id, target_id, target_type)` — one vote per user per target
+- `sessions` stores refresh-token JTIs for revocation
+
+### FTS5 Full-Text Search (`packages/db/src/fts5.ts`)
+
+- Virtual table `posts_fts` with external-content pattern (`content='posts'`, `content_rowid='rowid'`) — halves storage
+- Sync triggers: `posts_ai` (insert), `posts_ad` (delete), `posts_au` (update)
+- BM25 ranking via `searchPosts(db, query, limit, offset)`
+
+### Branded IDs (`packages/db/src/ids.ts`)
+
+Nominal-typed string aliases (`UserId`, `PostId`, etc.) that prevent passing the wrong ID type. Erased at runtime, enforced at compile time. Use `asUserId()` to lift a raw string.
+
+### Migrations & Seed
+
+- **Migrations**: `npm run db:generate` (drizzle-kit) → SQL in `src/migrations/`, applied via `npm run db:migrate`
+- **Seed**: `npm run db:seed` — deterministic PRNG → 49 users, 18 communities, 320 posts, ~3037 comments, 18 notifications. Demo user: `you` / `embers-demo`
+
+### SQLite Hardening
+
+Applied by `openDb()` in `packages/db/src/client.ts`:
+- `PRAGMA journal_mode=WAL` (skipped for `:memory:`)
+- `PRAGMA busy_timeout=5000`
+- `PRAGMA foreign_keys=ON`
+- `PRAGMA synchronous=NORMAL`
+
+## Backend Architecture (ADRs)
+
+| ADR | Decision |
+|---|---|
+| ADR-101 | REST + Zod API contract (`@embers/shared`) |
+| ADR-102 | Fastify web framework (plugin-based, inject-based testing) |
+| ADR-103 | SQLite + Drizzle ORM (WAL, busy_timeout=5000) |
+| ADR-104 | JWT auth (15m access + 7d refresh, HttpOnly cookies) |
+| ADR-107 | npm-workspaces monorepo |
+| ADR-108 | Transactional atomic vote counters (`UPDATE … SET col = col + delta`) |
+| ADR-109 | SQLite FTS5 virtual tables for full-text search |
+| ADR-110 | Pino structured logging + requestId correlation |
+
+Deferred: ADR-105 (React Query), ADR-106 (BrowserRouter), B23 (Docker/GHA), B24 (Playwright E2E).
 
 ## State Management
 
@@ -119,28 +205,34 @@ A synchronous inline script in `index.html` (mirrored in `src/store/themeBootstr
 
 ## Testing
 
+### Client (`apps/web`)
+
 Tests use **Vitest** with the **Testing Library** + **jsdom** environment.
 
-### Setup
-
 - Config: `vitest.config.ts` (separate from `vite.config.ts`).
-- Setup file: `src/test/setup.ts` — imports `@testing-library/jest-dom/vitest`, stubs `IntersectionObserver` and `matchMedia` (which jsdom doesn't implement).
-- Router helper: `src/test/utils.tsx` exports `renderWithRouter` which wraps a component in `MemoryRouter` and returns `user` (a `userEvent` instance) alongside the usual RTL queries.
-
-### Conventions
-
+- Setup file: `src/test/setup.ts` — imports `@testing-library/jest-dom/vitest`, stubs `IntersectionObserver` and `matchMedia`.
+- Router helper: `src/test/utils.tsx` exports `renderWithRouter` which wraps a component in `MemoryRouter`.
 - Test files live alongside source as `*.test.ts(x)`.
-- Characterization tests for existing pure utilities (format, random, score, search, url, selectors, storage) live in `src/utils/*.test.ts` and `src/store/*.test.ts`.
-- Integration tests for components (VoteControl, CreatePostModal, Modal, Dropdown, SearchBar) live next to the component.
-- TDD: write the failing test first (RED), implement the minimum to pass (GREEN), then refactor with tests still green.
-- Never weaken or skip a test to make the build pass. If a test is wrong, fix the test. If a test is right, fix the code.
+- TDD: write the failing test first (RED), implement the minimum to pass (GREEN), then refactor.
+- Never weaken or skip a test to make the build pass.
+
+### Backend (`apps/server`, `packages/{db,shared}`)
+
+Tests use **Vitest** with **Fastify's `inject()`** — no port binding needed.
+
+- **Fresh DB per test**: `openDb({ path: ":memory:" })` creates an isolated in-memory SQLite instance.
+- **Wire everything**: `buildApp({ env, db, rawDb })` registers repositories + routes for integration tests.
+- **Skip middleware**: `skipHelmet`/`skipRateLimit` options (rate-limit auto-disabled in `NODE_ENV=test`).
+- **Auth flow**: tests log in as the seeded demo user (`you` / `embers-demo`) to get access tokens.
+- **Direct seeding**: performance tests (vote concurrency) insert users directly via Drizzle to bypass Argon2id.
+- Test files: `*.test.ts` alongside source — 8 in server, 2 in db, 3 in shared.
 
 ### Pre-commit checklist
 
 ```bash
 npm run typecheck   # tsc --noEmit — must pass clean
-npm test            # vitest run — all tests must pass
-npm run build       # vite build — must succeed
+npm test            # vitest run (all workspaces) — all 367 tests must pass
+npm run build       # topological build — must succeed
 ```
 
 ## UI Conventions
@@ -174,27 +266,39 @@ Custom variant, not v3 `darkMode: 'class'`:
 ## File Organization
 
 ```
-src/
-├── App.tsx              # HashRouter + routes + theme effect
-├── main.tsx             # Entry point
-├── index.css            # Tailwind import, @theme, dark variant, .line-clamp
-├── components/
-│   ├── community/       # CommunityHeader
-│   ├── feed/            # PostCard, PostList, SortTabs, VoteControl, CreatePostModal
-│   ├── layout/          # AppShell, Navbar, Sidebar, RightPanel, ErrorBoundary
-│   ├── notifications/   # NotificationsPanel
-│   ├── post/            # CommentThread, CommentComposer
-│   ├── search/          # SearchBar
-│   └── ui/              # Avatar, Button, Dropdown, Modal, Skeleton, Toaster
-├── data/                # Deterministic content generation (immutable)
-├── hooks/               # useDebounce, useOnClickOutside, useInfiniteScroll, useFocusTrap
-├── pages/               # HomePage, CommunityPage, PostPage, ProfilePage, SearchPage, NotificationsPage, NotFoundPage
-├── store/               # Single zustand store (useAppStore)
-├── types/               # All TypeScript interfaces and union types
-└── utils/               # cn, format, random, score, search, url
+reddit-clone/
+├── apps/
+│   ├── web/                 ← @embers/web (React SPA, Vite, 176 tests)
+│   │   └── src/             # See AGENTS.md for full web tree
+│   └── server/              ← @embers/server (Fastify, 95 tests)
+│       └── src/
+│           ├── app.ts       # buildApp() composition root
+│           ├── index.ts     # Entry point (listen + graceful shutdown)
+│           ├── config.ts    # loadEnv() zod-validated env
+│           ├── auth/        # jwt.ts, password.ts (Argon2id)
+│           ├── plugins/     # helmet, cors, cookie, rateLimit, requestId, auth, errorHandler
+│           ├── repositories/ # userRepository, postRepository, voteRepository, etc.
+│           ├── services/    # voteService (transactional), commentTreeService
+│           └── routes/      # health, auth, posts, communities, votes, comments, search, notifications
+├── packages/
+│   ├── shared/              ← @embers/shared (Zod + branded IDs, 67 tests)
+│   │   └── src/
+│   │       ├── ids.ts       # Branded ID types + constructors
+│   │       ├── schemas/     # Entity Zod schemas
+│   │       └── api/         # API input/output schemas per endpoint
+│   └── db/                  ← @embers/db (Drizzle + SQLite + FTS5, 29 tests)
+│       └── src/
+│           ├── client.ts    # openDb() — connection + hardening pragmas
+│           ├── fts5.ts      # FTS5 virtual table + sync triggers + searchPosts()
+│           ├── schema/      # Drizzle table definitions (7 tables)
+│           └── seed/        # Deterministic seed script
+├── docs/                    # Architecture, remediation plans, QA
+└── package.json             # Root workspaces config + fan-out scripts
 ```
 
-## Routes (HashRouter)
+## Routes
+
+### Client (HashRouter)
 
 | Path | Page |
 |---|---|
@@ -205,6 +309,28 @@ src/
 | `/search` | SearchPage |
 | `/notifications` | NotificationsPage |
 | `*` | NotFoundPage |
+
+### Server API
+
+| Method | Path | Auth | Purpose |
+|---|---|---|---|
+| GET | `/health` | No | Health check |
+| POST | `/api/auth/register` | No | Create account |
+| POST | `/api/auth/login` | No | Login → access token + refresh cookie |
+| POST | `/api/auth/refresh` | Cookie | Rotate access token |
+| POST | `/api/auth/logout` | Cookie | Revoke refresh token |
+| GET | `/api/posts` | No | Cursor-paginated list |
+| GET | `/api/posts/:id` | No | Single post |
+| POST | `/api/posts` | Yes | Create post |
+| PATCH | `/api/posts/:id` | Yes (author) | Partial update |
+| DELETE | `/api/posts/:id` | Yes (author) | Delete post |
+| GET | `/api/communities` | No | List communities |
+| GET | `/api/communities/:id` | No | Single community |
+| PUT | `/api/votes/:targetId` | Yes | Cast/toggle/flip vote |
+| GET | `/api/comments/:postId` | No | Comment tree |
+| POST | `/api/comments/:postId` | Yes | Create comment |
+| GET | `/api/search` | No | FTS5 search (posts/communities/users) |
+| GET | `/api/notifications` | Yes | List notifications |
 
 ## Local ID Patterns
 
@@ -218,6 +344,8 @@ This is why vote keys are namespaced (`post:` / `comment:`) — to avoid collisi
 
 ## Pitfalls to Avoid
 
+### Client
+
 1. **Don't add `React.lazy` or dynamic `import()`.** Defeats `vite-plugin-singlefile`.
 2. **Don't switch to `BrowserRouter`.** Hash routing is intentional.
 3. **Don't mutate generated data.** Add overlay slices for new user-mutable features.
@@ -227,3 +355,13 @@ This is why vote keys are namespaced (`post:` / `comment:`) — to avoid collisi
 7. **Don't remove simulated latency.** It's intentional UX paired with skeleton states.
 8. **Don't call `getCommunity(id)` without a try/catch.** It throws on miss — use `getCommunityByName` for safe lookups.
 9. **Don't import React.** `jsx: react-jsx` handles it automatically.
+
+### Backend
+
+10. **Don't read `process.env` directly.** Use `loadEnv()` — it's zod-validated and enforces production required-fields.
+11. **Don't add `import type` for Drizzle tables.** Tables are runtime values (the `comments` import bug in Round 2).
+12. **Don't use the `tx` param in `db.transaction()` for better-sqlite3.** It's synchronous — outer `db` already executes within the transaction. Use `db.transaction(() => { ... })`.
+13. **Don't leak internals.** The error handler returns `{ error: { code, message, requestId } }` only — no stack traces.
+14. **Don't skip the `requestId` plugin.** The error handler depends on `req.id`.
+15. **Don't forget `.js` extensions in ESM imports.** All backend workspaces are `"type": "module"`.
+16. **Don't forget WAL is skipped for `:memory:` DBs.** `openDb()` handles this — don't override.

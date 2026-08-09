@@ -11,11 +11,11 @@ reddit-clone/
 │   ├── web/          ← @embers/web — the original client-only React SPA
 │   │                   (HashRouter, vite-plugin-singlefile, 176 tests)
 │   └── server/       ← @embers/server — Fastify REST API + auth + FTS5 search
-│                       (80 tests, /health, /api/auth, /api/posts,
+│                       (95 tests, /health, /api/auth, /api/posts,
 │                        /api/communities, /api/votes, /api/comments,
 │                        /api/search, /api/notifications)
 ├── packages/
-│   ├── shared/       ← @embers/shared — Zod schemas + branded IDs (61 tests)
+│   ├── shared/       ← @embers/shared — Zod schemas + branded IDs (67 tests)
 │   └── db/           ← @embers/db — Drizzle ORM + SQLite + FTS5 + seed (29 tests)
 ├── docs/             ← REMEDIATION_EXECUTION_PLAN.md (B0–B16 status),
 │                       REMEDIATION_PLAN_2.md (B17–B24 deferred),

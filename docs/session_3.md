@@ -222,3 +222,169 @@ Summary
  
 All 25 factual claims in session_2.md are accurate — the codebase matches the document. The only issue is an environment gap (uncompiled native binding) that the session didn't account for.
 
+---
+
+All 367 tests pass with zero manual compilation. The finding is invalidated. 
+ 
+---
+ 
+Re-Validation Report: better-sqlite3 Native Binding 
+ 
+Original Finding (Session 2) 
+ 
+│ ⚠ Critical: better-sqlite3 native binding not compiled. All db/server tests fail. Must manually run node-gyp rebuild. 
+ 
+What Changed 
+ 
+better-sqlite3 was bumped from 11.10.0 → 13.0.3 in package-lock.json (commit bdbcbcf: "update packages"). 
+ 
+Why the Finding is Wrong 
+ 
+### v11 (old) — requires compilation 
+ 
+- Loads native module via bindings package → looks in build/Release/better_sqlite3.node 
+- Install script: prebuild-install || node-gyp rebuild --release 
+- If install scripts are blocked → no .node file → all tests fail 
+ 
+### v13 (current) — ships prebuilt binaries ✅ 
+ 
+- Loads native module via platform-specific subpath exports + lib/binding.js 
+- Three-tier fallback: prebuilds/{platform}-{arch}.node → build/Debug/ → build/Release/ 
+- The prebuilt binary ships inside the npm package — no compilation needed 
+ 
+Evidence 
+ 
+┌──────────────────────────────────────────┬───────────────────────────────────────────────────────┐ 
+│ Check                                    │ Result                                                │ 
+├──────────────────────────────────────────┼───────────────────────────────────────────────────────┤ 
+│ prebuilds/linux-x64.node exists          │ ✅ 2.2 MB ELF 64-bit binary                           │ 
+├──────────────────────────────────────────┼───────────────────────────────────────────────────────┤ 
+│ build/Release/better_sqlite3.node exists │ ❌ Empty (NORMAL — not needed)                        │ 
+├──────────────────────────────────────────┼───────────────────────────────────────────────────────┤ 
+│ binding.js resolves to prebuild          │ ✅ getPrebuildPath() returns prebuilds/linux-x64.node │ 
+├──────────────────────────────────────────┼───────────────────────────────────────────────────────┤ 
+│ node -e "require('better-sqlite3')"      │ ✅ Loads and runs                                     │ 
+├──────────────────────────────────────────┼───────────────────────────────────────────────────────┤ 
+│ FTS5 query via prebuilt binary           │ ✅ Works                                              │ 
+├──────────────────────────────────────────┼───────────────────────────────────────────────────────┤ 
+│ npm test (367 tests)                     │ ✅ All pass — zero manual compilation                 │ 
+└──────────────────────────────────────────┴───────────────────────────────────────────────────────┘ 
+ 
+How lib/binding.js Works (v13) 
+ 
+```javascript 
+  // Tier 1: Prebuilt binary (shipped with npm package) 
+  function getPrebuildPath() { 
+    const target = `${process.platform}-${process.arch}`;  // "linux-x64" 
+    const filename = path.join(__dirname, '..', 'prebuilds', `${target}.node`); 
+    if (fs.existsSync(filename)) return filename;  // ← THIS HITS 
+    return null; 
+  } 
+ 
+  // Tier 2: build/Debug (only checked if no prebuild) 
+  // Tier 3: build/Release (only checked if no Debug) 
+``` 
+ 
+What the hasInstallScript: true Flag Does 
+ 
+The git diff added "hasInstallScript": true to package-lock.json. This is largely irrelevant because: 
+ 
+1. v13's package.json has no install script (only build-release, build-debug, etc.) 
+2. The prebuilt binary is bundled in the npm tarball — it doesn't need an install step 
+3. Even with install scripts blocked, the prebuilt binary is present and loads correctly 
+ 
+The flag may cause npm to run npm run build-release if someone manually triggers it, but it's not needed for normal operation. 
+ 
+Verdict 
+ 
+┌──────────────────────────┬─────────────────────────────┬────────────────────────────────────────────┐ 
+│ Aspect                   │ Original Claim              │ Reality                                    │ 
+├──────────────────────────┼─────────────────────────────┼────────────────────────────────────────────┤ 
+│ Binding compiled?        │ ❌ "Not compiled"           │ ✅ Prebuilt binary ships with npm package  │ 
+├──────────────────────────┼─────────────────────────────┼────────────────────────────────────────────┤ 
+│ Tests pass?              │ ❌ "25 db + 15 server fail" │ ✅ All 367 pass with zero compilation      │ 
+├──────────────────────────┼─────────────────────────────┼────────────────────────────────────────────┤ 
+│ Manual node-gyp needed?  │ ✅ "Required"               │ ❌ Not needed — v13 uses prebuilt binaries │ 
+├──────────────────────────┼─────────────────────────────┼────────────────────────────────────────────┤ 
+│ Fresh npm install works? │ ❌ "Will fail"              │ ✅ Works — no install scripts blocked      │ 
+└──────────────────────────┴─────────────────────────────┴────────────────────────────────────────────┘ 
+ 
+Conclusion 
+ 
+The finding is invalidated. The v11→v13 upgrade fundamentally changed how better-sqlite3 loads its native module — from requiring local compilation (node-gyp) to shipping prebuilt binaries. The build/Release/ directory being empty is  
+expected and correct for v13. The repo works on a fresh npm install with no manual intervention.
+
+---
+
+All 367 tests pass. Both docs are updated and consistent. Here's a summary of what was done: 
+ 
+---
+ 
+Summary 
+ 
+### AGENTS.md — 8 edits 
+ 
+┌──────────────────────────────────────┬──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐ 
+│ Edit                                 │ What Changed                                                                                                     │ 
+├──────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤ 
+│ Intro paragraph                      │ Now reflects monorepo reality (client SPA + backend workspaces)                                                  │ 
+├──────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤ 
+│ Commands                             │ Split into "All workspaces" + "Per-workspace" tables; added server dev, DB migrate/seed, topological build order │ 
+├──────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤ 
+│ Backend Workspaces (new)             │ Table of 3 workspaces + purpose                                                                                  │ 
+├──────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤ 
+│ Server Architecture (new)            │ Composition root, plugin order, lazy route registration, repository/service patterns, graceful shutdown          │ 
+├──────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤ 
+│ API Routes (new)                     │ Full 17-row route table with auth requirements                                                                   │ 
+├──────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤ 
+│ Authentication & Authorization (new) │ JWT + refresh cookies, Argon2id, decorator pattern, rate limiting                                                │ 
+├──────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤ 
+│ Database & FTS5 (new)                │ Drizzle schema, 7 tables, FTS5 triggers, migrations, seed                                                        │ 
+├──────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤ 
+│ Backend Testing Patterns (new)       │ app.inject(), in-memory DBs, seeded demo user, test file counts                                                  │ 
+├──────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤ 
+│ Backend Pitfalls (new)               │ 7 backend-specific pitfalls (loadEnv, import type, transactions, etc.)                                           │ 
+└──────────────────────────────────────┴──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘ 
+ 
+### CLAUDE.md — 9 edits 
+ 
+┌───────────────────────────────────┬─────────────────────────────────────────────────────────────────────────────────┐ 
+│ Edit                              │ What Changed                                                                    │ 
+├───────────────────────────────────┼─────────────────────────────────────────────────────────────────────────────────┤ 
+│ Intro                             │ Updated to reflect monorepo                                                     │ 
+├───────────────────────────────────┼─────────────────────────────────────────────────────────────────────────────────┤ 
+│ Tech Stack                        │ Split into Client + Backend tables (Fastify, Drizzle, jose, argon2, pino, etc.) │ 
+├───────────────────────────────────┼─────────────────────────────────────────────────────────────────────────────────┤ 
+│ Commands                          │ Added workspace-scoped commands, DB migrate/seed                                │ 
+├───────────────────────────────────┼─────────────────────────────────────────────────────────────────────────────────┤ 
+│ Build Constraints                 │ Split Client/Backend; added prebuilt binaries, ESM, loadEnv() rules             │ 
+├───────────────────────────────────┼─────────────────────────────────────────────────────────────────────────────────┤ 
+│ Backend Data Layer (new)          │ Schema, FTS5, branded IDs, migrations, seed, SQLite hardening                   │ 
+├───────────────────────────────────┼─────────────────────────────────────────────────────────────────────────────────┤ 
+│ Backend Architecture (ADRs) (new) │ 8 active ADRs + deferred                                                        │ 
+├───────────────────────────────────┼─────────────────────────────────────────────────────────────────────────────────┤ 
+│ Testing                           │ Split Client/Backend; added app.inject(), in-memory DBs, test counts            │ 
+├───────────────────────────────────┼─────────────────────────────────────────────────────────────────────────────────┤ 
+│ File Organization                 │ Replaced web-only tree with full monorepo layout                                │ 
+├───────────────────────────────────┼─────────────────────────────────────────────────────────────────────────────────┤ 
+│ Routes                            │ Split Client (HashRouter) + Server API tables                                   │ 
+├───────────────────────────────────┼─────────────────────────────────────────────────────────────────────────────────┤ 
+│ Pitfalls                          │ Split Client/Backend; added 7 backend pitfalls                                  │ 
+└───────────────────────────────────┴─────────────────────────────────────────────────────────────────────────────────┘ 
+ 
+### README.md — 1 edit 
+ 
+┌─────────────┬─────────────────────────────────────────────────────┐ 
+│ Edit        │ What Changed                                        │ 
+├─────────────┼─────────────────────────────────────────────────────┤ 
+│ Repo layout │ Fixed stale test counts: server 80→95, shared 61→67 │ 
+└─────────────┴─────────────────────────────────────────────────────┘ 
+ 
+### Cross-doc consistency verified 
+ 
+- Test counts match: web=176, shared=67, db=29, server=95, total=367 ✅ 
+- Demo login (you/embers-demo) documented in all three ✅ 
+- better-sqlite3@13.0.3 prebuilt binaries noted in AGENTS + CLAUDE ✅ 
+- API route tables content-identical across AGENTS + CLAUDE ✅ 
+- 367 tests passing, build clean, typecheck clean ✅
+

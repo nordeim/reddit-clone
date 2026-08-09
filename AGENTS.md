@@ -15,22 +15,34 @@
 
 ---
 
-**embers** — a Reddit-style community feed. A client-only React SPA: **no backend, no API, no `fetch` anywhere**. Every post, user, community, comment and notification is generated deterministically in the browser at module load.
+**embers** — a Reddit-style community feed. The original client-only React SPA lives at `apps/web/` (`@embers/web`): **no backend, no API, no `fetch`** — every post, user, community, comment and notification is generated deterministically in the browser. Three backend workspaces (`@embers/server`, `@embers/db`, `@embers/shared`) were added in the monorepo transition and provide a Fastify REST API, Drizzle ORM data layer, and shared Zod schema contracts.
 
 ## Commands
 
+### All workspaces (run from root)
+
 | Task | Command | Notes |
 | --- | --- | --- |
-| Dev server | `npm run dev` | Vite, default `:5173` |
-| Production build | `npm run build` | Bare `vite build` — **does not typecheck** |
-| Typecheck | `npm run typecheck` | Alias for `tsc --noEmit`. Passes clean as of this writing. |
-| Run tests | `npm test` | Vitest run mode (single shot). Add `--watch` for watch mode. |
-| Watch tests | `npm run test:watch` | Vitest in watch mode. |
-| Preview build | `npm run preview` | Serves `dist/` over HTTP |
+| Dev server (web) | `npm run dev --workspace @embers/web` | Vite, default `:5173` |
+| Dev server (server) | `npm run dev --workspace @embers/server` | `tsx watch`, default `:4000` |
+| Production build (all) | `npm run build` | Topological: `shared → db → server → web` |
+| Typecheck (all) | `npm run typecheck` | Same topological order |
+| Test (all) | `npm test` | Uses `--workspaces` — **do NOT run `vitest run` from root** (it won't discover workspace configs) |
+| DB migrate | `npm run db:migrate --workspace @embers/db` | Drizzle migrations |
+| DB seed | `npm run db:seed --workspace @embers/db` | 49 users, 320 posts, ~3000 comments |
+
+### Per-workspace (run from root with `--workspace`)
+
+| Task | Command |
+| --- | --- |
+| Build one workspace | `npm run build --workspace @embers/server` |
+| Typecheck one workspace | `npm run typecheck --workspace @embers/db` |
+| Test one workspace | `npm test --workspace @embers/shared` |
 
 - `build` is **not** the standard Vite template's `tsc -b && vite build`. Type errors will not fail it. Always run `npm run typecheck` before claiming a change compiles.
-- **Tests run on Vitest + Testing Library + jsdom.** Config lives in `vitest.config.ts` (separate from `vite.config.ts` to avoid a type clash between the project's `vite` package and the `vite` bundled inside `vitest`). Test files live alongside source as `*.test.ts(x)`.
+- **Tests run on Vitest + Testing Library + jsdom** (web) and **Vitest + Fastify inject** (server). Config lives in each workspace's `vitest.config.ts`. Test files live alongside source as `*.test.ts(x)`.
 - Both `node_modules/` and `dist/` are gitignored — neither pollutes `git status`.
+- **Node ≥20** required. `better-sqlite3@13.0.3` ships prebuilt binaries (no compilation needed) — install scripts being blocked is fine.
 
 ## Build & toolchain quirks
 
@@ -42,6 +54,98 @@
   `@custom-variant dark (&:where(.dark, .dark *));`
   `App.tsx` toggles `.dark` on `<html>` from the persisted store value.
 - `.line-clamp-1/2/3` are hand-written in `index.css` and shadow Tailwind's built-ins.
+
+## Backend Workspaces
+
+Three workspaces form the REST API backend alongside the client SPA:
+
+| Workspace | Path | Purpose |
+|---|---|---|
+| `@embers/shared` | `packages/shared/` | Zod schemas, branded IDs, API contracts (request/response validation) |
+| `@embers/db` | `packages/db/` | Drizzle ORM schema, SQLite client, FTS5, seed script |
+| `@embers/server` | `apps/server/` | Fastify REST API, auth, plugins, repositories, routes |
+
+### Server Architecture
+
+The server follows a **composition root** pattern — `buildApp(opts)` in `src/app.ts` is a pure function that returns an unstarted Fastify instance (tests use `app.inject()` without binding a port).
+
+**Plugin registration order matters:**
+1. **helmet** — outermost, hardens all responses (CSP, HSTS, nosniff)
+2. **cors** — must precede routes so preflight works
+3. **cookie** — HttpOnly refresh cookie parsing
+4. **rateLimit** — guards all routes (auth endpoints have stricter overrides)
+5. **requestId** — assigns `req.id` before error handler uses it
+6. **auth** — registers `app.authenticate` decorator
+7. **routes** — health + (when `db` provided) all API routes
+8. **errorHandler** — last, so it can wrap everything
+
+**Lazy route registration:** API routes (auth, posts, communities, votes, comments, search, notifications) are only registered when `db` + `rawDb` are passed to `buildApp()`. Without them, only health + error handler are registered (used by health tests).
+
+**Repository pattern:** Data access lives in `src/repositories/` — factory functions (`createUserRepository(db)`, etc.) that return plain objects. Repositories are injected into routes at registration time.
+
+**Service layer:** Cross-repository operations (vote casting) live in `src/services/`. `voteService` wraps repositories and executes inside `db.transaction()` for atomicity.
+
+**Graceful shutdown:** `src/index.ts` registers SIGINT/SIGTERM handlers that call `app.close()` before exiting.
+
+### API Routes
+
+| Method | Path | Auth | Purpose |
+| --- | --- | --- | --- |
+| GET | `/health` | No | Health check |
+| POST | `/api/auth/register` | No | Create account |
+| POST | `/api/auth/login` | No | Login → access token + refresh cookie |
+| POST | `/api/auth/refresh` | Cookie | Rotate access token |
+| POST | `/api/auth/logout` | Cookie | Revoke refresh token |
+| GET | `/api/posts` | No | Cursor-paginated list |
+| GET | `/api/posts/:id` | No | Single post |
+| POST | `/api/posts` | Yes | Create post |
+| PATCH | `/api/posts/:id` | Yes (author) | Partial update |
+| DELETE | `/api/posts/:id` | Yes (author) | Delete post |
+| GET | `/api/communities` | No | List communities |
+| GET | `/api/communities/:id` | No | Single community |
+| PUT | `/api/votes/:targetId` | Yes | Cast/toggle/flip vote |
+| GET | `/api/comments/:postId` | No | Comment tree |
+| POST | `/api/comments/:postId` | Yes | Create comment |
+| GET | `/api/search` | No | FTS5 search (posts/communities/users) |
+| GET | `/api/notifications` | Yes | List notifications |
+
+### Authentication & Authorization
+
+- **JWT access token** (15m TTL) + **HttpOnly refresh cookie** (7d TTL), signed with `jose` HS256
+- **Argon2id** for password hashing (`src/auth/password.ts`)
+- **`authenticate` decorator** — routes opt in via `preHandler: [app.authenticate]`. Reads `Authorization: Bearer <token>`, sets `req.user = { id, username }`
+- **Author-only enforcement**: routes check `existing.authorId !== user.id` → 403 (not 401)
+- **Rate limiting on auth endpoints**: 5 req/min/IP (stricter than the 100/min global limit)
+- **Refresh token rotation**: each refresh revokes the old token (session row `revocedAt` set) and issues a new one
+
+### Database & FTS5
+
+- **Drizzle ORM** with `better-sqlite3` driver
+- **SQLite hardening**: WAL mode, `busy_timeout=5000`, `foreign_keys=ON`, `synchronous=NORMAL`
+- **Schema** in `packages/db/src/schema/index.ts` — 7 tables: `users`, `communities`, `posts`, `comments`, `votes`, `notifications`, `sessions`
+- **`votes` composite PK**: `(user_id, target_id, target_type)` enforces one vote per user per target
+- **FTS5 virtual table** `posts_fts` in `packages/db/src/fts5.ts` — external-content pattern (`content='posts'`), sync triggers (`posts_ai`, `posts_ad`, `posts_au`), BM25 ranking
+- **Migrations**: `drizzle-kit generate` → SQL in `src/migrations/`, applied via `scripts/migrate.ts`
+- **Seed script**: deterministic PRNG (ported from `apps/web/src/utils/random.ts`) → 49 users, 18 communities, 320 posts, ~3037 comments, 18 notifications. Demo user: `you` / `embers-demo`
+
+### Backend Testing Patterns
+
+- Tests use **`app.inject()`** (Fastify's lightweight HTTP injection) — no port binding needed
+- Each test creates a **fresh in-memory DB** via `openDb({ path: ":memory:" })`
+- `buildApp({ env, db, rawDb })` wires repositories + routes for integration tests
+- **Helmet/rate-limit** can be skipped via `skipHelmet`/`skipRateLimit` options (rate-limit auto-disabled in `NODE_ENV=test`)
+- **Auth tests** use the seeded demo user; **vote concurrency tests** seed 100 users directly via Drizzle insert (bypassing Argon2id for speed)
+- Test files: 8 in `apps/server/src/routes/` and `src/auth/`, 2 in `packages/db/src/`, 3 in `packages/shared/src/`
+
+### Backend Pitfalls
+
+1. **Don't read `process.env` directly** — use `loadEnv()` (zod-validated, production-safe with required-field checks)
+2. **Don't forget WAL is skipped for `:memory:` DBs** — `openDb()` handles this automatically
+3. **Don't use `db.transaction()` with the `tx` parameter** — better-sqlite3 is synchronous; the outer `db` already executes within the transaction. Use `db.transaction(() => { ... })`
+4. **Don't add `import type` for Drizzle table imports** — tables are values (runtime objects), not types
+5. **Don't rate-limit `/health`** — it's excluded from the auth rate limiter; the global limiter allows 100/min
+6. **Don't leak stack traces** — `errorHandler` returns structured `{ error: { code, message, requestId } }` only
+7. **Don't skip `requestId` plugin** — the error handler depends on `req.id` being set
 
 ## TypeScript conventions
 
