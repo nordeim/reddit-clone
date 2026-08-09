@@ -41,6 +41,7 @@ export const authUserSchema = z.object({
   colorFrom: z.string().min(1),
   colorTo: z.string().min(1),
 });
+export type AuthUser = z.infer<typeof authUserSchema>;
 
 export const loginOutputSchema = z.object({
   accessToken: z.string().min(1),

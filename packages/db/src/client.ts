@@ -3,6 +3,7 @@ import { drizzle, type BetterSQLite3Database } from "drizzle-orm/better-sqlite3"
 import { migrate as drizzleMigrate } from "drizzle-orm/better-sqlite3/migrator";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { existsSync } from "node:fs";
 import * as schema from "./schema/index";
 import { applyFts5 } from "./fts5";
 
@@ -61,10 +62,21 @@ export function openDb(opts: OpenDbOptions = {}): { raw: Database; db: DrizzleDB
 }
 
 function resolveMigrationsFolder(): string {
-  // Works both when run via tsx (src/migrations) and compiled JS (dist/migrations)
+  // The migrations folder is created by `drizzle-kit generate` at
+  // `src/migrations/`. When the package is built with `tsc`, that folder
+  // is NOT copied to `dist/` (tsc only compiles .ts files). We resolve
+  // the folder by trying both locations:
+  //   - dist/migrations  (preferred when the package was built + the
+  //                       build was configured to copy migrations)
+  //   - src/migrations   (used when running via tsx, or when dist is
+  //                       absent and we're running from source)
   const here = dirname(fileURLToPath(import.meta.url));
-  // Try src/migrations first (tsx), fall back to dist/migrations (compiled)
-  return resolve(here, "migrations");
+  const distMigrations = resolve(here, "migrations");
+  const srcMigrations = resolve(here, "..", "src", "migrations");
+  if (existsSync(distMigrations)) return distMigrations;
+  if (existsSync(srcMigrations)) return srcMigrations;
+  // Last resort — return dist path so the error message is clear.
+  return distMigrations;
 }
 
 /**
