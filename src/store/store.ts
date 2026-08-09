@@ -1,6 +1,12 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { Comment, Post, VoteValue } from "../types";
+import {
+  STORAGE_KEY,
+  SCHEMA_VERSION,
+  mergePersistedState,
+  type PersistedState,
+} from "./storage";
 
 export interface ToastMessage {
   id: string;
@@ -9,6 +15,7 @@ export interface ToastMessage {
 }
 
 interface AppState {
+  schemaVersion: number;
   theme: "light" | "dark";
   toggleTheme: () => void;
 
@@ -39,6 +46,7 @@ interface AppState {
 export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
+      schemaVersion: SCHEMA_VERSION,
       theme: "light",
       toggleTheme: () => set((s) => ({ theme: s.theme === "light" ? "dark" : "light" })),
 
@@ -93,8 +101,16 @@ export const useAppStore = create<AppState>()(
       dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
     }),
     {
-      name: "reddit-clone-state",
-      partialize: (s) => ({
+      name: STORAGE_KEY,
+      version: SCHEMA_VERSION,
+      // Custom merge: validate persisted state shape, drop corrupt fields,
+      // never throw. See `src/store/storage.ts` for the full strategy.
+      merge: (persisted, currentState) =>
+        mergePersistedState<PersistedState & typeof currentState>(persisted, currentState),
+      // Whitelist exactly the persisted fields. `schemaVersion` is included
+      // so future migrations can detect old shapes on hydration.
+      partialize: (s): PersistedState => ({
+        schemaVersion: s.schemaVersion,
         theme: s.theme,
         votes: s.votes,
         joinedCommunityIds: s.joinedCommunityIds,
@@ -103,6 +119,13 @@ export const useAppStore = create<AppState>()(
         localComments: s.localComments,
         notificationReadOverrides: s.notificationReadOverrides,
       }),
+      // Migration hook — currently a no-op since SCHEMA_VERSION === 1.
+      // Future versions will switch on `version` here and transform persisted
+      // state into the current shape.
+      migrate: (persistedState, _version) => {
+        // For now, just re-validate via mergePersistedState.
+        return mergePersistedState(persistedState, persistedState as object);
+      },
     },
   ),
 );
