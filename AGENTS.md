@@ -8,11 +8,13 @@
 | --- | --- | --- |
 | Dev server | `npm run dev` | Vite, default `:5173` |
 | Production build | `npm run build` | Bare `vite build` — **does not typecheck** |
-| Typecheck | `npx tsc --noEmit` | No script for it; run manually. Passes clean as of this writing. |
+| Typecheck | `npm run typecheck` | Alias for `tsc --noEmit`. Passes clean as of this writing. |
+| Run tests | `npm test` | Vitest run mode (single shot). Add `--watch` for watch mode. |
+| Watch tests | `npm run test:watch` | Vitest in watch mode. |
 | Preview build | `npm run preview` | Serves `dist/` over HTTP |
 
-- `build` is **not** the standard Vite template's `tsc -b && vite build`. Type errors will not fail it. Always run `npx tsc --noEmit` before claiming a change compiles.
-- **No test runner and no linter are installed.** `npm test` / `npm run lint` do not exist. The `eslint-disable-next-line` comment at `src/hooks/index.ts:47` is a leftover, not evidence of ESLint.
+- `build` is **not** the standard Vite template's `tsc -b && vite build`. Type errors will not fail it. Always run `npm run typecheck` before claiming a change compiles.
+- **Tests run on Vitest + Testing Library + jsdom.** Config lives in `vitest.config.ts` (separate from `vite.config.ts` to avoid a type clash between the project's `vite` package and the `vite` bundled inside `vitest`). Test files live alongside source as `*.test.ts(x)`.
 - `node_modules/` is gitignored; **`dist/` is not** — delete it after building or it pollutes `git status`.
 
 ## Build & toolchain quirks
@@ -71,10 +73,11 @@ Accessor contracts are inconsistent — check before calling:
 
 To add a user-mutable feature, add an overlay slice — never write back into `POSTS` / `USERS` / `COMMUNITIES`.
 
-Persistence caveats:
+Persistence details:
 
-- `partialize` whitelists exactly what is saved (`toasts` is deliberately excluded). **A new persisted field must also be added to `partialize`, or it silently won't survive a reload.**
-- There is no `version` / `migrate` on the `persist` middleware, so a changed state shape hydrates stale data from earlier runs. When debugging odd state, clear the `reddit-clone-state` key first.
+- **Schema versioning + validation.** The persisted state is stamped with `schemaVersion: 1` (`src/store/storage.ts`). The `persist` middleware is configured with `version: SCHEMA_VERSION` + a custom `merge` function (`mergePersistedState`) that validates every field's shape and drops invalid entries individually (rather than rejecting the whole blob). Corrupt JSON, wrong schema versions, and privacy-mode `localStorage` errors all fall back to defaults without crashing the app. **A new persisted field must be added to `partialize` AND to `validatePersistedState`** or it will silently be dropped on hydration.
+- **Theme bootstrap.** A synchronous inline script in `index.html` (mirrored in `src/store/themeBootstrap.ts` for testability) reads the persisted theme and applies the `.dark` class to `<html>` **before** React mounts, preventing a flash of light theme on reload.
+- **Pure selectors** live in `src/store/selectors.ts` (`getVisibleScore`, `isPostSaved`, `isCommunityJoined`, `getUnreadNotificationCount`, `getDerivedCommentCount`, `capBadgeCount`). They take plain state slices as input — they do NOT call `useAppStore` themselves — so they're unit-testable without mocking zustand.
 
 Local ids are timestamp-based (`local-${Date.now()}` for posts, `${postId}-c${Date.now()}` for top-level comments, `${comment.id}-r${Date.now()}` for nested replies) versus generated `p1…p320`, `u1…u48`, `c1…cN` — which is why vote keys are namespaced.
 

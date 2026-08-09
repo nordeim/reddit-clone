@@ -17,9 +17,10 @@ A client-only React SPA: **no backend, no API, no `fetch`**. All content (users,
 | Animation | framer-motion | 13.x |
 | Icons | lucide-react | 1.30.x |
 | Utilities | clsx + tailwind-merge | 2.1.1 / 3.4.0 |
-| Single-file | vite-plugin-singlefile | 2.3.0 |
+| Testing | vitest + @testing-library/react | 2.1.9 / 16.x |
+| Test env | jsdom | 25.x |
 
-No test runner. No linter. No ESLint.
+Tests are colocated with source as `*.test.ts(x)`. The vitest config lives in `vitest.config.ts` (separate from `vite.config.ts` to avoid a type clash between the project's `vite` package and the `vite` bundled inside `vitest`). No ESLint.
 
 ## Commands
 
@@ -27,10 +28,12 @@ No test runner. No linter. No ESLint.
 |---------|---------|
 | `npm run dev` | Vite dev server (default `:5173`) |
 | `npm run build` | Production build — **does NOT typecheck** |
-| `npx tsc --noEmit` | Typecheck manually (no script exists for it) |
+| `npm run typecheck` | `tsc --noEmit` — runs the type checker |
+| `npm test` | Vitest in run mode (single shot) |
+| `npm run test:watch` | Vitest in watch mode |
 | `npm run preview` | Serve `dist/` over HTTP |
 
-`build` is bare `vite build`, not `tsc -b && vite build`. Always run `npx tsc --noEmit` before claiming a change compiles.
+`build` is bare `vite build`, not `tsc -b && vite build`. Always run `npm run typecheck` before claiming a change compiles. Run `npm test` before claiming a change is correct — every code change should ship with tests (TDD: red → green → refactor).
 
 ## Critical Build Constraints
 
@@ -39,8 +42,8 @@ These are non-negotiable. Violating them breaks the build or runtime.
 1. **No code splitting.** `vite-plugin-singlefile` inlines everything into one `dist/index.html`. Never add `React.lazy`, dynamic `import()`, or manual chunks.
 2. **`HashRouter`, not `BrowserRouter`.** Deliberate — enables static hosting without rewrite rules. Don't switch it.
 3. **Dist is not gitignored.** `node_modules/` is, but `dist/` is not. Delete it after building or it pollutes `git status`.
-4. **Google Fonts + images load externally.** `index.css` `@import`s Inter from Google Fonts; `public/images/*.jpg` are referenced as `/images/...`. Opening `dist/` over `file://` breaks both. Serve from a web root.
-5. **Tailwind v4 has no config file.** Theme lives in `src/index.css` under `@theme`. No `tailwind.config.js`, no PostCSS config.
+4. **Google Fonts + images load externally.** `index.css` `@import`s Inter from Google Fonts; `public/images/*.jpg` are referenced as `${import.meta.env.BASE_URL}images/...`. Opening `dist/` over `file://` breaks both. Serve from a web root.
+5. **Tailwind v4 has no config file.** Theme lives in `src/index.css` under `@theme`. No `tailwind.config.js`, no PostCSS config. Use CSS custom properties like `var(--color-orange-500)` in plain CSS — the `theme()` function syntax from v3 does NOT work.
 
 ## TypeScript
 
@@ -86,8 +89,47 @@ Single zustand store (`src/store/store.ts`), persisted to `localStorage` key `re
 
 ### Persistence rules
 
-- `partialize` whitelists exactly what survives a reload. **A new persisted field must also be added to `partialize`.**
-- No `version`/`migrate` on `persist`. Changed state shapes hydrate stale data. When debugging odd state, clear `reddit-clone-state` first.
+- `partialize` whitelists exactly what survives a reload. **A new persisted field must also be added to `partialize` AND to `validatePersistedState` in `src/store/storage.ts`** or it will silently be dropped on hydration.
+- The persisted state is stamped with `schemaVersion: 1` (`SCHEMA_VERSION` in `src/store/storage.ts`). The `persist` middleware is configured with `version: SCHEMA_VERSION` + a custom `merge` function (`mergePersistedState`) that validates every field's shape and drops invalid entries individually. Corrupt JSON, wrong schema versions, and privacy-mode `localStorage` errors all fall back to defaults without crashing.
+- When debugging odd state, clear the `reddit-clone-state` key first.
+
+### Theme bootstrap
+
+A synchronous inline script in `index.html` (mirrored in `src/store/themeBootstrap.ts` for testability) reads the persisted theme and applies the `.dark` class to `<html>` **before** React mounts. This prevents a flash of light theme on reload when dark mode is persisted.
+
+### Pure selectors
+
+`src/store/selectors.ts` exports pure functions: `getVisibleScore`, `isPostSaved`, `isCommunityJoined`, `getUnreadNotificationCount`, `getDerivedCommentCount`, `capBadgeCount`. They take plain state slices as input — they do NOT call `useAppStore` themselves — so they're unit-testable without mocking zustand.
+
+### Error boundary
+
+`src/components/layout/ErrorBoundary.tsx` is a class component wrapping `<Outlet />` in `AppShell`. It catches render-time errors from any page, logs them to the console (structured for grepability), and renders a fallback UI with a reload button.
+
+## Testing
+
+Tests use **Vitest** with the **Testing Library** + **jsdom** environment.
+
+### Setup
+
+- Config: `vitest.config.ts` (separate from `vite.config.ts`).
+- Setup file: `src/test/setup.ts` — imports `@testing-library/jest-dom/vitest`, stubs `IntersectionObserver` and `matchMedia` (which jsdom doesn't implement).
+- Router helper: `src/test/utils.tsx` exports `renderWithRouter` which wraps a component in `MemoryRouter` and returns `user` (a `userEvent` instance) alongside the usual RTL queries.
+
+### Conventions
+
+- Test files live alongside source as `*.test.ts(x)`.
+- Characterization tests for existing pure utilities (format, random, score, search, url, selectors, storage) live in `src/utils/*.test.ts` and `src/store/*.test.ts`.
+- Integration tests for components (VoteControl, CreatePostModal, Modal, Dropdown, SearchBar) live next to the component.
+- TDD: write the failing test first (RED), implement the minimum to pass (GREEN), then refactor with tests still green.
+- Never weaken or skip a test to make the build pass. If a test is wrong, fix the test. If a test is right, fix the code.
+
+### Pre-commit checklist
+
+```bash
+npm run typecheck   # tsc --noEmit — must pass clean
+npm test            # vitest run — all tests must pass
+npm run build       # vite build — must succeed
+```
 
 ## UI Conventions
 

@@ -488,25 +488,64 @@ Dark mode: Custom variant `@custom-variant dark (&:where(.dark, .dark *));` — 
 
 | Aspect | Status |
 |---|---|
-| Test runner | **None installed** |
-| E2E framework | **None installed** |
-| Linter | **None installed** |
-| Typechecker | `npx tsc --noEmit` (manual, no script) |
+| Test runner | **Vitest 2.1.9** |
+| Test env | **jsdom 25.x** |
+| Component testing | **@testing-library/react 16.x + @testing-library/user-event 14.x** |
+| E2E framework | None installed |
+| Linter | None installed |
+| Typechecker | `npm run typecheck` (alias for `tsc --noEmit`) |
 
-### 7.2 Quality Assurance
+### 7.2 Test layout
+
+Tests are colocated with source as `*.test.ts(x)`:
+
+```
+src/
+├── utils/
+│   ├── cn.test.ts           # class merge sanity
+│   ├── format.test.ts       # timeAgo, formatCount, formatFullDate
+│   ├── random.test.ts       # hashString, seededRandom, createRng, gradientFor
+│   ├── score.test.ts        # getVisibleScore, hotScore, risingScore, sortPosts
+│   ├── search.test.ts       # normalizeQuery, matchScore, searchPosts/Communities/Users
+│   └── url.test.ts          # isSafeUrl, extractDomain
+├── store/
+│   ├── storage.test.ts      # safeParseJSON, validatePersistedState, mergePersistedState
+│   ├── selectors.test.ts    # getVisibleScore, isPostSaved, getUnreadNotificationCount, etc.
+│   └── themeBootstrap.test.ts # applyPersistedTheme
+├── components/feed/
+│   ├── VoteControl.test.tsx     # integration: voting toggles, score updates, persistence
+│   └── CreatePostModal.test.tsx # integration: validation, URL safety, submit + store
+└── test/
+    ├── setup.ts             # jest-dom matchers + IntersectionObserver/matchMedia stubs
+    └── utils.tsx            # renderWithRouter helper
+```
+
+### 7.3 Configuration
+
+- `vitest.config.ts` — separate from `vite.config.ts` to avoid a TypeScript type clash between the project's `vite` package and the `vite` bundled inside `vitest`. The `test` block in vitest's config is ignored by `vite build`, so the single-file production output is unaffected.
+- `src/test/setup.ts` — auto-imported by every test file via `setupFiles`. Imports `@testing-library/jest-dom/vitest` for DOM matchers, stubs `IntersectionObserver` and `matchMedia` (which jsdom doesn't implement).
+- `src/test/utils.tsx` — exports `renderWithRouter` which wraps a component in `MemoryRouter` and returns `user` (a `userEvent` instance) alongside the usual RTL queries.
+
+### 7.4 Quality Assurance
 
 The project relies on:
 
 1. **TypeScript strict mode** — catches type errors, unused variables, fallthrough cases
-2. **Manual typecheck** — `npx tsc --noEmit` before claiming a change compiles
-3. **Production build** — `npm run build` validates bundling succeeds
+2. **Vitest unit + integration tests** — 176 tests across 11 files covering pure utilities, store logic, and key components
+3. **Manual typecheck** — `npm run typecheck` before claiming a change compiles
+4. **Production build** — `npm run build` validates bundling succeeds
 
-### 7.3 Pre-Commit Checklist (Recommended)
+### 7.5 Pre-Commit Checklist
 
 ```bash
-npx tsc --noEmit   # Typecheck passes clean
-npm run build      # Build succeeds
+npm run typecheck   # tsc --noEmit — must pass clean
+npm test            # vitest run — all tests must pass
+npm run build       # vite build — must succeed
 ```
+
+### 7.6 Manual QA matrix
+
+See `docs/MANUAL_QA.md` for the full manual QA matrix covering feed, voting, posts, comments, communities, profiles, search, notifications, theme, persistence, accessibility, and responsiveness.
 
 ---
 
@@ -516,15 +555,15 @@ npm run build      # Build succeeds
 
 ```bash
 npm install        # Install dependencies
-npm run build      # → dist/index.html (single file, ~508 KB)
+npm run build      # → dist/index.html (single file, ~528 KB)
 npm run preview    # Serve dist/ for verification
 ```
 
-**Output:** `dist/index.html` — fully self-contained JS/CSS inlined. External deps: Google Fonts, `public/images/*.jpg`.
+**Output:** `dist/index.html` — fully self-contained JS/CSS inlined. External deps: Google Fonts, `public/images/*.jpg` (referenced as `${import.meta.env.BASE_URL}images/...` so the build works under subpath hosting).
 
 ### 8.2 Environment Variables
 
-**None.** The app reads no environment variables. No `.env` file. No build-time configuration.
+**None.** The app reads no environment variables. No `.env` file. No build-time configuration. `import.meta.env.BASE_URL` is the only Vite env reference — used by `src/data/images.ts` for asset paths.
 
 ### 8.3 Build Constraints
 
@@ -534,6 +573,7 @@ npm run preview    # Serve dist/ for verification
 | No code splitting | Single-file output requires single chunk |
 | No `tailwind.config.js` | Tailwind v4 uses CSS-first `@theme` |
 | No PostCSS config | `@tailwindcss/vite` handles everything |
+| No `theme()` function in plain CSS | Tailwind v4 doesn't support it; use `var(--color-*)` directly |
 
 ### 8.4 Deployment Targets
 
@@ -575,7 +615,9 @@ npm run preview  # → serves dist/ on a local port
 | `npm run dev` | Root | Vite dev server with HMR |
 | `npm run build` | Root | Production build (no typecheck) |
 | `npm run preview` | Root | Serve `dist/` over HTTP |
-| `npx tsc --noEmit` | Root | Manual TypeScript typecheck |
+| `npm run typecheck` | Root | `tsc --noEmit` — TypeScript typecheck |
+| `npm test` | Root | Vitest run mode (single shot) |
+| `npm run test:watch` | Root | Vitest watch mode |
 
 ### 9.3 Code Style Rules
 
@@ -604,12 +646,38 @@ npm run preview  # → serves dist/ on a local port
 
 | Priority | Issue | Impact | Status |
 |----------|-------|--------|--------|
-| MEDIUM | No test runner installed | No automated regression protection | Open |
 | MEDIUM | No linter installed | No enforced code style | Open |
-| MEDIUM | No `version`/`migrate` on `persist` | Changed state shapes hydrate stale data from earlier runs | Open |
 | LOW | Google Fonts loaded externally | Breaks when offline or blocked by CSP | Open |
 | LOW | `dist/` not gitignored | Pollutes `git status` after builds | Open |
 | LOW | Comment IDs (`${postId}-c${Date.now()}`) can theoretically collide if two comments are created in the same millisecond | Extremely unlikely but possible | Open |
+
+### 10.1 Resolved in the latest remediation pass
+
+The following previously-open issues are now resolved (see `docs/REMEDIATION_PLAN.md` for the full audit):
+
+| Issue | Resolution |
+|---|---|
+| No test runner installed | Vitest + Testing Library + jsdom installed; 176 tests across 11 files |
+| No `version`/`migrate` on `persist` | `schemaVersion: 1` + custom `merge` + `migrate` hook on `persist` |
+| Corrupt localStorage could crash the app | `mergePersistedState` validates every field, drops invalid entries, never throws |
+| Theme flash on reload | Synchronous inline script in `index.html` applies `.dark` before React mounts |
+| Modal missing focus trap / Escape / scroll lock | `useFocusTrap` hook + Escape handler + body scroll lock added |
+| Dropdown missing `aria-expanded` / arrow keys | Trigger wrapped with a11y props; arrow-key navigation between items |
+| No skip link | `<a href="#main" className="skip-link">` in `AppShell` |
+| No reduced-motion support | `MotionConfig reducedMotion="user"` wrapper + CSS `@media (prefers-reduced-motion)` |
+| `CreatePostModal` accepted `javascript:` URLs | `isSafeUrl` validates http(s) only; inline error messages with `aria-describedby` |
+| Post detail silently redirected on missing post | Now renders a "Post not found" empty state with link back to home |
+| `post.commentCount` didn't match the generated tree | Now derived from `countComments(getCommentsForPost(post.id))` at module scope |
+| Search bar lacked keyboard nav / Escape / race-fix | ArrowUp/ArrowDown/Enter/Escape handlers; navigation uses bound result objects |
+| Notifications page lacked All/Unread tabs + per-item mark-read | Added with `?filter=` URL sync; target safety checks `getPost(id)` |
+| Notification bell badge showed raw count | `capBadgeCount` caps at "9+" |
+| Feed sort wasn't URL-synced | `?sort=` param on HomePage + CommunityPage; invalid sort falls back to default |
+| No error boundary around router outlet | `ErrorBoundary` class component wraps `<Outlet />` |
+| Reply allowed past max comment depth | Reply button hidden at `depth >= 4`, replaced with "Continue thread" hint |
+| Images broke under subpath hosting | `data/images.ts` prefixes paths with `import.meta.env.BASE_URL` |
+| `timeAgo` not deterministic in tests | Accepts optional `now?: number` parameter |
+| Score/sort logic untestable | Extracted to pure `src/utils/score.ts`; `sortPosts` adds stable id-ascending tie-breakers |
+| Search logic untestable | Extracted to pure `src/utils/search.ts` with normalize + rank + tie-breakers |
 
 ---
 

@@ -46,8 +46,11 @@ npm run build
 # Preview the production build
 npm run preview
 
-# Typecheck (no script exists — run manually)
-npx tsc --noEmit
+# Typecheck
+npm run typecheck
+
+# Run the test suite (Vitest + Testing Library)
+npm test
 ```
 
 ## Tech Stack
@@ -64,8 +67,10 @@ npx tsc --noEmit
 | Icons | lucide-react | 1.30.x |
 | Utilities | clsx + tailwind-merge | 2.1.1 / 3.4.0 |
 | Single-file | vite-plugin-singlefile | 2.3.0 |
+| Testing | vitest + @testing-library/react | 2.1.9 / 16.x |
+| Test env | jsdom | 25.x |
 
-No test runner. No linter.
+Tests are colocated with source as `*.test.ts(x)`. The vitest config lives in `vitest.config.ts` (kept separate from `vite.config.ts` to avoid a type clash between the project's `vite` package and the `vite` bundled inside `vitest`). No ESLint.
 
 ## Design System
 
@@ -141,21 +146,26 @@ npm run build
     │   ├── notifications.ts    # 18 notifications
     │   └── images.ts           # ImageCategory → URL mapping
     │
-    ├── store/store.ts          # Zustand store + persist middleware
+    ├── store/
+    │   ├── store.ts            # Zustand store + persist middleware (schema-versioned + validated)
+    │   ├── storage.ts          # safe JSON parse + persisted-state validation + merge helpers
+    │   ├── selectors.ts        # pure selectors (visible score, unread count, badge cap, etc.)
+    │   └── themeBootstrap.ts   # synchronous theme application before React mounts
     │
     ├── components/
     │   ├── ui/                 # Primitives: Avatar, Button, Modal, Dropdown, Skeleton, Toaster
-    │   ├── layout/             # AppShell, Navbar, Sidebar, RightPanel
+    │   ├── layout/             # AppShell, Navbar, Sidebar, RightPanel, ErrorBoundary
     │   ├── feed/               # PostCard, PostList, SortTabs, VoteControl, CreatePostModal
     │   ├── post/               # CommentThread, CommentComposer
     │   ├── community/          # CommunityHeader
-    │   └── search/             # SearchBar
+    │   └── search/             # SearchBar (with keyboard nav + race-fix)
     │
     ├── pages/                  # HomePage, CommunityPage, PostPage, ProfilePage,
     │                           #   SearchPage, NotificationsPage, NotFoundPage
     │
-    ├── hooks/                  # useDebounce, useOnClickOutside, useInfiniteScroll
-    └── utils/                  # cn (class merging), format (time/count), random (PRNG + gradients)
+    ├── hooks/                  # useDebounce, useOnClickOutside, useInfiniteScroll, useFocusTrap
+    ├── test/                   # setup.ts (jest-dom + jsdom stubs), utils.tsx (renderWithRouter)
+    └── utils/                  # cn, format (with injectable `now`), random, score, search, url
 ```
 
 ## License
