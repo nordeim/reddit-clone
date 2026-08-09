@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
+export { useFocusTrap } from "./useFocusTrap";
+
 export function useDebounce<T>(value: T, delayMs = 300): T {
   const [debounced, setDebounced] = useState(value);
   useEffect(() => {

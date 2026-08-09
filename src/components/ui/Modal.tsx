@@ -1,7 +1,8 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { X } from "lucide-react";
+import { useFocusTrap } from "../../hooks";
 
 interface ModalProps {
   open: boolean;
@@ -12,6 +13,27 @@ interface ModalProps {
 }
 
 export function Modal({ open, onClose, title, children, widthClassName = "max-w-lg" }: ModalProps) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(panelRef, open);
+
+  // Escape to close + lock body scroll while modal is open.
+  useEffect(() => {
+    if (!open) return;
+    function handleKey(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.stopPropagation();
+        onClose();
+      }
+    }
+    document.addEventListener("keydown", handleKey);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", handleKey);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [open, onClose]);
+
   return createPortal(
     <AnimatePresence>
       {open && (
@@ -25,6 +47,7 @@ export function Modal({ open, onClose, title, children, widthClassName = "max-w-
           }}
         >
           <motion.div
+            ref={panelRef}
             role="dialog"
             aria-modal="true"
             aria-label={title}

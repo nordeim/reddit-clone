@@ -20,6 +20,49 @@ body {
   @apply bg-zinc-950 text-zinc-100;
 }
 
+/*
+ * Global focus-visible outline.
+ * Plan §13.1 requires visible focus states on every interactive element.
+ * Tailwind's `focus-visible:ring-*` utilities cover components that opt in
+ * (e.g. Button), but raw <button> / <a> elements throughout the codebase
+ * rely on this global default.
+ *
+ * In Tailwind v4, the default color palette is exposed as CSS custom
+ * properties (e.g. `--color-orange-500`), so we reference them directly.
+ */
+:where(a, button, input, textarea, select, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-orange-500);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/*
+ * Skip link — visually hidden until focused. Plan §13.1 / §13.2.
+ * Used by AppShell to provide a keyboard shortcut past the navbar/sidebar
+ * straight to the main content area.
+ */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 200;
+}
+.skip-link:focus {
+  left: 0.5rem;
+  top: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: white;
+  color: #18181b; /* zinc-900 */
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+.dark .skip-link:focus {
+  background: #18181b; /* zinc-900 */
+  color: #fafafa; /* zinc-50 */
+}
+
 * {
   scrollbar-width: thin;
   scrollbar-color: #d4d4d8 transparent;
@@ -41,6 +84,24 @@ body {
 
 .dark ::-webkit-scrollbar-thumb {
   background-color: #3f3f46;
+}
+
+/*
+ * Reduced motion — Plan §11.6, §14.6.
+ * framer-motion is wrapped in <MotionConfig reducedMotion="user"> in App.tsx,
+ * which honors this media query automatically for motion components. This
+ * CSS rule also clamps CSS animations / transitions for components that
+ * don't go through framer-motion (skeleton shimmer, vote score tick).
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 .line-clamp-1 {
