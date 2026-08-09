@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Bookmark, ExternalLink, Link2, MessageSquare, Share2 } from "lucide-react";
@@ -11,7 +12,12 @@ import { timeAgo, formatCount } from "../../utils/format";
 import { cn } from "../../utils/cn";
 import type { Post } from "../../types";
 
-export function PostCard({ post, showCommunity = true }: { post: Post; showCommunity?: boolean }) {
+interface PostCardProps {
+  post: Post;
+  showCommunity?: boolean;
+}
+
+export const PostCard = memo(function PostCard({ post, showCommunity = true }: PostCardProps) {
   const author = getUser(post.authorId);
   const community = getCommunity(post.communityId);
   const isSaved = useAppStore((s) => s.savedPostIds.includes(post.id));
@@ -85,8 +91,12 @@ export function PostCard({ post, showCommunity = true }: { post: Post; showCommu
             <div className="mt-2 max-h-[420px] overflow-hidden rounded-lg bg-zinc-100 dark:bg-zinc-800">
               <img
                 src={CATEGORY_IMAGES[post.imageCategory]}
-                alt=""
+                alt={`Image for ${post.title}`}
                 loading="lazy"
+                onError={(e) => {
+                  // Hide the broken image container gracefully.
+                  (e.currentTarget.parentElement as HTMLElement).style.display = "none";
+                }}
                 className="max-h-[420px] w-full object-cover"
               />
             </div>
@@ -105,6 +115,7 @@ export function PostCard({ post, showCommunity = true }: { post: Post; showCommu
           </Link>
           <button
             onClick={share}
+            aria-label="Share post"
             className="flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-semibold hover:bg-zinc-100 dark:hover:bg-zinc-800"
           >
             <Share2 className="h-4 w-4" /> <span className="hidden sm:inline">Share</span>
@@ -115,6 +126,8 @@ export function PostCard({ post, showCommunity = true }: { post: Post; showCommu
               toggleSave(post.id);
               pushToast(isSaved ? "Removed from saved" : "Saved post", "success");
             }}
+            aria-pressed={isSaved}
+            aria-label={isSaved ? "Remove from saved" : "Save post"}
             className={cn(
               "flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-semibold hover:bg-zinc-100 dark:hover:bg-zinc-800",
               isSaved && "text-orange-600",
@@ -127,4 +140,4 @@ export function PostCard({ post, showCommunity = true }: { post: Post; showCommu
       </div>
     </motion.article>
   );
-}
+});

@@ -47,16 +47,25 @@ export function PostList({ posts, showCommunity = true }: { posts: Post[]; showC
       </AnimatePresence>
 
       {loadingMore && (
-        <div className="flex flex-col gap-3">
+        // role="status" + aria-live="polite" so screen readers announce
+        // "loading more posts" without stealing focus. Plan §13.7.
+        <div
+          role="status"
+          aria-live="polite"
+          aria-label="Loading more posts"
+          className="flex flex-col gap-3"
+        >
           <PostCardSkeleton />
           <PostCardSkeleton />
         </div>
       )}
 
       {hasMore ? (
-        <div ref={sentinelRef} className="h-4" />
+        <div ref={sentinelRef} aria-hidden="true" className="h-4" />
       ) : (
-        <p className="py-8 text-center text-sm text-zinc-400">You've reached the end of the feed 🎉</p>
+        <p className="py-8 text-center text-sm text-zinc-400" role="status">
+          You've reached the end of the feed 🎉
+        </p>
       )}
     </div>
   );

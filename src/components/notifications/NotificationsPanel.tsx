@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { ArrowBigUp, AtSign, MessageSquare, Radio } from "lucide-react";
 import { NOTIFICATIONS } from "../../data/notifications";
 import { useAppStore } from "../../store/store";
+import { getUnreadNotificationCount } from "../../store/selectors";
 import { timeAgo } from "../../utils/format";
 import { cn } from "../../utils/cn";
 
@@ -21,7 +22,7 @@ export function NotificationsPanel({ onNavigate }: { onNavigate?: () => void }) 
   const notifications = useNotifications();
   const markRead = useAppStore((s) => s.markNotificationRead);
   const markAllRead = useAppStore((s) => s.markAllNotificationsRead);
-  const unreadCount = notifications.filter((n) => !n.read).length;
+  const unreadCount = getUnreadNotificationCount(notifications, {});
 
   return (
     <div className="flex max-h-[28rem] flex-col">

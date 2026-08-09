@@ -9,6 +9,10 @@ import { useAppStore } from "../../store/store";
 import { timeAgo } from "../../utils/format";
 import type { Comment } from "../../types";
 
+// AGENTS.md locks max comment depth at 4 (root depth 0 + 4 child levels).
+// At max depth, hide the Reply button to prevent deeper nesting.
+const MAX_DEPTH = 4;
+
 export function CommentThread({ comment, postId, depth = 0 }: { comment: Comment; postId: string; depth?: number }) {
   const [collapsed, setCollapsed] = useState(false);
   const [replying, setReplying] = useState(false);
@@ -17,6 +21,7 @@ export function CommentThread({ comment, postId, depth = 0 }: { comment: Comment
   const author = getUser(comment.authorId);
 
   const allChildren = [...localChildren, ...comment.children];
+  const atMaxDepth = depth >= MAX_DEPTH;
 
   function handleReply(text: string) {
     const reply: Comment = {
@@ -59,13 +64,22 @@ export function CommentThread({ comment, postId, depth = 0 }: { comment: Comment
           <>
             <p className="mt-1 pl-6 text-sm leading-relaxed text-zinc-700 dark:text-zinc-300">{comment.body}</p>
             <div className="mt-1.5 flex items-center gap-1 pl-5">
-              <VoteControl targetId={`comment:${comment.id}`} baseScore={comment.score} orientation="horizontal" size="sm" />
-              <button
-                onClick={() => setReplying((v) => !v)}
-                className="flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold text-zinc-500 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
-              >
-                <MessageSquare className="h-3.5 w-3.5" /> Reply
-              </button>
+              <VoteControl targetId={`comment:${comment.id}`} baseScore={comment.score} orientation="horizontal" size="sm" label="comment" />
+              {atMaxDepth ? (
+                <span
+                  className="flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium text-zinc-400"
+                  title="Replies are disabled at the maximum comment depth."
+                >
+                  <MessageSquare className="h-3.5 w-3.5" /> Continue thread
+                </span>
+              ) : (
+                <button
+                  onClick={() => setReplying((v) => !v)}
+                  className="flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold text-zinc-500 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
+                >
+                  <MessageSquare className="h-3.5 w-3.5" /> Reply
+                </button>
+              )}
             </div>
 
             {replying && (

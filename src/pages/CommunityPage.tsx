@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { Navigate, useParams } from "react-router-dom";
+import { useMemo } from "react";
+import { Navigate, useParams, useSearchParams } from "react-router-dom";
 import { CommunityHeader } from "../components/community/CommunityHeader";
 import { PostList } from "../components/feed/PostList";
 import { SortTabs } from "../components/feed/SortTabs";
@@ -9,10 +9,21 @@ import { POSTS, sortPosts } from "../data/posts";
 import { useAppStore } from "../store/store";
 import type { SortMode } from "../types";
 
+const VALID_SORTS: SortMode[] = ["best", "hot", "new", "top", "rising"];
+
 export function CommunityPage() {
   const { name = "" } = useParams();
   const community = getCommunityByName(name);
-  const [sort, setSort] = useState<SortMode>("hot");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const rawSort = (searchParams.get("sort") ?? "hot") as SortMode;
+  const sort: SortMode = VALID_SORTS.includes(rawSort) ? rawSort : "hot";
+  const setSort = (next: SortMode) => {
+    const params = new URLSearchParams(searchParams);
+    if (next === "hot") params.delete("sort");
+    else params.set("sort", next);
+    setSearchParams(params, { replace: true });
+  };
+
   const localPosts = useAppStore((s) => s.localPosts);
 
   const posts = useMemo(() => {

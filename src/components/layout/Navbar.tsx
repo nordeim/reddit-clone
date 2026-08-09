@@ -9,6 +9,7 @@ import { NotificationsPanel, useNotifications } from "../notifications/Notificat
 import { CreatePostModal } from "../feed/CreatePostModal";
 import { useAppStore } from "../../store/store";
 import { CURRENT_USER } from "../../data/users";
+import { capBadgeCount } from "../../store/selectors";
 
 export function Navbar({ onMenuClick }: { onMenuClick: () => void }) {
   const theme = useAppStore((s) => s.theme);
@@ -16,6 +17,7 @@ export function Navbar({ onMenuClick }: { onMenuClick: () => void }) {
   const [createOpen, setCreateOpen] = useState(false);
   const notifications = useNotifications();
   const unreadCount = notifications.filter((n) => !n.read).length;
+  const badgeLabel = capBadgeCount(unreadCount);
   const navigate = useNavigate();
 
   return (
@@ -77,9 +79,9 @@ export function Navbar({ onMenuClick }: { onMenuClick: () => void }) {
               className="relative rounded-full p-2 text-zinc-600 transition-colors hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
             >
               <Bell className="h-5 w-5" />
-              {unreadCount > 0 && (
+              {badgeLabel && (
                 <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-orange-600 px-1 text-[10px] font-bold text-white">
-                  {unreadCount}
+                  {badgeLabel}
                 </span>
               )}
             </button>

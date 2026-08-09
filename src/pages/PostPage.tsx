@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Navigate, useParams, Link } from "react-router-dom";
+import { useParams, Link } from "react-router-dom";
 import { ExternalLink, Link2 } from "lucide-react";
 import { getPost } from "../data/posts";
 import { getUser } from "../data/users";
@@ -12,6 +12,7 @@ import { CommentComposer } from "../components/post/CommentComposer";
 import { CommentSkeleton } from "../components/ui/Skeleton";
 import { Avatar } from "../components/ui/Avatar";
 import { Card, RightPanelShell } from "../components/layout/RightPanel";
+import { Button } from "../components/ui/Button";
 import { useAppStore } from "../store/store";
 import { timeAgo } from "../utils/format";
 import { CURRENT_USER } from "../data/users";
@@ -40,7 +41,21 @@ export function PostPage() {
     return () => clearTimeout(timer);
   }, [post]);
 
-  if (!post) return <Navigate to="/" replace />;
+  // Plan §12.5: render a not-found state instead of silently redirecting.
+  if (!post) {
+    return (
+      <div className="mx-auto flex max-w-md flex-col items-center gap-3 py-24 text-center">
+        <span className="text-5xl">🗑️</span>
+        <h1 className="text-xl font-extrabold text-zinc-900 dark:text-zinc-50">Post not found</h1>
+        <p className="text-sm text-zinc-500">
+          This post may have been removed, or the link is broken.
+        </p>
+        <Link to="/">
+          <Button variant="primary">Back to Home</Button>
+        </Link>
+      </div>
+    );
+  }
 
   const author = getUser(post.authorId);
   const community = getCommunity(post.communityId);
@@ -110,7 +125,12 @@ export function PostPage() {
             <div className="mt-3 max-h-[560px] overflow-hidden rounded-lg bg-zinc-100 dark:bg-zinc-800">
               <img
                 src={CATEGORY_IMAGES[post.imageCategory]}
-                alt=""
+                alt={`Image for ${post.title}`}
+                loading="lazy"
+                onError={(e) => {
+                  // Hide the broken image container gracefully.
+                  (e.currentTarget.parentElement as HTMLElement).style.display = "none";
+                }}
                 className="max-h-[560px] w-full object-cover"
               />
             </div>

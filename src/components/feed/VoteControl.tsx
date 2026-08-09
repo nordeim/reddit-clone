@@ -1,6 +1,7 @@
 import { ArrowBigDown, ArrowBigUp } from "lucide-react";
 import { motion } from "framer-motion";
 import { useAppStore } from "../../store/store";
+import { getVisibleScore } from "../../store/selectors";
 import { formatCount } from "../../utils/format";
 import { cn } from "../../utils/cn";
 import type { VoteValue } from "../../types";
@@ -10,13 +11,21 @@ interface VoteControlProps {
   baseScore: number;
   orientation?: "vertical" | "horizontal";
   size?: "sm" | "md";
+  /** Used to build the `aria-label` — "Upvote post" vs "Upvote comment". */
+  label?: "post" | "comment";
 }
 
-export function VoteControl({ targetId, baseScore, orientation = "vertical", size = "md" }: VoteControlProps) {
+export function VoteControl({
+  targetId,
+  baseScore,
+  orientation = "vertical",
+  size = "md",
+  label = "post",
+}: VoteControlProps) {
   const vote = useAppStore((s) => s.votes[targetId] ?? 0) as VoteValue;
   const setVote = useAppStore((s) => s.setVote);
 
-  const score = baseScore + vote;
+  const score = getVisibleScore(baseScore, vote);
   const iconSize = size === "sm" ? "h-4 w-4" : "h-5 w-5";
 
   function cast(next: VoteValue) {
@@ -32,7 +41,7 @@ export function VoteControl({ targetId, baseScore, orientation = "vertical", siz
     >
       <button
         type="button"
-        aria-label="Upvote"
+        aria-label={`Upvote ${label}`}
         aria-pressed={vote === 1}
         onClick={() => cast(1)}
         className={cn(
@@ -60,7 +69,7 @@ export function VoteControl({ targetId, baseScore, orientation = "vertical", siz
 
       <button
         type="button"
-        aria-label="Downvote"
+        aria-label={`Downvote ${label}`}
         aria-pressed={vote === -1}
         onClick={() => cast(-1)}
         className={cn(

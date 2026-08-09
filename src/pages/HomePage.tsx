@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useMemo } from "react";
+import { useLocation, useSearchParams } from "react-router-dom";
 import { PostList } from "../components/feed/PostList";
 import { SortTabs } from "../components/feed/SortTabs";
 import { RightPanelShell, TrendingCommunitiesCard, AboutFooterCard, Card } from "../components/layout/RightPanel";
@@ -7,8 +7,20 @@ import { POSTS, sortPosts } from "../data/posts";
 import { useAppStore } from "../store/store";
 import type { SortMode } from "../types";
 
+const VALID_SORTS: SortMode[] = ["best", "hot", "new", "top", "rising"];
+
 export function HomePage() {
-  const [sort, setSort] = useState<SortMode>("best");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const rawSort = (searchParams.get("sort") ?? "best") as SortMode;
+  // Invalid sort falls back to "best" (Plan §12.1 requirement).
+  const sort: SortMode = VALID_SORTS.includes(rawSort) ? rawSort : "best";
+  const setSort = (next: SortMode) => {
+    const params = new URLSearchParams(searchParams);
+    if (next === "best") params.delete("sort");
+    else params.set("sort", next);
+    setSearchParams(params, { replace: true });
+  };
+
   const localPosts = useAppStore((s) => s.localPosts);
   const joinedIds = useAppStore((s) => s.joinedCommunityIds);
   const location = useLocation();
