@@ -339,3 +339,204 @@ describe("error handling", () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// 401 refresh-and-retry (Slice 4 — Round 6 B18.3)
+// ---------------------------------------------------------------------------
+
+/**
+ * A fetch mock that returns a sequence of responses, in order. Used to
+ * simulate the 401-then-200 retry flow.
+ */
+function sequentialFetch(
+  responses: Array<{ status: number; body?: unknown; headers?: Record<string, string> }>
+): typeof fetch & {
+  calls: Array<{ url: string; init: RequestInit }>;
+} {
+  const calls: Array<{ url: string; init: RequestInit }> = [];
+  let i = 0;
+  const fn = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+    calls.push({ url, init: init ?? ({} as RequestInit) });
+    const next = responses[i] ?? responses[responses.length - 1];
+    i += 1;
+    return Promise.resolve(
+      new Response(
+        next.body === undefined ? null : JSON.stringify(next.body),
+        {
+          status: next.status,
+          headers: {
+            "Content-Type": "application/json",
+            ...(next.headers ?? {}),
+          },
+        }
+      )
+    );
+  }) as unknown as typeof fetch & {
+    calls: Array<{ url: string; init: RequestInit }>;
+  };
+  fn.calls = calls;
+  return fn;
+}
+
+describe("createApiClient — 401 refresh-and-retry (Slice 4)", () => {
+  it("does not attempt refresh when getToken returns null (default)", async () => {
+    // Default config: no token → no refresh attempt → caller sees the 401.
+    const fetchMock = sequentialFetch([
+      { status: 401, body: { error: { code: "UNAUTHORIZED", message: "no token" } } },
+    ]);
+    const api = createApiClient({ baseUrl: "http://test", fetch: fetchMock });
+    await expect(api.getPosts()).rejects.toMatchObject({ status: 401 });
+    expect(fetchMock.calls).toHaveLength(1); // no retry
+  });
+
+  it("refreshes and retries once when an authenticated request returns 401", async () => {
+    // First call: 401 (token expired). Refresh: 200 + new token. Retry: 200.
+    const fetchMock = sequentialFetch([
+      { status: 401, body: { error: { code: "TOKEN_EXPIRED", message: "expired" } } },
+      { status: 200, body: { accessToken: "tok-new", user: { id: "u1", username: "you" } } },
+      { status: 200, body: { items: [{ id: "p1" }], nextCursor: null } },
+    ]);
+    const api = createApiClient({
+      baseUrl: "http://test",
+      fetch: fetchMock,
+      getToken: () => "tok-old",
+      tryRefreshOn401: true,
+    });
+    const result = await api.getPosts();
+    expect(result).toEqual({ items: [{ id: "p1" }], nextCursor: null });
+    // 3 fetches: original 401, refresh POST, retry 200.
+    expect(fetchMock.calls).toHaveLength(3);
+    expect(fetchMock.calls[1].url).toBe("http://test/api/auth/refresh");
+    expect(fetchMock.calls[1].init.method).toBe("POST");
+  });
+
+  it("does not retry when tryRefreshOn401 is false (opt-out)", async () => {
+    const fetchMock = sequentialFetch([
+      { status: 401, body: { error: { code: "UNAUTHORIZED", message: "no" } } },
+    ]);
+    const api = createApiClient({
+      baseUrl: "http://test",
+      fetch: fetchMock,
+      getToken: () => "tok-old",
+      tryRefreshOn401: false,
+    });
+    await expect(api.getPosts()).rejects.toMatchObject({ status: 401 });
+    expect(fetchMock.calls).toHaveLength(1);
+  });
+
+  it("propagates the original 401 when refresh itself returns 401 (refresh failed)", async () => {
+    // First call: 401. Refresh: also 401. No retry of the original.
+    const fetchMock = sequentialFetch([
+      { status: 401, body: { error: { code: "TOKEN_EXPIRED", message: "expired" } } },
+      { status: 401, body: { error: { code: "REFRESH_FAILED", message: "refresh revoked" } } },
+    ]);
+    const api = createApiClient({
+      baseUrl: "http://test",
+      fetch: fetchMock,
+      getToken: () => "tok-old",
+      tryRefreshOn401: true,
+    });
+    await expect(api.getPosts()).rejects.toMatchObject({
+      status: 401,
+      code: "TOKEN_EXPIRED", // original error preserved
+    });
+    // 2 fetches: original 401, refresh 401. No retry.
+    expect(fetchMock.calls).toHaveLength(2);
+  });
+
+  it("propagates the original 401 when refresh throws (network error during refresh)", async () => {
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (url === "http://test/api/auth/refresh") {
+        return Promise.reject(new TypeError("network error"));
+      }
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({ error: { code: "TOKEN_EXPIRED", message: "expired" } }),
+          { status: 401, headers: { "Content-Type": "application/json" } }
+        )
+      );
+    }) as unknown as typeof fetch;
+    const api = createApiClient({
+      baseUrl: "http://test",
+      fetch: fetchMock,
+      getToken: () => "tok-old",
+      tryRefreshOn401: true,
+    });
+    await expect(api.getPosts()).rejects.toMatchObject({
+      status: 401,
+      code: "TOKEN_EXPIRED",
+    });
+  });
+
+  it("does NOT trigger refresh on the refresh() call itself (avoids infinite loop)", async () => {
+    // Calling api.refresh() directly when the refresh returns 401 should
+    // surface the 401, not recurse into another refresh.
+    const fetchMock = sequentialFetch([
+      { status: 401, body: { error: { code: "REFRESH_FAILED", message: "revoked" } } },
+    ]);
+    const api = createApiClient({
+      baseUrl: "http://test",
+      fetch: fetchMock,
+      getToken: () => "tok-old",
+      tryRefreshOn401: true,
+    });
+    await expect(api.refresh()).rejects.toMatchObject({
+      status: 401,
+      code: "REFRESH_FAILED",
+    });
+    expect(fetchMock.calls).toHaveLength(1); // no recursive refresh
+  });
+
+  it("updates the access token via onTokenRefresh callback after a successful refresh", async () => {
+    const fetchMock = sequentialFetch([
+      { status: 401, body: { error: { code: "TOKEN_EXPIRED", message: "expired" } } },
+      { status: 200, body: { accessToken: "tok-new", user: { id: "u1", username: "you" } } },
+      { status: 200, body: { items: [], nextCursor: null } },
+    ]);
+    let capturedToken: string | null = null;
+    const api = createApiClient({
+      baseUrl: "http://test",
+      fetch: fetchMock,
+      getToken: () => "tok-old",
+      tryRefreshOn401: true,
+      onTokenRefresh: (token: string) => {
+        capturedToken = token;
+      },
+    });
+    await api.getPosts();
+    expect(capturedToken).toBe("tok-new");
+  });
+
+  it("does not refresh on non-401 errors (e.g. 500)", async () => {
+    const fetchMock = sequentialFetch([
+      { status: 500, body: { error: { code: "INTERNAL", message: "boom" } } },
+    ]);
+    const api = createApiClient({
+      baseUrl: "http://test",
+      fetch: fetchMock,
+      getToken: () => "tok-old",
+      tryRefreshOn401: true,
+    });
+    await expect(api.getPosts()).rejects.toMatchObject({ status: 500 });
+    expect(fetchMock.calls).toHaveLength(1);
+  });
+
+  it("retry uses the new access token from refresh in the Authorization header", async () => {
+    const fetchMock = sequentialFetch([
+      { status: 401, body: { error: { code: "TOKEN_EXPIRED", message: "expired" } } },
+      { status: 200, body: { accessToken: "tok-fresh", user: { id: "u1", username: "you" } } },
+      { status: 200, body: { items: [], nextCursor: null } },
+    ]);
+    const api = createApiClient({
+      baseUrl: "http://test",
+      fetch: fetchMock,
+      getToken: () => "tok-old", // Note: the api client uses the refreshed token internally
+      tryRefreshOn401: true,
+    });
+    await api.getPosts();
+    // 3rd call is the retry — it should have Authorization: Bearer tok-fresh
+    const retryCall = fetchMock.calls[2];
+    const headers = new Headers(retryCall.init.headers as HeadersInit);
+    expect(headers.get("Authorization")).toBe("Bearer tok-fresh");
+  });
+});

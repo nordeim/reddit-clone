@@ -62,6 +62,30 @@ export interface ApiClientOptions {
   fetch?: typeof fetch;
   /** Accessor for the current access token. Returning null omits the header. */
   getToken?: () => string | null;
+  /**
+   * When `true` (default `false`), a 401 response on an authenticated
+   * request triggers a single `POST /api/auth/refresh` attempt. If the
+   * refresh succeeds, the original request is retried once with the new
+   * access token (which is also forwarded to `onTokenRefresh` so the
+   * caller can update its in-memory token). If the refresh fails (401
+   * or network error), the original 401 is propagated to the caller.
+   *
+   * The refresh call itself NEVER triggers a recursive refresh — this
+   * is enforced by an internal `skipRefresh` flag on the request. This
+   * prevents infinite loops when the refresh token is revoked.
+   *
+   * Round 6 B18.3.
+   */
+  tryRefreshOn401?: boolean;
+  /**
+   * Callback invoked after a successful refresh with the new access
+   * token. The caller (typically `AuthProvider`) uses this to update
+   * its in-memory token ref. Optional — if omitted, the refreshed
+   * token is used only for the in-flight retry.
+   *
+   * Round 6 B18.3.
+   */
+  onTokenRefresh?: (token: string) => void;
 }
 
 // --- Response shapes (mirror @embers/shared Zod schemas; intentionally loose
@@ -176,11 +200,35 @@ export function createApiClient(options: ApiClientOptions = {}) {
   const baseUrl = options.baseUrl ?? defaultBaseUrl();
   const fetchFn = options.fetch ?? fetch;
   const getToken = options.getToken ?? (() => null);
+  const tryRefreshOn401 = options.tryRefreshOn401 ?? false;
+  const onTokenRefresh = options.onTokenRefresh;
 
+  /**
+   * Internal request function. `skipRefresh` is set to `true` for the
+   * `refresh()` method itself so it can never trigger a recursive
+   * refresh (which would cause an infinite loop when the refresh token
+   * is revoked).
+   *
+   * The refresh-and-retry flow (Round 6 B18.3):
+   *   1. Caller invokes any authenticated method (e.g. `getPosts`).
+   *   2. `request` adds the `Authorization: Bearer <token>` header and
+   *      calls `fetch`.
+   *   3. If the response is 401 AND `tryRefreshOn401` AND
+   *      `getToken()` returned a token AND `skipRefresh !== true`:
+   *      a. Call `refresh()` (which goes through this same `request`
+   *         function but with `skipRefresh: true`).
+   *      b. If refresh succeeds, capture the new access token, fire
+   *         `onTokenRefresh`, and retry the original request once
+   *         with the new token.
+   *      c. If refresh fails (401 or network), propagate the ORIGINAL
+   *         401 error to the caller — the retry never happens.
+   *   4. Otherwise: standard success/error path.
+   */
   async function request<T>(
     method: string,
     path: string,
-    body?: unknown
+    body?: unknown,
+    opts: { skipRefresh?: boolean } = {}
   ): Promise<T> {
     const url = `${baseUrl}${path}`;
     const headers: Record<string, string> = {
@@ -199,6 +247,69 @@ export function createApiClient(options: ApiClientOptions = {}) {
       res.headers.get("x-request-id") ?? undefined;
 
     if (!res.ok) {
+      // Refresh-and-retry path (Round 6 B18.3).
+      if (
+        res.status === 401 &&
+        tryRefreshOn401 &&
+        !opts.skipRefresh &&
+        token !== null
+      ) {
+        let refreshedToken: string | null = null;
+        try {
+          // `request` with `skipRefresh: true` to prevent recursion.
+          const refreshResult = await request<LoginResponse>(
+            "POST",
+            "/api/auth/refresh",
+            undefined,
+            { skipRefresh: true }
+          );
+          refreshedToken = refreshResult.accessToken;
+          if (onTokenRefresh) onTokenRefresh(refreshedToken);
+        } catch {
+          // Refresh failed — propagate the ORIGINAL 401 to the caller.
+          // The refresh error is intentionally swallowed: the caller
+          // only needs to know the original request failed with 401.
+          const errorBody = await parseErrorBody(res).catch(
+            (): ServerErrorBody => ({})
+          );
+          const code = errorBody.error?.code ?? "INTERNAL";
+          const message = errorBody.error?.message ?? `HTTP ${res.status}`;
+          throw new ApiError(res.status, code, message, requestId);
+        }
+
+        // Retry the original request once with the new token.
+        // We construct a fresh headers object so the new token wins
+        // over the stale one captured above.
+        const retryHeaders: Record<string, string> = {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${refreshedToken}`,
+        };
+        const retryRes = await fetchFn(url, {
+          method,
+          headers: retryHeaders,
+          body: body === undefined ? undefined : JSON.stringify(body),
+        });
+        const retryRequestId =
+          retryRes.headers.get("x-request-id") ?? undefined;
+        if (!retryRes.ok) {
+          const retryErrorBody = await parseErrorBody(retryRes).catch(
+            (): ServerErrorBody => ({})
+          );
+          const retryCode = retryErrorBody.error?.code ?? "INTERNAL";
+          const retryMessage =
+            retryErrorBody.error?.message ?? `HTTP ${retryRes.status}`;
+          throw new ApiError(
+            retryRes.status,
+            retryCode,
+            retryMessage,
+            retryRequestId
+          );
+        }
+        if (retryRes.status === 204) return undefined as T;
+        return (await retryRes.json()) as T;
+      }
+
+      // Standard error path — no refresh, or refresh disabled.
       const errorBody = await parseErrorBody(res);
       const code = errorBody.error?.code ?? "INTERNAL";
       const message = errorBody.error?.message ?? `HTTP ${res.status}`;
@@ -213,7 +324,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
     // health
     health: () => request<HealthResponse>("GET", "/health"),
 
-    // auth
+    // auth — refresh() passes skipRefresh:true to prevent infinite loops
     login: (username: string, password: string) =>
       request<LoginResponse>("POST", "/api/auth/login", { username, password }),
     register: (username: string, password: string) =>
@@ -222,7 +333,10 @@ export function createApiClient(options: ApiClientOptions = {}) {
         password,
       }),
     logout: () => request<void>("POST", "/api/auth/logout"),
-    refresh: () => request<LoginResponse>("POST", "/api/auth/refresh"),
+    refresh: () =>
+      request<LoginResponse>("POST", "/api/auth/refresh", undefined, {
+        skipRefresh: true,
+      }),
 
     // posts
     getPosts: (cursor?: string) =>
