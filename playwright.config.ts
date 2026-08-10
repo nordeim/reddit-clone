@@ -15,6 +15,10 @@ const BASE_URL = `http://127.0.0.1:${PORT}`;
 
 export default defineConfig({
   testDir: "./e2e",
+  // R8.3: live-deployment audit is opt-in (run via `npm run test:e2e:live`
+  // with LIVE_BASE_URL set). Exclude it from the default `npm run test:e2e`
+  // gate so it doesn't add 12 always-skipped tests to every CI run.
+  testIgnore: /live\.spec\.ts/,
   fullyParallel: false, // sequential — single in-memory DB shared across tests
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
