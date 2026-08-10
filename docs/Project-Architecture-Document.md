@@ -3,7 +3,7 @@
 **Classification:** Internal Engineering Reference
 **Status:** DEFINITIVE, PRODUCTION-LOCKED BLUEPRINT
 **Companion Documents:** `AGENTS.md` (deep codebase reference), `CLAUDE.md` (daily implementation guide)
-**Last Updated:** 2026-04-13
+**Last Updated:** 2026-08-10 (Round 5 — doc-alignment, `pretest` script, `@vitest/coverage-v8`, foundational web API client)
 **Audience:** Senior Engineers, Tech Leads, DevOps, and Onboarding Engineers
 **Rule:** Every architectural decision in this document traces to a specific rationale.
            Nothing is here "because it's popular."
@@ -202,6 +202,9 @@ src/
 │   ├── storage.ts              # safe JSON parse + persisted-state validation + merge helpers
 │   ├── selectors.ts            # pure selectors (visible score, unread count, badge cap, etc.)
 │   └── themeBootstrap.ts       # synchronous theme application before React mounts
+│
+├── lib/
+│   └── api.ts                  # Foundational fetch-based API client (Round 5) — basis for B17–B22
 │
 ├── hooks/
 │   ├── index.ts                # useDebounce, useOnClickOutside, useInfiniteScroll
@@ -506,11 +509,13 @@ Dark mode: Custom variant `@custom-variant dark (&:where(.dark, .dark *));` — 
 | Aspect | Status |
 |---|---|
 | Test runner | **Vitest 2.1.9** |
-| Test env | **jsdom 25.x** |
+| Test env | **jsdom 25.x** (client) — in-memory SQLite + Fastify `inject()` (server) |
 | Component testing | **@testing-library/react 16.x + @testing-library/user-event 14.x** |
-| E2E framework | None installed |
-| Linter | None installed |
-| Typechecker | `npm run typecheck` (alias for `tsc --noEmit`) |
+| E2E framework | **Playwright 1.62** (added Round 3 — 9 smoke tests in `e2e/smoke.spec.ts`) |
+| Linter | **ESLint 9 flat config** (`eslint.config.mjs` at repo root, added Round 4 — 0 errors, 0 warnings) |
+| Coverage | **`@vitest/coverage-v8`** in `@embers/server` (added Round 5 — informational, no CI gate yet) |
+| Typechecker | `npm run typecheck` (alias for `tsc --noEmit` across all 4 workspaces) |
+| Total tests | **389 vitest** (web=198, server=95, shared=67, db=29) + **9 Playwright E2E** |
 
 ### 7.2 Test layout
 
@@ -529,6 +534,8 @@ src/
 │   ├── storage.test.ts      # safeParseJSON, validatePersistedState, mergePersistedState
 │   ├── selectors.test.ts    # getVisibleScore, isPostSaved, getUnreadNotificationCount, etc.
 │   └── themeBootstrap.test.ts # applyPersistedTheme
+├── lib/
+│   └── api.test.ts          # foundational fetch client (Round 5) — 22 tests
 ├── components/feed/
 │   ├── VoteControl.test.tsx     # integration: voting toggles, score updates, persistence
 │   └── CreatePostModal.test.tsx # integration: validation, URL safety, submit + store
@@ -548,16 +555,21 @@ src/
 The project relies on:
 
 1. **TypeScript strict mode** — catches type errors, unused variables, fallthrough cases
-2. **Vitest unit + integration tests** — 176 tests across 11 files covering pure utilities, store logic, and key components
-3. **Manual typecheck** — `npm run typecheck` before claiming a change compiles
-4. **Production build** — `npm run build` validates bundling succeeds
+2. **Vitest unit + integration tests** — 198 tests across 12 files covering pure utilities, store logic, the foundational API client, and key components (web) + 95 server tests + 67 shared tests + 29 db tests = 389 total
+3. **ESLint 9 flat config** (Round 4) — 0 errors, 0 warnings across all workspaces
+4. **Playwright E2E** (Round 3) — 9 smoke tests covering health, register, login, feed, single post, search, communities
+5. **Manual typecheck** — `npm run typecheck` before claiming a change compiles
+6. **Production build** — `npm run build` validates bundling succeeds
 
 ### 7.5 Pre-Commit Checklist
 
 ```bash
-npm run typecheck   # tsc --noEmit — must pass clean
-npm test            # vitest run — all tests must pass
-npm run build       # vite build — must succeed
+npm run lint        # ESLint flat config — 0 errors, 0 warnings (Round 4)
+npm run typecheck   # tsc --noEmit across all 4 workspaces — must pass clean
+npm test            # vitest run — all 389 tests must pass (pretest auto-builds shared+db)
+npm run test:e2e    # playwright run — 9 smoke tests must pass (Round 3)
+npm run build       # topological build — must succeed
+git ls-files | grep -E '(^|/)dist/' | wc -l   # must be 0 (no dist/ tracked)
 ```
 
 ### 7.6 Manual QA matrix
@@ -673,7 +685,7 @@ The following previously-open issues are now resolved (see `docs/REMEDIATION_PLA
 
 | Issue | Resolution |
 |---|---|
-| No test runner installed | Vitest + Testing Library + jsdom installed; 176 tests across 11 files |
+| No test runner installed | Vitest + Testing Library + jsdom installed; 198 tests across 12 files (web) + 95 server + 67 shared + 29 db = 389 total |
 | No `version`/`migrate` on `persist` | `schemaVersion: 1` + custom `merge` + `migrate` hook on `persist` |
 | Corrupt localStorage could crash the app | `mergePersistedState` validates every field, drops invalid entries, never throws |
 | Theme flash on reload | Synchronous inline script in `index.html` applies `.dark` before React mounts |
@@ -737,6 +749,8 @@ The following previously-open issues are now resolved (see `docs/REMEDIATION_PLA
 | `src/components/notifications/NotificationsPanel.tsx` | Notification list with All/Unread tabs |
 | `src/pages/HomePage.tsx` | Feed with scope (home/popular/all/explore) |
 | `src/pages/PostPage.tsx` | Post detail + comment tree (500ms simulated load) |
+| `src/lib/api.ts` | Foundational fetch-based API client for the Fastify backend (Round 5) — basis for deferred B17–B22 frontend integration |
+| `src/lib/api.test.ts` | 22 tests for the API client (constructor defaults, every endpoint, auth header, cursor encoding, 4xx/5xx error mapping) |
 | `vite.config.ts` | Vite + React + Tailwind + singlefile |
 | `tsconfig.json` | Strict TypeScript config |
 | `index.html` | Minimal HTML shell (title + root div + module script) |
@@ -792,7 +806,7 @@ apply to `apps/server` and the `packages/{shared,db}` workspaces.
 ┌──────────────────────────────────────────────────────────────┐
 │                  CLIENT (Browser) — apps/web                  │
 │   React 19 SPA (unchanged from §2, runs via HashRouter +       │
-│   vite-plugin-singlefile, 176 tests green)                    │
+│   vite-plugin-singlefile, 198 tests green)                    │
 └──────────────────────────────────────────────────────────────┘
                               │
                               │  (frontend integration deferred — §5)

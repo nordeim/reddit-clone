@@ -233,11 +233,17 @@ Tests use **Vitest** with **Fastify's `inject()`** — no port binding needed.
 ```bash
 npm run lint        # ESLint flat config — 0 errors, 0 warnings (Round 4)
 npm run typecheck   # tsc --noEmit — must pass clean
-npm test            # vitest run (all workspaces) — all 367 tests must pass
+npm test            # vitest run (all workspaces) — all 389 tests must pass
 npm run test:e2e    # playwright run — 9 smoke tests must pass (B24, Round 3)
 npm run build       # topological build — must succeed
 git ls-files | grep -E '(^|/)dist/' | wc -l   # must be 0 (no dist/ tracked)
 ```
+
+> **Test count breakdown (389 total):** `@embers/web` = 198 (incl. 22 in
+> `src/lib/api.test.ts` added Round 5), `@embers/server` = 95,
+> `@embers/shared` = 67, `@embers/db` = 29. The previously documented total
+> of 367 (Round 4) was superseded when Round 5 added the foundational web
+> API client test suite.
 
 **Build-before-test prerequisite (Round 5):** `@embers/server`'s test suites import
 `@embers/db` and `@embers/shared` as runtime packages, so their `dist/` builds
@@ -369,8 +375,11 @@ Custom variant, not v3 `darkMode: 'class'`:
 ```
 reddit-clone/
 ├── apps/
-│   ├── web/                 ← @embers/web (React SPA, Vite, 176 tests)
-│   │   └── src/             # See AGENTS.md for full web tree
+│   ├── web/                 ← @embers/web (React SPA, Vite, 198 tests)
+│   │   └── src/             # See AGENTS.md for full web tree.
+│   │                        # Note: `lib/api.ts` (Round 5) is the foundational
+│   │                        # fetch-based client for the deferred B17–B22
+│   │                        # frontend integration — not yet wired into pages.
 │   └── server/              ← @embers/server (Fastify, 95 tests)
 │       └── src/
 │           ├── app.ts       # buildApp() composition root

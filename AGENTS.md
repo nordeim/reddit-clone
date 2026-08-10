@@ -147,7 +147,8 @@ The server follows a **composition root** pattern — `buildApp(opts)` in `src/a
 - `buildApp({ env, db, rawDb })` wires repositories + routes for integration tests
 - **Helmet/rate-limit** can be skipped via `skipHelmet`/`skipRateLimit` options (rate-limit auto-disabled in `NODE_ENV=test`)
 - **Auth tests** use the seeded demo user; **vote concurrency tests** seed 100 users directly via Drizzle insert (bypassing Argon2id for speed)
-- Test files: 8 in `apps/server/src/` (5 in `routes/`, 2 in `auth/`, 1 `config.test.ts` in root), 2 in `packages/db/src/`, 3 in `packages/shared/src/`
+- Test files: 8 in `apps/server/src/` (5 in `routes/`, 2 in `auth/`, 1 `config.test.ts` in root), 2 in `packages/db/src/`, 3 in `packages/shared/src/`, 12 in `apps/web/src/` (including `lib/api.test.ts` added in Round 5)
+- **Total vitest count: 389** = 95 (server) + 67 (shared) + 29 (db) + 198 (web, of which 22 cover `lib/api.ts`). The previously documented 367 (Round 4) was superseded when Round 5 added the foundational web API client suite.
 
 ### Backend Pitfalls
 
@@ -226,6 +227,29 @@ Local ids are timestamp-based (`local-${Date.now()}` for posts, `${postId}-c${Da
 ## Routes (`src/App.tsx`)
 
 `/`, `/popular`, `/all` and `/explore` all render `HomePage`, which derives its scope from `location.pathname`. Remaining: `/r/:name`, `/comments/:postId`, `/u/:username`, `/search?q=`, `/notifications`, and `*` → `NotFoundPage`. All pages render inside `AppShell` via `<Outlet />`.
+
+## Foundational API client (Round 5 — `apps/web/src/lib/api.ts`)
+
+A typed, fetch-based client for the Fastify backend. **Not yet wired into any
+page** — it is the foundation for the deferred B17–B22 frontend integration
+(auth provider, React Query, optimistic UI, notification polling). Existing
+Zustand store, `HashRouter`, and `src/data/*` deterministic layer are
+untouched.
+
+| Export | Purpose |
+| --- | --- |
+| `createApiClient(options)` | Factory; returns an object with `health`, `login`, `register`, `logout`, `refresh`, `getPosts`, `getPost`, `createPost`, `vote`, `getComments`, `createComment`, `search`, `getCommunities`, `getCommunity`, `getNotifications` methods |
+| `ApiClient` | `ReturnType<typeof createApiClient>` — pass to hooks / store actions |
+| `ApiError` | Thrown on non-2xx; carries `{ status, code, message, requestId }` mirroring the server's `errorHandler` plugin |
+| `ApiClientOptions` | `{ baseUrl?, fetch?, getToken? }` — `fetch` + `getToken` are dependency-injected so the 22 unit tests run with zero network |
+
+**Conventions:**
+- The client is **pessimistic** by design. Optimistic UI (B21) will be added at the hook layer (`useVote`, `useCreateComment`) — this file stays rollback-free.
+- `getToken` is a function (`() => string | null`), not a stored string. B18's `AuthProvider` will pass `() => authCtx.accessToken`; for now it defaults to `() => null` and the `Authorization` header is omitted.
+- `baseUrl` defaults to `import.meta.env.VITE_API_URL ?? "http://localhost:4000"`. The `import.meta.env` access is cast through `unknown` so the file typechecks outside Vite (e.g. in unit tests).
+- All paths use `encodeURIComponent` on dynamic segments — vote targets, post IDs, community slugs, search queries.
+
+**Test coverage:** `apps/web/src/lib/api.test.ts` — 22 tests covering constructor defaults, every endpoint, auth header injection, cursor encoding, 4xx/5xx error mapping, and 204 No Content handling.
 
 ## Docker (B23 — Round 3)
 

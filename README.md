@@ -9,7 +9,9 @@ monorepo.
 reddit-clone/
 ├── apps/
 │   ├── web/          ← @embers/web — the original client-only React SPA
-│   │                   (HashRouter, vite-plugin-singlefile, 176 tests)
+│   │                   (HashRouter, vite-plugin-singlefile, 198 tests;
+│   │                    includes `src/lib/api.ts` foundational fetch client
+│   │                    added in Round 5 for the deferred B17–B22 integration)
 │   └── server/       ← @embers/server — Fastify REST API + auth + FTS5 search
 │                       (95 tests, /health, /api/auth, /api/posts,
 │                        /api/communities, /api/votes, /api/comments,
@@ -75,17 +77,20 @@ host (ADR-003 single-file build is still in force for the client).
 
 | Workspace | Tests | Command |
 |-----------|-------|---------|
-| `@embers/web` | 176 | `npm test --workspace @embers/web` |
+| `@embers/web` | 198 | `npm test --workspace @embers/web` |
 | `@embers/shared` | 67 | `npm test --workspace @embers/shared` |
 | `@embers/db` | 29 | `npm test --workspace @embers/db` |
 | `@embers/server` | 95 | `npm test --workspace @embers/server` |
-| **Vitest total** | **367** | `npm test --workspaces --if-present` |
+| **Vitest total** | **389** | `npm test --workspaces --if-present` |
 | E2E (Playwright) | 9 | `npm run test:e2e` |
 | Lint (ESLint) | 0 errors, 0 warnings | `npm run lint` |
 
-All 367 vitest tests + 9 Playwright E2E smoke tests pass, ESLint is clean, and
-typecheck + build succeed as of Round 5 (2026-08-10). See
-`docs/REMEDIATION_PLAN_ROUND_5.md` for the Round 5 changelog (doc-alignment +
+All 389 vitest tests + 9 Playwright E2E smoke tests pass, ESLint is clean, and
+typecheck + build succeed as of Round 5 (2026-08-10). The 22-test delta over
+the previously documented 367 (Round 4) is the new `apps/web/src/lib/api.test.ts`
+suite covering the foundational fetch-based API client (`apps/web/src/lib/api.ts`)
+introduced in Round 5 as the basis for the deferred B17–B22 frontend integration.
+See `docs/REMEDIATION_PLAN_ROUND_5.md` for the Round 5 changelog (doc-alignment +
 `pretest` script + `@vitest/coverage-v8` + foundational web API client).
 
 ## Architecture Decision Records
