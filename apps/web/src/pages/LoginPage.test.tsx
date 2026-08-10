@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
-import { AuthProvider, useAuth, type AuthApiClient, type AuthApiClientOptions } from "../auth/AuthProvider";
+import { AuthProvider, useAuth, type AuthApiClient, type AuthApiClientOptions, type AuthUser } from "../auth/AuthProvider";
 import { LoginPage } from "./LoginPage";
 
 /**
@@ -13,6 +13,19 @@ import { LoginPage } from "./LoginPage";
  * success. Tests use MemoryRouter + a capturing AuthProvider so the
  * tests can assert the login call without hitting the network.
  */
+
+function makeUser(username: string): AuthUser {
+  return {
+    id: `u-${username}`,
+    username,
+    displayName: username,
+    bio: "",
+    karma: 0,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    colorFrom: "#ff6600",
+    colorTo: "#ff9900",
+  };
+}
 
 function makeStubClient(overrides: Partial<AuthApiClient> = {}): AuthApiClient & {
   calls: { login: Array<[string, string]> };
@@ -25,9 +38,10 @@ function makeStubClient(overrides: Partial<AuthApiClient> = {}): AuthApiClient &
         calls.login.push([username, password]);
         return {
           accessToken: "tok-stub",
-          user: { id: `u-${username}`, username },
+          user: makeUser(username),
         };
       }),
+    register: async () => ({ user: makeUser("new") }),
     logout:
       overrides.logout ??
       (async () => {
@@ -91,7 +105,7 @@ describe("LoginPage (Slice 6)", () => {
   });
 
   it("disables the submit button and shows a loading state while submitting", async () => {
-    let resolveLogin!: (value: { accessToken: string; user: { id: string; username: string } }) => void;
+    let resolveLogin!: (value: { accessToken: string; user: AuthUser }) => void;
     const stub = makeStubClient({
       login: () =>
         new Promise((resolve) => {
@@ -114,7 +128,7 @@ describe("LoginPage (Slice 6)", () => {
     // Cleanup: resolve so the test doesn't hang.
     resolveLogin({
       accessToken: "tok",
-      user: { id: "u-you", username: "you" },
+      user: makeUser("you"),
     });
   });
 
@@ -187,7 +201,7 @@ describe("LoginPage (Slice 6)", () => {
       stub.calls.login.push([username, password]);
       return {
         accessToken: "tok",
-        user: { id: "u-you", username: "you" },
+        user: makeUser("you"),
       };
     };
 

@@ -81,19 +81,38 @@ describe("auth", () => {
     );
   });
 
-  it("register sends username + password and returns access token + user", async () => {
+  it("register sends username + password and returns { user } (no access token — client must login after)", async () => {
     const fetchMock = mockFetch({
       status: 201,
-      body: { accessToken: "tok-new", user: { id: "u2", username: "newbie" } },
+      body: { user: { id: "u2", username: "newbie" } },
     });
     const api = createApiClient({ baseUrl: "http://test", fetch: fetchMock });
     const result = await api.register("newbie", "password123");
-    expect(result.accessToken).toBe("tok-new");
+    expect(result.user).toEqual({ id: "u2", username: "newbie" });
+    // The register response has NO accessToken — the client must call
+    // login() afterwards to establish a session.
+    expect((result as { accessToken?: unknown }).accessToken).toBeUndefined();
     expect(fetchMock).toHaveBeenCalledWith(
       "http://test/api/auth/register",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({ username: "newbie", password: "password123" }),
+      })
+    );
+  });
+
+  it("register sends optional displayName when provided", async () => {
+    const fetchMock = mockFetch({
+      status: 201,
+      body: { user: { id: "u2", username: "newbie" } },
+    });
+    const api = createApiClient({ baseUrl: "http://test", fetch: fetchMock });
+    await api.register("newbie", "password123", "Newbie");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://test/api/auth/register",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ username: "newbie", password: "password123", displayName: "Newbie" }),
       })
     );
   });

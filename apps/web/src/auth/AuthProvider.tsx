@@ -35,10 +35,16 @@ import {
  * @packageDocumentation
  */
 
-/** The authenticated user. `null` when anonymous. */
+/** The authenticated user. `null` when anonymous. Mirrors `authUserSchema` from `@embers/shared`. */
 export interface AuthUser {
   id: string;
   username: string;
+  displayName: string;
+  bio: string;
+  karma: number;
+  createdAt: string;
+  colorFrom: string;
+  colorTo: string;
 }
 
 /** Session status — drives UI conditionals (login button vs. avatar). */
@@ -55,6 +61,19 @@ export interface AuthContextValue {
   error: string | null;
   /** Submit credentials. Rejects on network error or wrong password. */
   login: (username: string, password: string) => Promise<void>;
+  /**
+   * Create a new account. The server's `/api/auth/register` endpoint
+   * returns `{ user }` only (no session) — the client must call
+   * `login()` afterwards to establish a session. This method does NOT
+   * auto-login; the caller (typically RegisterPage) orchestrates the
+   * register-then-login flow so it can show appropriate errors at each
+   * step.
+   */
+  register: (
+    username: string,
+    password: string,
+    displayName?: string
+  ) => Promise<AuthUser>;
   /** Revoke the session. Always resolves — even if the server call fails. */
   logout: () => Promise<void>;
 }
@@ -87,6 +106,11 @@ export interface AuthApiClient {
     username: string,
     password: string
   ) => Promise<{ accessToken: string; user: AuthUser }>;
+  register: (
+    username: string,
+    password: string,
+    displayName?: string
+  ) => Promise<{ user: AuthUser }>;
   logout: () => Promise<void>;
 }
 
@@ -181,6 +205,27 @@ export function AuthProvider({
           tokenRef.current = null;
           setUser(null);
           setStatus("anonymous");
+          setError(err instanceof Error ? err.message : String(err));
+          throw err;
+        }
+      },
+      register: async (
+        username: string,
+        password: string,
+        displayName?: string
+      ) => {
+        setError(null);
+        try {
+          const { user: createdUser } = await client.register(
+            username,
+            password,
+            displayName
+          );
+          // NOTE: register does NOT establish a session. The caller must
+          // call login() afterwards. We return the created user so the
+          // caller can display it or pre-fill the login form.
+          return createdUser;
+        } catch (err) {
           setError(err instanceof Error ? err.message : String(err));
           throw err;
         }

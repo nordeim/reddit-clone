@@ -51,6 +51,20 @@ interface StubClient extends AuthApiClient {
   refresh: () => Promise<{ accessToken: string; user: AuthUser }>;
 }
 
+/** Build a complete AuthUser matching the widened shape (Round 7). */
+function makeUser(username: string): AuthUser {
+  return {
+    id: `u-${username}`,
+    username,
+    displayName: username,
+    bio: "",
+    karma: 0,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    colorFrom: "#ff6600",
+    colorTo: "#ff9900",
+  };
+}
+
 function makeStubClient(
   overrides: Partial<StubClient> = {}
 ): StubClient & {
@@ -58,12 +72,14 @@ function makeStubClient(
     login: Array<[string, string]>;
     logout: number;
     refresh: number;
+    register: Array<[string, string, string | undefined]>;
   };
 } {
   const calls = {
     login: [] as Array<[string, string]>,
     logout: 0,
     refresh: 0,
+    register: [] as Array<[string, string, string | undefined]>,
   };
   return {
     login:
@@ -72,8 +88,14 @@ function makeStubClient(
         calls.login.push([username, password]);
         return {
           accessToken: "tok-stub",
-          user: { id: `u-${username}`, username },
+          user: makeUser(username),
         };
+      }),
+    register:
+      overrides.register ??
+      (async (username: string, password: string, displayName?: string) => {
+        calls.register.push([username, password, displayName]);
+        return { user: makeUser(username) };
       }),
     logout:
       overrides.logout ??
@@ -86,7 +108,7 @@ function makeStubClient(
         calls.refresh += 1;
         return {
           accessToken: "tok-refreshed",
-          user: { id: "u-refreshed", username: "refreshed" },
+          user: makeUser("refreshed"),
         };
       }),
     calls,
@@ -206,10 +228,7 @@ describe("AuthProvider — login() (Slice 2)", () => {
     await waitFor(() => {
       expect(auth.current!.status).toBe("authenticated");
     });
-    expect(auth.current!.user).toEqual({
-      id: "u-you",
-      username: "you",
-    });
+    expect(auth.current!.user).toEqual(makeUser("you"));
     expect(auth.current!.error).toBeNull();
     // The factory was called with options (Slice 5 wiring).
     expect(captured.opts).not.toBeNull();
@@ -271,7 +290,7 @@ describe("AuthProvider — login() (Slice 2)", () => {
     await act(async () => {
       resolveLogin({
         accessToken: "tok",
-        user: { id: "u-you", username: "you" },
+        user: makeUser("you"),
       });
       await pending!;
     });

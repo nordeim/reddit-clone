@@ -10,6 +10,7 @@ import { SearchPage } from "./pages/SearchPage";
 import { NotificationsPage } from "./pages/NotificationsPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 import { LoginPage } from "./pages/LoginPage";
+import { RegisterPage } from "./pages/RegisterPage";
 import { useAppStore } from "./store/store";
 
 export default function App() {
@@ -27,9 +28,11 @@ export default function App() {
     <MotionConfig reducedMotion="user">
       <HashRouter>
         <Routes>
-          {/* /login renders OUTSIDE AppShell so it has no sidebar/navbar.
-              B18 (Round 6) — works under HashRouter as #/login. */}
+          {/* /login and /register render OUTSIDE AppShell so they have no
+              sidebar/navbar. B18 (Round 6 + Round 7) — works under
+              HashRouter as #/login and #/register. */}
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
           <Route element={<AppShell />}>
             <Route path="/" element={<HomePage />} />
             <Route path="/popular" element={<HomePage />} />

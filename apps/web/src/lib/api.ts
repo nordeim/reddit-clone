@@ -99,10 +99,29 @@ export interface HealthResponse {
 export interface AuthUser {
   id: string;
   username: string;
+  displayName: string;
+  bio: string;
+  karma: number;
+  createdAt: string;
+  colorFrom: string;
+  colorTo: string;
 }
 
 export interface LoginResponse {
   accessToken: string;
+  user: AuthUser;
+}
+
+/**
+ * Response from `POST /api/auth/register`. The server creates the user
+ * but does NOT establish a session — no access token, no refresh cookie.
+ * The client must call `api.login()` afterwards to get a session.
+ *
+ * Mirrors `authUserSchema` from `@embers/shared` (Round 7 widened the
+ * shape from `{ id, username }` to the full server response so the
+ * Navbar can display `displayName` + `karma`).
+ */
+export interface RegisterResponse {
   user: AuthUser;
 }
 
@@ -327,10 +346,15 @@ export function createApiClient(options: ApiClientOptions = {}) {
     // auth — refresh() passes skipRefresh:true to prevent infinite loops
     login: (username: string, password: string) =>
       request<LoginResponse>("POST", "/api/auth/login", { username, password }),
-    register: (username: string, password: string) =>
-      request<LoginResponse>("POST", "/api/auth/register", {
+    register: (
+      username: string,
+      password: string,
+      displayName?: string
+    ) =>
+      request<RegisterResponse>("POST", "/api/auth/register", {
         username,
         password,
+        ...(displayName ? { displayName } : {}),
       }),
     logout: () => request<void>("POST", "/api/auth/logout"),
     refresh: () =>
