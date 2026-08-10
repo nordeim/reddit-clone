@@ -314,14 +314,32 @@ B17 / B19--B22 status is unchanged.
 
 The embers SPA is deployed at **`https://reddit.jesspete.shop/`**.
 
-### Known gaps (audited 2026-08-10, see `docs/REMEDIATION_PLAN_ROUND_8.md`)
+### Known gaps (re-audited 2026-08-10, see `docs/REMEDIATION_PLAN_ROUND_8.md` + `docs/REMEDIATION_PLAN_ROUND_9.md`)
 
-| ID | Severity | Gap | Operator fix |
-|----|----------|-----|--------------|
-| LIVE-CRIT-1 | Critical | The live site serves the Vite **dev server**, not a production build (`/@react-refresh` + `/@vite/client` are present in the HTML). | Build the SPA with `npm run build --workspace @embers/web` and serve `apps/web/dist/index.html` (a single-file ~525 KB bundle). Do NOT run `npm run dev` in production. |
-| LIVE-CRIT-2 | Critical | The Fastify backend is **not reachable** from the live URL. `/api/auth/login` returns 404; `/api/posts`, `/api/communities`, `/api/search`, `/health` all return the SPA `index.html` (1579 bytes, `text/html`) instead of JSON. | Start the Fastify backend (`npm run server:start` or `docker compose up`) and configure the reverse proxy to route `/api/*` and `/health` to the Fastify port. |
-| LIVE-CRIT-3 | Critical | No production security headers are set (CSP, HSTS, X-Content-Type-Options, X-Frame-Options, Referrer-Policy all absent). | Add the 5 required security headers at the CDN/reverse-proxy layer. Fastify Helmet already sets them on the backend -- the proxy must not strip them. |
-| LIVE-HIGH-2 | High | `/api/*` requests receive the SPA `index.html` with HTTP 200, masking API failures as successful responses. | Configure the reverse proxy to return 502/503 when the backend is down, not the SPA fallback. SPA fallback should only apply to non-`/api/*` routes. |
+| ID | Severity | Status | Gap | Operator fix |
+|----|----------|--------|-----|--------------|
+| LIVE-CRIT-1 | Critical | **FIXED** (2026-08-10) | The live site was serving the Vite dev server. | Now resolved -- the live site serves a 537 KB production build (no `/@react-refresh` or `/@vite/client` in the HTML). Verified by `e2e/live.spec.ts` test #1. |
+| LIVE-CRIT-2 | Critical | **Still broken** | The Fastify backend is **not reachable** from the live URL. `/api/posts`, `/api/communities`, `/api/search`, `/health` all return HTTP 404 (335 bytes, `text/html`). `/api/auth/login` returns HTTP 501. | Start the Fastify backend (`npm run server:start-prod` or `docker compose up`) and configure the reverse proxy to route `/api/*` and `/health` to the Fastify port (5000). |
+| LIVE-CRIT-3 | Critical | **Still broken** | No production security headers are set (CSP, HSTS, X-Content-Type-Options, X-Frame-Options, Referrer-Policy all absent). | Add the 5 required security headers at the CDN/reverse-proxy layer. Fastify Helmet already sets them on the backend -- the proxy must not strip them. |
+| LIVE-CRIT-4 | Critical | **New (Round 9)** | `/api/auth/login` returns HTTP 501 (Not Implemented) instead of 404 or 200. This suggests the reverse proxy has a partial route to the backend but the route is misconfigured. | Investigate the reverse proxy config -- the `/api/auth/*` route may be pointing to the wrong upstream or the backend may not be running. All other `/api/*` routes return 404 (SPA fallback), but `/api/auth/login` returns 501 (proxy error). |
+| LIVE-HIGH-2 | High | **Still broken** | `/api/*` requests receive the SPA `index.html` (or a proxy error page) instead of JSON, masking API failures. | Configure the reverse proxy to return 502/503 when the backend is down, not the SPA fallback. SPA fallback should only apply to non-`/api/*` routes. |
+
+### SECRET ROTATION REQUIRED (R9.1, 2026-08-10)
+
+**A `.env` file containing real JWT signing secrets was committed to git history** (commits `89f1012` and `526a836`) and pushed to GitHub. The secrets have been removed from the current commit (R9.1), but **they remain in the git history**.
+
+**The operator MUST rotate the following secrets immediately:**
+- `JWT_ACCESS_SECRET` (was: a 64-hex-char value, committed in plain text)
+- `JWT_REFRESH_SECRET` (was: the same value as JWT_ACCESS_SECRET -- both were identical)
+
+**How to rotate:**
+1. Generate new secrets: `openssl rand -hex 32` (run twice -- use a DIFFERENT value for each)
+2. Update `.env` (local, gitignored): set `JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET` to the new values
+3. Restart the Fastify backend: `npm run server:start-prod`
+4. All existing JWT tokens become invalid -- users must log in again
+
+See `docs/SECRET_ROTATION_GUIDE.md` for the full step-by-step guide.
+See `docs/REMEDIATION_PLAN_ROUND_9.md` for the full incident report and remediation plan.
 
 ### How to verify the live deployment
 
@@ -333,11 +351,13 @@ LIVE_BASE_URL=https://reddit.jesspete.shop/ npm run test:e2e:live
 curl -sS -o /dev/null -w "%{http_code} %{content_type}\n" https://reddit.jesspete.shop/
 curl -sS -o /dev/null -w "%{http_code} %{content_type}\n" https://reddit.jesspete.shop/api/posts
 curl -sS -o /dev/null -w "%{http_code} %{content_type}\n" https://reddit.jesspete.shop/health
-# Expected after fix: 200 text/html, 200 application/json, 200 application/json
+# Current state (2026-08-10): 200 text/html (SPA), 404 text/html (API broken), 404 text/html (health broken)
+# Expected after fix:  200 text/html, 200 application/json, 200 application/json
 ```
 
 ### What works on the live site today
 
+- The SPA is served as a **production build** (537 KB single-file HTML, no Vite dev modules). [Fixed in Round 9 -- was LIVE-CRIT-1]
 - The deterministic SPA feed renders (8 articles on initial load, 48 after scroll).
 - Dark-mode toggle persists to `localStorage` (zustand `persist`).
 - Infinite scroll via `IntersectionObserver`.
