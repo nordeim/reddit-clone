@@ -32,6 +32,17 @@
 > (20 AuthProvider + 9 api refresh-and-retry + 10 LoginPage) bring
 > the web suite to 237. See `docs/REMEDIATION_PLAN_ROUND_6.md` for
 > the Round 6 changelog + 7-slice TDD breakdown.
+> Round 7 (2026-08-10) completed B18: added `/register` page +
+> auth-aware Navbar (replaced hardcoded `CURRENT_USER` with `useAuth`)
+> + `<RequireAuth>` route guard (protecting `/notifications`) + 9 E2E
+> auth lifecycle tests. The `AuthUser` interface was widened from
+> `{ id, username }` to the full server shape (with `displayName`,
+> `karma`, etc.) so the Navbar can display them. 24 new web tests
+> (11 RegisterPage + 8 Navbar + 5 RequireAuth) + 1 new api test
+> (register displayName) bring the web suite to 262. 9 new E2E tests
+> bring the E2E suite to 18. See `docs/REMEDIATION_PLAN_ROUND_7.md`
+> for the Round 7 changelog + 5-slice TDD breakdown + the rationale
+> for deferring B17 (build refactor) again.
 
 ---
 
@@ -155,8 +166,8 @@ The server follows a **composition root** pattern — `buildApp(opts)` in `src/a
 - `buildApp({ env, db, rawDb })` wires repositories + routes for integration tests
 - **Helmet/rate-limit** can be skipped via `skipHelmet`/`skipRateLimit` options (rate-limit auto-disabled in `NODE_ENV=test`)
 - **Auth tests** use the seeded demo user; **vote concurrency tests** seed 100 users directly via Drizzle insert (bypassing Argon2id for speed)
-- Test files: 8 in `apps/server/src/` (5 in `routes/`, 2 in `auth/`, 1 `config.test.ts` in root), 2 in `packages/db/src/`, 3 in `packages/shared/src/`, 14 in `apps/web/src/` (including `lib/api.test.ts` from Round 5, `auth/AuthProvider.test.tsx` from Round 6, `pages/LoginPage.test.tsx` from Round 6)
-- **Total vitest count: 428** = 95 (server) + 67 (shared) + 29 (db) + 237 (web). Round 6 added 39 new web tests (20 AuthProvider + 9 api refresh-and-retry + 10 LoginPage) on top of the Round 5 baseline of 389.
+- Test files: 8 in `apps/server/src/` (5 in `routes/`, 2 in `auth/`, 1 `config.test.ts` in root), 2 in `packages/db/src/`, 3 in `packages/shared/src/`, 17 in `apps/web/src/` (including `lib/api.test.ts` from Round 5, `auth/AuthProvider.test.tsx` + `auth/RequireAuth.test.tsx` from Rounds 6-7, `pages/LoginPage.test.tsx` from Round 6, `pages/RegisterPage.test.tsx` + `components/layout/Navbar.test.tsx` from Round 7), 2 E2E specs (`e2e/smoke.spec.ts` + `e2e/auth.spec.ts`)
+- **Total vitest count: 453** = 95 (server) + 67 (shared) + 29 (db) + 262 (web). Round 7 added 25 new web tests (11 RegisterPage + 8 Navbar + 5 RequireAuth + 1 api register-displayName) on top of the Round 6 baseline of 428. **E2E: 18** (9 smoke + 9 auth lifecycle, added in Round 7).
 
 ### Backend Pitfalls
 
@@ -234,7 +245,7 @@ Local ids are timestamp-based (`local-${Date.now()}` for posts, `${postId}-c${Da
 
 ## Routes (`src/App.tsx`)
 
-`/`, `/popular`, `/all` and `/explore` all render `HomePage`, which derives its scope from `location.pathname`. `/r/:name`, `/comments/:postId`, `/u/:username`, `/search?q=`, `/notifications`, and `*` → `NotFoundPage` all render inside `AppShell` via `<Outlet />`. **`/login`** (added in Round 6, B18) renders `LoginPage` **outside** `AppShell` — no sidebar/navbar, just a centered form. The route is added before the `<Route element={<AppShell />}>` wrapper in `App.tsx` so it bypasses the layout entirely.
+`/`, `/popular`, `/all` and `/explore` all render `HomePage`, which derives its scope from `location.pathname`. `/r/:name`, `/comments/:postId`, `/u/:username`, `/search?q=`, and `*` → `NotFoundPage` all render inside `AppShell` via `<Outlet />`. **`/login`** (Round 6) and **`/register`** (Round 7) render `LoginPage` / `RegisterPage` **outside** `AppShell` — no sidebar/navbar, just a centered form. **`/notifications`** (Round 7) is the first **protected** route — wrapped in `<RequireAuth>` which redirects anonymous users to `/login` with `state: { from: "/notifications" }` so the LoginPage can redirect back after successful login.
 
 ## Foundational API client (Round 5 — `apps/web/src/lib/api.ts`)
 
@@ -311,6 +322,39 @@ function Header() {
 - All async state updates are wrapped in `act()` from `@testing-library/react` to silence the React 18 testing-library warning.
 - The `captureAuth()` helper grabs the latest `useAuth()` value into an outer ref-like object so tests can assert against it after async settles.
 
+## Auth UI completion (Round 7 — B18 finished)
+
+Round 7 closes the gap left by Round 6: the AuthProvider existed but the UI still showed the hardcoded `CURRENT_USER`, the auth flow had no `/register` page, and protected routes had no guard.
+
+### What landed in Round 7
+
+| File | Status | Purpose |
+| --- | --- | --- |
+| `apps/web/src/pages/RegisterPage.tsx` | New | Register form with login-after-register flow. Client-side validation (username ≥3, password ≥8, passwords match). On submit: `auth.register()` → `auth.login()` → navigate `/`. |
+| `apps/web/src/pages/RegisterPage.test.tsx` | New | 11 TDD tests covering form rendering, submit flow, validation, loading, navigation, accessibility. |
+| `apps/web/src/components/layout/Navbar.tsx` | Modified | Replaced `CURRENT_USER` import with `useAuth()`. Anonymous: shows "Log in" + "Sign up" links. Authenticated: shows avatar + username + karma + real "Log out" that calls `auth.logout()`. Notifications bell gated on authenticated status. |
+| `apps/web/src/components/layout/Navbar.test.tsx` | New | 8 TDD tests covering anonymous + authenticated states, logout flow. |
+| `apps/web/src/auth/RequireAuth.tsx` | New | Route guard. Anonymous → `<Navigate to="/login" state={{ from: location.pathname }} replace />`. Authenticated → children. Loading → null (avoids flash of login page). |
+| `apps/web/src/auth/RequireAuth.test.tsx` | New | 5 TDD tests covering redirect, state preservation, authenticated rendering. |
+| `apps/web/src/App.tsx` | Modified | Added `/register` route (outside AppShell). Wrapped `/notifications` in `<RequireAuth>`. |
+| `e2e/auth.spec.ts` | New | 9 E2E auth lifecycle tests (register → login → access protected → logout → refresh revoked; taken username → 409; wrong password → 401; invalid token → 401; refresh rotation; validation 422s). |
+| `apps/web/src/auth/AuthProvider.tsx` | Modified | Widened `AuthUser` to full server shape (displayName, karma, etc.). Added `register()` method to context value. |
+| `apps/web/src/lib/api.ts` | Modified | Widened `AuthUser`. Fixed `register()` return type from `LoginResponse` to new `RegisterResponse` (`{ user }` — no access token). Added optional `displayName` param. |
+
+### Key contracts
+
+1. **`/api/auth/register` returns `{ user }` only (201)** — no access token, no refresh cookie. The client MUST call `/api/auth/login` afterwards to establish a session. `RegisterPage` orchestrates this: `await auth.register(...)` → `await auth.login(...)` → `navigate("/")`.
+2. **`AuthUser` is the full server shape** (id, username, displayName, bio, karma, createdAt, colorFrom, colorTo) — mirrors `authUserSchema` from `@embers/shared`. The Navbar uses `displayName` + `karma`.
+3. **`<RequireAuth>` preserves the intended destination** via `state: { from: location.pathname }`. LoginPage can read this via `useLocation().state.from` to redirect back after successful login (not yet implemented in LoginPage — deferred to a future round).
+4. **`/notifications` is the first protected route.** Other routes (/, /r/:name, /comments/:id, /u/:username, /search) remain open — they render deterministic demo data when anonymous. B19/B20 will migrate them to React Query + API calls, at which point they'll also need `<RequireAuth>`.
+
+### What Round 7 did NOT do (deferred)
+
+- **B17 (build refactor)** — deferred again. Removing `vite-plugin-singlefile` + switching to `BrowserRouter` would break the "deploy anywhere" story (GitHub Pages, `python -m http.server`, S3 without SPA fallback). Needs explicit user confirmation. See `docs/REMEDIATION_PLAN_ROUND_7.md` §1.2 for the full rationale.
+- **B19–B22** (React Query, feeds/search wiring, optimistic UI, notification polling) — depend on B17. Deferred.
+- **LoginPage post-login redirect back to `state.from`** — the `state.from` is preserved by `<RequireAuth>` but LoginPage currently always navigates to `/`. A future round can read `location.state?.from` and redirect back.
+- **Browser-level E2E tests of the React auth flow** — the E2E setup only starts the Fastify server, not the Vite dev server. The 9 new E2E tests verify the server-side auth contract, not the React rendering. Browser-level tests would require adding the Vite dev server to `playwright.config.ts`'s `webServer` config.
+
 ## Docker (B23 — Round 3)
 
 A multi-stage `Dockerfile` at the repo root builds a production image for
@@ -336,12 +380,13 @@ or `docker run -e JWT_ACCESS_SECRET=… -e JWT_REFRESH_SECRET=…`.
 | `playwright.config.ts` | Single chromium project, `webServer` that runs `npx tsx e2e/start-server.ts` with a fresh seeded DB at `/tmp/embers-e2e.db`. |
 | `e2e/start-server.ts` | Bootstrap script: deletes prior DB → opens + migrates + seeds → starts Fastify on the same process (shares the DB handle). |
 | `e2e/smoke.spec.ts` | 9 smoke tests: `/health`, register+login, login demo user, login wrong password, feed list, single post, search, empty-q 422, communities list. |
+| `e2e/auth.spec.ts` | 9 auth lifecycle tests (Round 7): register → login → access protected endpoint → 200; register → login → logout → refresh revoked → 401; taken username → 409; wrong password → 401; no auth → 401; invalid token → 401; refresh rotation; validation 422s (short username, short password). |
 
 **Run locally:**
 
 ```bash
 npm run test:e2e:install   # one-time: install chromium browser
-npm run test:e2e           # runs the 9 smoke tests against a fresh seeded DB
+npm run test:e2e           # runs all 18 tests (9 smoke + 9 auth lifecycle) against a fresh seeded DB
 ```
 
 **Run in CI:** the GitHub Actions `e2e` job (see `.github/workflows/ci.yml`)

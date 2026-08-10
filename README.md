@@ -9,12 +9,14 @@ monorepo.
 reddit-clone/
 ├── apps/
 │   ├── web/          ← @embers/web — the original client-only React SPA
-│   │                   (HashRouter, vite-plugin-singlefile, 237 tests;
+│   │                   (HashRouter, vite-plugin-singlefile, 262 tests;
 │   │                    includes `src/lib/api.ts` foundational fetch client
 │   │                    added in Round 5, `src/auth/AuthProvider.tsx` React
 │   │                    context + `useAuth()` hook + 401 refresh-and-retry
 │   │                    added in Round 6 B18, `src/pages/LoginPage.tsx`
-│   │                    real /login form)
+│   │                    real /login form (Round 6), `src/pages/RegisterPage.tsx`
+│   │                    real /register form (Round 7), `src/auth/RequireAuth.tsx`
+│   │                    route guard (Round 7), auth-aware Navbar (Round 7))
 │   └── server/       ← @embers/server — Fastify REST API + auth + FTS5 search
 │                       (95 tests, /health, /api/auth, /api/posts,
 │                        /api/communities, /api/votes, /api/comments,
@@ -80,23 +82,24 @@ host (ADR-003 single-file build is still in force for the client).
 
 | Workspace | Tests | Command |
 |-----------|-------|---------|
-| `@embers/web` | 237 | `npm test --workspace @embers/web` |
+| `@embers/web` | 262 | `npm test --workspace @embers/web` |
 | `@embers/shared` | 67 | `npm test --workspace @embers/shared` |
 | `@embers/db` | 29 | `npm test --workspace @embers/db` |
 | `@embers/server` | 95 | `npm test --workspace @embers/server` |
-| **Vitest total** | **428** | `npm test --workspaces --if-present` |
-| E2E (Playwright) | 9 | `npm run test:e2e` |
+| **Vitest total** | **453** | `npm test --workspaces --if-present` |
+| E2E (Playwright) | 18 | `npm run test:e2e` |
 | Lint (ESLint) | 0 errors, 0 warnings | `npm run lint` |
 
-All 428 vitest tests + 9 Playwright E2E smoke tests pass, ESLint is clean, and
-typecheck + build succeed as of Round 6 (2026-08-10). Round 6 executed Phase
-B18 (Auth Provider): added `apps/web/src/auth/AuthProvider.tsx` + `useAuth()`
-hook, added 401 refresh-and-retry to `apps/web/src/lib/api.ts`, added a real
-`apps/web/src/pages/LoginPage.tsx` + `/login` route, and wrapped `<App />`
-in `<AuthProvider>` in `main.tsx`. 39 new TDD tests (20 AuthProvider + 9 api
-refresh-and-retry + 10 LoginPage) bring the web suite to 237. See
-`docs/REMEDIATION_PLAN_ROUND_6.md` for the Round 6 changelog + 7-slice TDD
-breakdown.
+All 453 vitest tests + 18 Playwright E2E tests pass, ESLint is clean, and
+typecheck + build succeed as of Round 7 (2026-08-10). Round 7 completed
+B18: added `/register` page, auth-aware Navbar (replaced hardcoded
+`CURRENT_USER` with `useAuth()`), `<RequireAuth>` route guard (protecting
+`/notifications`), and 9 E2E auth lifecycle tests. The `AuthUser` interface
+was widened to the full server shape (with `displayName`, `karma`, etc.).
+25 new web tests (11 RegisterPage + 8 Navbar + 5 RequireAuth + 1 api
+register-displayName) bring the web suite to 262. See
+`docs/REMEDIATION_PLAN_ROUND_7.md` for the Round 7 changelog + 5-slice TDD
+breakdown + the rationale for deferring B17 (build refactor) again.
 
 ## Architecture Decision Records
 
@@ -120,7 +123,7 @@ breakdown.
 **Deferred (B17–B24, see `docs/REMEDIATION_EXECUTION_PLAN.md` §5):**
 - ADR-105 — React Query + Zustand split (requires breaking client refactor)
 - ADR-106 — BrowserRouter + chunked Vite build (requires removing single-file)
-- ~~B18 — Auth Provider~~ **Partially done in Round 6** — `apps/web/src/auth/AuthProvider.tsx` + `useAuth()` hook + `apps/web/src/pages/LoginPage.tsx` + 401 refresh-and-retry in `lib/api.ts`. See `docs/REMEDIATION_PLAN_ROUND_6.md`.
+- ~~B18 — Auth Provider~~ **Done in Rounds 6-7** — `apps/web/src/auth/AuthProvider.tsx` + `useAuth()` hook + `apps/web/src/pages/LoginPage.tsx` + `apps/web/src/pages/RegisterPage.tsx` + `apps/web/src/auth/RequireAuth.tsx` route guard + auth-aware Navbar + 401 refresh-and-retry in `lib/api.ts` + 9 E2E auth lifecycle tests. See `docs/REMEDIATION_PLAN_ROUND_6.md` and `docs/REMEDIATION_PLAN_ROUND_7.md`.
 - B17, B19–B22 — Build refactor, React Query, Axios, optimistic UI, auth-aware UI (depend on B17)
 - ~~B23 — Docker, GitHub Actions~~ **Done in Round 3** (see `Dockerfile`, `docker-compose.yml`, `.github/workflows/ci.yml`)
 - ~~B24 — Playwright E2E~~ **Done in Round 3** (see `e2e/smoke.spec.ts`, `playwright.config.ts`)
@@ -137,6 +140,7 @@ breakdown.
 | `docs/REMEDIATION_PLAN.md` | Master remediation plan (10 ADRs, B0–B24 backlog) |
 | `docs/REMEDIATION_PLAN_ROUND_5.md` | Round 5 changelog + detailed B17–B22 TDD breakdown |
 | `docs/REMEDIATION_PLAN_ROUND_6.md` | Round 6 changelog — B18 (Auth Provider) execution, 7-slice TDD breakdown |
+| `docs/REMEDIATION_PLAN_ROUND_7.md` | Round 7 changelog — B18 completion (RegisterPage, auth-aware Navbar, RequireAuth, E2E auth lifecycle), 5-slice TDD breakdown + B17 deferral rationale |
 | `docs/REMEDIATION_PLAN_2.md` | Original 10-ADR remediation proposal (status annotations added) |
 | `docs/IMPLEMENTATION_PLAN.md` | Original greenfield plan that produced `apps/web` |
 | `docs/MANUAL_QA.md` | Manual QA matrix for the client SPA |

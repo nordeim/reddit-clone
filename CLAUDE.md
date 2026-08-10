@@ -233,19 +233,23 @@ Tests use **Vitest** with **Fastify's `inject()`** — no port binding needed.
 ```bash
 npm run lint        # ESLint flat config — 0 errors, 0 warnings (Round 4)
 npm run typecheck   # tsc --noEmit — must pass clean
-npm test            # vitest run (all workspaces) — all 428 tests must pass
-npm run test:e2e    # playwright run — 9 smoke tests must pass (B24, Round 3)
+npm test            # vitest run (all workspaces) — all 453 tests must pass
+npm run test:e2e    # playwright run — 18 tests must pass (9 smoke + 9 auth lifecycle)
 npm run build       # topological build — must succeed
 git ls-files | grep -E '(^|/)dist/' | wc -l   # must be 0 (no dist/ tracked)
 ```
 
-> **Test count breakdown (428 total):** `@embers/web` = 237 (incl. 22 in
-> `src/lib/api.test.ts` from Round 5, 20 in `src/auth/AuthProvider.test.tsx`
-> + 9 api refresh-and-retry tests + 10 in `src/pages/LoginPage.test.tsx`
-> from Round 6), `@embers/server` = 95, `@embers/shared` = 67,
-> `@embers/db` = 29. The previously documented total of 389 (Round 5)
-> was superseded when Round 6 added the AuthProvider + LoginPage
-> test suites.
+> **Test count breakdown (453 vitest + 18 e2e):** `@embers/web` = 262
+> (incl. 22 in `src/lib/api.test.ts` from Round 5, 20 in
+> `src/auth/AuthProvider.test.tsx` + 9 api refresh-and-retry + 10 in
+> `src/pages/LoginPage.test.tsx` from Round 6, 11 in
+> `src/pages/RegisterPage.test.tsx` + 8 in `src/components/layout/Navbar.test.tsx`
+> + 5 in `src/auth/RequireAuth.test.tsx` + 1 api register-displayName from
+> Round 7), `@embers/server` = 95, `@embers/shared` = 67, `@embers/db` = 29.
+> E2E = 18 (9 smoke from Round 3 + 9 auth lifecycle from Round 7).
+> The previously documented total of 428 (Round 6) was superseded when
+> Round 7 added the RegisterPage + Navbar + RequireAuth test suites +
+> the E2E auth lifecycle suite.
 
 **Build-before-test prerequisite (Round 5):** `@embers/server`'s test suites import
 `@embers/db` and `@embers/shared` as runtime packages, so their `dist/` builds
@@ -362,6 +366,47 @@ already cover) but is useful for ad-hoc manual checks before a release.
 - B19–B22 (React Query, feeds/search wiring, optimistic UI, notification
   polling) — depend on B17. Tracked in `docs/REMEDIATION_PLAN_ROUND_5.md` §2.
 
+**Round 7 additions (B18 completion — auth UI):**
+- New `apps/web/src/pages/RegisterPage.tsx` — register form with login-after-
+  register flow. Client-side validation (username ≥3, password ≥8, passwords
+  match). On submit: `auth.register()` → `auth.login()` → navigate `/`.
+- New `apps/web/src/pages/RegisterPage.test.tsx` — 11 TDD tests.
+- Modified `apps/web/src/components/layout/Navbar.tsx` — replaced hardcoded
+  `CURRENT_USER` import with `useAuth()`. Anonymous: shows "Log in" + "Sign
+  up" links. Authenticated: shows avatar + username + karma + real "Log out"
+  that calls `auth.logout()`. Notifications bell gated on authenticated.
+- New `apps/web/src/components/layout/Navbar.test.tsx` — 8 TDD tests.
+- New `apps/web/src/auth/RequireAuth.tsx` — route guard. Anonymous → redirect
+  to `/login` with `state: { from: location.pathname }`. Authenticated →
+  children. Loading → null.
+- New `apps/web/src/auth/RequireAuth.test.tsx` — 5 TDD tests.
+- Modified `apps/web/src/App.tsx` — added `/register` route (outside
+  AppShell). Wrapped `/notifications` in `<RequireAuth>`.
+- New `e2e/auth.spec.ts` — 9 E2E auth lifecycle tests (register → login →
+  access protected → logout → refresh revoked; 409/401/422 error paths;
+  refresh rotation).
+- Modified `apps/web/src/auth/AuthProvider.tsx` — widened `AuthUser` to
+  full server shape (displayName, karma, etc.). Added `register()` method
+  to context value.
+- Modified `apps/web/src/lib/api.ts` — widened `AuthUser`. Fixed
+  `register()` return type from `LoginResponse` to new `RegisterResponse`
+  (`{ user }` — no access token, documents the no-session contract). Added
+  optional `displayName` param.
+- New `docs/REMEDIATION_PLAN_ROUND_7.md` — the Round 7 plan with 5-slice
+  TDD breakdown + the rationale for deferring B17 again.
+
+**Round 7 deferred (same as Round 6):**
+- B17 (build refactor) — deferred again. Needs explicit user confirmation
+  because it breaks the "deploy anywhere" story. See
+  `docs/REMEDIATION_PLAN_ROUND_7.md` §1.2.
+- B19–B22 — depend on B17.
+- LoginPage post-login redirect back to `state.from` — the `state.from` is
+  preserved by `<RequireAuth>` but LoginPage currently always navigates to
+  `/`. A future round can read `location.state?.from` and redirect back.
+- Browser-level E2E tests of the React auth flow — the E2E setup only
+  starts the Fastify server, not the Vite dev server. The 9 new E2E tests
+  verify the server-side auth contract, not the React rendering.
+
 ### ESLint Conventions (Round 4)
 
 - **Flat config** (`eslint.config.mjs`), not legacy `.eslintrc`.
@@ -418,14 +463,16 @@ Custom variant, not v3 `darkMode: 'class'`:
 ```
 reddit-clone/
 ├── apps/
-│   ├── web/                 ← @embers/web (React SPA, Vite, 237 tests)
+│   ├── web/                 ← @embers/web (React SPA, Vite, 262 tests)
 │   │   └── src/             # See AGENTS.md for full web tree.
 │   │                        # Note: `lib/api.ts` (Round 5) is the foundational
-│   │                        # fetch-based client for the deferred B17–B22
-│   │                        # frontend integration — wired into the React
-│   │                        # tree via `auth/AuthProvider.tsx` (Round 6).
-│   │                        # `pages/LoginPage.tsx` (Round 6) renders the
-│   │                        # real /login form.
+│   │                        # fetch-based client, wired into the React tree via
+│   │                        # `auth/AuthProvider.tsx` (Round 6). `pages/LoginPage.tsx`
+│   │                        # (Round 6) + `pages/RegisterPage.tsx` (Round 7) render
+│   │                        # the real auth forms. `auth/RequireAuth.tsx` (Round 7)
+│   │                        # guards protected routes. `components/layout/Navbar.tsx`
+│   │                        # (Round 7) is auth-aware — uses useAuth() instead of
+│   │                        # the hardcoded CURRENT_USER.
 │   └── server/              ← @embers/server (Fastify, 95 tests)
 │       └── src/
 │           ├── app.ts       # buildApp() composition root

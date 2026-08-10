@@ -3,7 +3,7 @@
 **Classification:** Internal Engineering Reference
 **Status:** DEFINITIVE, PRODUCTION-LOCKED BLUEPRINT
 **Companion Documents:** `AGENTS.md` (deep codebase reference), `CLAUDE.md` (daily implementation guide)
-**Last Updated:** 2026-08-10 (Round 6 — B18 Auth Provider execution: AuthProvider, LoginPage, 401 refresh-and-retry)
+**Last Updated:** 2026-08-10 (Round 7 — B18 completion: RegisterPage, auth-aware Navbar, RequireAuth route guard, E2E auth lifecycle)
 **Audience:** Senior Engineers, Tech Leads, DevOps, and Onboarding Engineers
 **Rule:** Every architectural decision in this document traces to a specific rationale.
            Nothing is here "because it's popular."
@@ -519,7 +519,7 @@ Dark mode: Custom variant `@custom-variant dark (&:where(.dark, .dark *));` — 
 | Linter | **ESLint 9 flat config** (`eslint.config.mjs` at repo root, added Round 4 — 0 errors, 0 warnings) |
 | Coverage | **`@vitest/coverage-v8`** in `@embers/server` (added Round 5 — informational, no CI gate yet) |
 | Typechecker | `npm run typecheck` (alias for `tsc --noEmit` across all 4 workspaces) |
-| Total tests | **428 vitest** (web=237, server=95, shared=67, db=29) + **9 Playwright E2E** |
+| Total tests | **453 vitest** (web=262, server=95, shared=67, db=29) + **18 Playwright E2E** (9 smoke + 9 auth lifecycle) |
 
 ### 7.2 Test layout
 
@@ -539,14 +539,18 @@ src/
 │   ├── selectors.test.ts    # getVisibleScore, isPostSaved, getUnreadNotificationCount, etc.
 │   └── themeBootstrap.test.ts # applyPersistedTheme
 ├── lib/
-│   └── api.test.ts          # foundational fetch client (Round 5) + 401 refresh-and-retry (Round 6)
+│   └── api.test.ts          # foundational fetch client (Round 5) + 401 refresh-and-retry (Round 6) + register displayName (Round 7)
 ├── auth/
-│   └── AuthProvider.test.tsx # useAuth() context + login/logout + refresh wiring (Round 6 B18)
+│   ├── AuthProvider.test.tsx # useAuth() context + login/logout + refresh wiring (Round 6 B18)
+│   └── RequireAuth.test.tsx # route guard redirect + state preservation (Round 7 B18)
 ├── components/feed/
 │   ├── VoteControl.test.tsx     # integration: voting toggles, score updates, persistence
 │   └── CreatePostModal.test.tsx # integration: validation, URL safety, submit + store
+├── components/layout/
+│   └── Navbar.test.tsx      # auth-aware navbar: anonymous vs authenticated + logout (Round 7 B18)
 ├── pages/
-│   └── LoginPage.test.tsx   # /login form submit, loading, error, navigation, a11y (Round 6 B18)
+│   ├── LoginPage.test.tsx   # /login form submit, loading, error, navigation, a11y (Round 6 B18)
+│   └── RegisterPage.test.tsx # /register form submit, validation, login-after-register (Round 7 B18)
 └── test/
     ├── setup.ts             # jest-dom matchers + IntersectionObserver/matchMedia stubs
     └── utils.tsx            # renderWithRouter helper
@@ -563,9 +567,9 @@ src/
 The project relies on:
 
 1. **TypeScript strict mode** — catches type errors, unused variables, fallthrough cases
-2. **Vitest unit + integration tests** — 237 tests across 14 files covering pure utilities, store logic, the foundational API client (Round 5), the AuthProvider context + 401 refresh-and-retry (Round 6), the LoginPage form (Round 6), and key components (web) + 95 server tests + 67 shared tests + 29 db tests = 428 total
+2. **Vitest unit + integration tests** — 262 tests across 17 files covering pure utilities, store logic, the foundational API client (Round 5), the AuthProvider context + 401 refresh-and-retry (Round 6), the LoginPage + RegisterPage forms + auth-aware Navbar + RequireAuth route guard (Round 7), and key components (web) + 95 server tests + 67 shared tests + 29 db tests = 453 total
 3. **ESLint 9 flat config** (Round 4) — 0 errors, 0 warnings across all workspaces
-4. **Playwright E2E** (Round 3) — 9 smoke tests covering health, register, login, feed, single post, search, communities
+4. **Playwright E2E** (Round 3 smoke + Round 7 auth lifecycle) — 18 tests covering health, register, login, feed, single post, search, communities, + the full auth lifecycle (register → login → access protected → logout → refresh revoked; 409/401/422 error paths; refresh rotation)
 5. **Manual typecheck** — `npm run typecheck` before claiming a change compiles
 6. **Production build** — `npm run build` validates bundling succeeds
 
@@ -574,8 +578,8 @@ The project relies on:
 ```bash
 npm run lint        # ESLint flat config — 0 errors, 0 warnings (Round 4)
 npm run typecheck   # tsc --noEmit across all 4 workspaces — must pass clean
-npm test            # vitest run — all 428 tests must pass (pretest auto-builds shared+db)
-npm run test:e2e    # playwright run — 9 smoke tests must pass (Round 3)
+npm test            # vitest run — all 453 tests must pass (pretest auto-builds shared+db)
+npm run test:e2e    # playwright run — 18 tests must pass (9 smoke + 9 auth lifecycle)
 npm run build       # topological build — must succeed
 git ls-files | grep -E '(^|/)dist/' | wc -l   # must be 0 (no dist/ tracked)
 ```
@@ -693,7 +697,7 @@ The following previously-open issues are now resolved (see `docs/REMEDIATION_PLA
 
 | Issue | Resolution |
 |---|---|
-| No test runner installed | Vitest + Testing Library + jsdom installed; 237 tests across 14 files (web) + 95 server + 67 shared + 29 db = 428 total |
+| No test runner installed | Vitest + Testing Library + jsdom installed; 262 tests across 17 files (web) + 95 server + 67 shared + 29 db = 453 total |
 | No `version`/`migrate` on `persist` | `schemaVersion: 1` + custom `merge` + `migrate` hook on `persist` |
 | Corrupt localStorage could crash the app | `mergePersistedState` validates every field, drops invalid entries, never throws |
 | Theme flash on reload | Synchronous inline script in `index.html` applies `.dark` before React mounts |
@@ -759,10 +763,17 @@ The following previously-open issues are now resolved (see `docs/REMEDIATION_PLA
 | `src/pages/PostPage.tsx` | Post detail + comment tree (500ms simulated load) |
 | `src/lib/api.ts` | Foundational fetch-based API client for the Fastify backend (Round 5) — basis for deferred B17–B22 frontend integration. Extended in Round 6 with `tryRefreshOn401` + `onTokenRefresh` for 401 refresh-and-retry. |
 | `src/lib/api.test.ts` | 22 tests for the API client (constructor defaults, every endpoint, auth header, cursor encoding, 4xx/5xx error mapping) + 9 new tests for the 401 refresh-and-retry path (Round 6). |
-| `src/auth/AuthProvider.tsx` | React context + `useAuth()` hook holding the access token in a `useRef`. Exposes `{ user, status, error, login, logout }`. Wires `tryRefreshOn401: true` on the api client. (Round 6, B18) |
+| `src/auth/AuthProvider.tsx` | React context + `useAuth()` hook holding the access token in a `useRef`. Exposes `{ user, status, error, login, register, logout }`. Wires `tryRefreshOn401: true` on the api client. (Round 6, B18; register method added Round 7) |
 | `src/auth/AuthProvider.test.tsx` | 20 TDD tests for AuthProvider — initial state, login flow, logout flow, refresh-path wiring. (Round 6, B18) |
+| `src/auth/RequireAuth.tsx` | Route guard. Anonymous → `<Navigate to="/login" state={{ from: location.pathname }} replace />`. Authenticated → children. Loading → null. (Round 7, B18) |
+| `src/auth/RequireAuth.test.tsx` | 5 TDD tests for RequireAuth — redirect, state preservation, authenticated rendering. (Round 7, B18) |
 | `src/pages/LoginPage.tsx` | Real `/login` form — username + password inputs, submit calls `useAuth().login`, navigates to `/` on success, error alert with `role="alert"`. WCAG 2.2 AA: labelled inputs, `type=password`, `aria-busy`. (Round 6, B18) |
 | `src/pages/LoginPage.test.tsx` | 10 TDD tests for LoginPage — form rendering, submit, loading, error, navigation, accessibility. (Round 6, B18) |
+| `src/pages/RegisterPage.tsx` | Real `/register` form — username + password + confirm-password + optional display-name. Client-side validation. On submit: `auth.register()` → `auth.login()` → navigate `/`. (Round 7, B18) |
+| `src/pages/RegisterPage.test.tsx` | 11 TDD tests for RegisterPage — form rendering, submit flow, validation, loading, navigation, accessibility. (Round 7, B18) |
+| `src/components/layout/Navbar.tsx` | Auth-aware navbar. Replaced hardcoded `CURRENT_USER` with `useAuth()`. Anonymous: "Log in" + "Sign up" links. Authenticated: avatar + username + karma + real "Log out". (Round 7, B18) |
+| `src/components/layout/Navbar.test.tsx` | 8 TDD tests for auth-aware Navbar — anonymous + authenticated states, logout flow. (Round 7, B18) |
+| `e2e/auth.spec.ts` | 9 E2E auth lifecycle tests — register → login → access protected → logout → refresh revoked; 409/401/422 error paths; refresh rotation. (Round 7, B18) |
 | `vite.config.ts` | Vite + React + Tailwind + singlefile |
 | `tsconfig.json` | Strict TypeScript config |
 | `index.html` | Minimal HTML shell (title + root div + module script) |
@@ -811,7 +822,7 @@ apply to `apps/server` and the `packages/{shared,db}` workspaces.
 | ADR-108 | Transactional atomic vote counters (`UPDATE … SET col = col + delta`) | `apps/server/src/services/voteService.ts` |
 | ADR-109 | SQLite FTS5 virtual tables + BM25 ranking | `packages/db/src/fts5.ts` |
 | ADR-110 | Pino structured logging + requestId correlation | `apps/server/src/plugins/{requestId,errorHandler}.ts` |
-| ADR-104 (web) | AuthProvider context + 401 refresh-and-retry + `/login` page | `apps/web/src/auth/AuthProvider.tsx` + `apps/web/src/lib/api.ts` + `apps/web/src/pages/LoginPage.tsx` — **Round 6 (B18) partial**: wired the AuthProvider + LoginPage + 401 refresh-and-retry into the existing HashRouter + single-file build. The full B18 (Axios interceptors, global 401-refresh-fail redirect to /login) and B17–B22 (React Query, optimistic UI, notification polling) remain deferred. See `docs/REMEDIATION_PLAN_ROUND_6.md`. |
+| ADR-104 (web) | AuthProvider context + 401 refresh-and-retry + `/login` + `/register` + auth-aware Navbar + `<RequireAuth>` route guard | `apps/web/src/auth/{AuthProvider,RequireAuth}.tsx` + `apps/web/src/lib/api.ts` + `apps/web/src/pages/{LoginPage,RegisterPage}.tsx` + `apps/web/src/components/layout/Navbar.tsx` — **Rounds 6-7 (B18) DONE**: the full auth flow is wired. AuthProvider holds the access token in a `useRef`, exposes `{ user, status, error, login, register, logout }`. The api client does 401 refresh-and-retry (opt-in via `tryRefreshOn401`). `/login` and `/register` render outside AppShell. `/notifications` is protected by `<RequireAuth>`. The Navbar is auth-aware (shows login/signup links when anonymous, avatar+logout when authenticated). 9 E2E auth lifecycle tests verify the server-side contract. B17 (build refactor — remove singlefile + BrowserRouter) remains deferred pending user confirmation. See `docs/REMEDIATION_PLAN_ROUND_6.md` + `docs/REMEDIATION_PLAN_ROUND_7.md`. |
 
 ### 13.2 Backend Topology
 
@@ -819,7 +830,7 @@ apply to `apps/server` and the `packages/{shared,db}` workspaces.
 ┌──────────────────────────────────────────────────────────────┐
 │                  CLIENT (Browser) — apps/web                  │
 │   React 19 SPA (unchanged from §2, runs via HashRouter +       │
-│   vite-plugin-singlefile, 237 tests green)                    │
+│   vite-plugin-singlefile, 262 tests green)                    │
 └──────────────────────────────────────────────────────────────┘
                               │
                               │  (frontend integration deferred — §5)
