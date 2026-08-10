@@ -1,5 +1,6 @@
 import {
   createContext,
+  useCallback,
   useContext,
   useMemo,
   useRef,
@@ -17,16 +18,19 @@ import {
  *
  * Slice 1: initial state + stub login/logout that reject with
  * "not implemented".
- * Slice 2 (this file): `login` calls `api.login(username, password)`,
- * stores the access token in a ref, sets `user` + `status="authenticated"`.
- * Slice 3 (next): `logout` calls `api.logout()`, clears the token ref,
- * resets state to anonymous.
- * Slice 5 (later): wires `tryRefreshOn401` on the api client so 401s
- * on authenticated requests silently refresh and retry once.
+ * Slice 2: `login` calls `api.login(username, password)`, stores the
+ * access token in a ref, sets `user` + `status="authenticated"`.
+ * Slice 3: `logout` calls `api.logout()`, clears the token ref, resets
+ * state to anonymous.
+ * Slice 5 (this file): wires `tryRefreshOn401` on the api client so
+ * 401s on authenticated requests silently refresh and retry once.
+ * The factory signature changed from `() => unknown` to
+ * `(opts) => AuthApiClient` so the AuthProvider can pass the live
+ * `getToken` accessor, the `tryRefreshOn401: true` flag, and the
+ * `onTokenRefresh` callback that updates the token ref.
  *
- * The provider accepts an optional `apiClientFactory` prop so tests can
- * inject a stub `createApiClient`. Production code (main.tsx) uses the
- * default factory which calls `createApiClient` from `lib/api.ts`.
+ * Production code (main.tsx) passes a factory that calls
+ * `createApiClient` from `lib/api.ts` with the options it receives.
  *
  * @packageDocumentation
  */
@@ -55,6 +59,37 @@ export interface AuthContextValue {
   logout: () => Promise<void>;
 }
 
+/**
+ * Options the AuthProvider passes to the api client factory. These map
+ * 1:1 to `ApiClientOptions.getToken` / `tryRefreshOn401` /
+ * `onTokenRefresh` from `lib/api.ts`. The AuthProvider owns the
+ * `tokenRef` and exposes these accessors so the api client can read
+ * and update the live token without re-creating the client on every
+ * render.
+ *
+ * Round 6 B18.3 / B18.5.
+ */
+export interface AuthApiClientOptions {
+  /** Returns the current access token (null when anonymous). */
+  getToken: () => string | null;
+  /** Always `true` when the AuthProvider is in charge. */
+  tryRefreshOn401: true;
+  /** Updates the AuthProvider's internal token ref. */
+  onTokenRefresh: (token: string) => void;
+}
+
+/**
+ * The minimal subset of the `ApiClient` (from `lib/api.ts`) that
+ * `AuthProvider` actually calls.
+ */
+export interface AuthApiClient {
+  login: (
+    username: string,
+    password: string
+  ) => Promise<{ accessToken: string; user: AuthUser }>;
+  logout: () => Promise<void>;
+}
+
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 /**
@@ -70,35 +105,23 @@ export function useAuth(): AuthContextValue {
   return ctx;
 }
 
-/**
- * The minimal subset of the `ApiClient` (from `lib/api.ts`) that
- * `AuthProvider` actually calls. The factory returns `unknown` from
- * the public prop type to keep this module decoupled from `lib/api.ts`
- * at the type level, but internally we cast to this interface.
- *
- * Slice 5 will widen this to include `refresh`.
- */
-interface AuthApiClient {
-  login: (
-    username: string,
-    password: string
-  ) => Promise<{ accessToken: string; user: AuthUser }>;
-  logout: () => Promise<void>;
-}
-
 export interface AuthProviderProps {
   children: ReactNode;
   /**
-   * Factory for the API client. Defaults to a factory that throws
-   * "not implemented" — production code (main.tsx) passes the real
-   * factory which calls `createApiClient` from `lib/api.ts`. Tests
-   * pass a stub that returns a mocked client.
+   * Factory that receives the auth options and returns an api client.
+   * Production code (main.tsx) wires this to `createApiClient` from
+   * `lib/api.ts`:
    *
-   * Typed as `() => unknown` so the AuthProvider module has no static
-   * import on `lib/api.ts` — this keeps the test surface minimal and
-   * lets tests inject stubs without importing the real client.
+   * ```tsx
+   * <AuthProvider apiClientFactory={(opts) => createApiClient(opts)}>
+   *   <App />
+   * </AuthProvider>
+   * ```
+   *
+   * Tests pass a stub factory that captures the options and returns
+   * a mocked client.
    */
-  apiClientFactory?: () => unknown;
+  apiClientFactory: (opts: AuthApiClientOptions) => AuthApiClient;
 }
 
 /**
@@ -117,22 +140,28 @@ export function AuthProvider({
   // by `getToken` callbacks (Slice 5) without triggering re-renders.
   const tokenRef = useRef<string | null>(null);
 
-  const value = useMemo<AuthContextValue>(() => {
-    /**
-     * Lazily instantiate the api client on first login. If the caller
-     * didn't pass a factory, reject loudly so the mistake surfaces at
-     * the call site rather than causing a silent no-op.
-     */
-    function getClient(): AuthApiClient {
-      if (!apiClientFactory) {
-        throw new Error(
-          "AuthProvider: apiClientFactory is required (Slice 2). main.tsx must pass createApiClient from lib/api.ts."
-        );
-      }
-      return apiClientFactory() as AuthApiClient;
-    }
+  // Stable accessors — same identity across renders so the api client
+  // doesn't need to be re-created when the token changes.
+  const getToken = useCallback(() => tokenRef.current, []);
+  const onTokenRefresh = useCallback((token: string) => {
+    tokenRef.current = token;
+  }, []);
 
-    return {
+  // Build the api client once. The factory receives the stable
+  // accessors — they read/write the ref, so the client sees the live
+  // token without needing to be rebuilt.
+  const client = useMemo(
+    () =>
+      apiClientFactory({
+        getToken,
+        tryRefreshOn401: true,
+        onTokenRefresh,
+      }),
+    [apiClientFactory, getToken, onTokenRefresh]
+  );
+
+  const value = useMemo<AuthContextValue>(
+    () => ({
       user,
       status,
       error,
@@ -140,7 +169,6 @@ export function AuthProvider({
         setStatus("loading");
         setError(null);
         try {
-          const client = getClient();
           const { accessToken, user: loggedInUser } = await client.login(
             username,
             password
@@ -167,7 +195,6 @@ export function AuthProvider({
         // server-side revocation succeeds. A failed /logout should not
         // leave the user stuck authenticated client-side.
         try {
-          const client = getClient();
           await client.logout();
         } catch (err) {
           setError(err instanceof Error ? err.message : String(err));
@@ -177,8 +204,9 @@ export function AuthProvider({
           setStatus("anonymous");
         }
       },
-    };
-  }, [user, status, error, apiClientFactory]);
+    }),
+    [user, status, error, client]
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
