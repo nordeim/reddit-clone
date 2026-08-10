@@ -866,3 +866,51 @@ Existing scripts simplified — DATABASE_URL removed from inline args (now in .e
 - ✅ .env path resolution: DATABASE_URL resolves correctly from repo root 
 - ✅ loadEnv() production enforcement: still refuses to start without secrets 
 
+---
+
+$ ./start_production.sh 
+=== embers production startup ---
+[1/5] Installing dependencies...
+
+up to date in 2s
+[2/5] Checking database...
+[3/5] Building all workspaces...
+npm notice run @embers/root@0.0.0 build
+npm notice run npm run build --workspace @embers/shared && npm run build --workspace @embers/db && npm run build --workspace @embers/server && npm run build --workspace @embers/web
+npm notice run @embers/shared@0.0.0 build
+npm notice run tsc
+npm notice run @embers/db@0.0.0 build
+npm notice run tsc
+npm notice run @embers/server@0.0.0 build
+npm notice run tsc
+npm notice run @embers/web@0.0.0 build
+npm notice run vite build
+vite v7.3.2 building client environment for production...
+✓ 2276 modules transformed.
+[plugin vite:singlefile] 
+
+[plugin vite:singlefile] Inlining: index-BNpSG_8q.js
+[plugin vite:singlefile] Inlining: style-BcBosRSO.css
+dist/index.html  537.74 kB │ gzip: 165.30 kB
+✓ built in 3.99s
+[4/5] Starting backend (Fastify, port 5000, NODE_ENV=production)...
+       PID: 469246  |  log: /tmp/embers-server.log
+[5/5] Starting frontend (static server, port 5173)...
+       PID: 469248  |  log: /tmp/embers-web.log
+
+Waiting for backend to respond to /health...
+✓ Backend is healthy.
+
+=== embers is running ===
+
+  Backend:   http://localhost:5000  (Fastify, NODE_ENV=production)
+  Frontend:  http://localhost:5173  (static files from apps/web/dist)
+
+  Backend PID:  469246  |  log: /tmp/embers-server.log
+  Frontend PID: 469248  |  log: /tmp/embers-web.log
+
+  Stop:  ./start_production.sh stop
+  Logs:  tail -f /tmp/embers-server.log /tmp/embers-web.log
+
+  NOTE: If you created .env from .env.example, edit it with real secrets:
+        JWT_ACCESS_SECRET, JWT_REFRESH_SECRET, CORS_ORIGIN
