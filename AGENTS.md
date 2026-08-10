@@ -43,6 +43,22 @@
 > bring the E2E suite to 18. See `docs/REMEDIATION_PLAN_ROUND_7.md`
 > for the Round 7 changelog + 5-slice TDD breakdown + the rationale
 > for deferring B17 (build refactor) again.
+> Round 8 (2026-08-10) was a **live-deployment audit + codebase
+> hardening** round, triggered by running browser-based E2E tests
+> against `https://reddit.jesspete.shop/`. The audit surfaced 3
+> critical deployment gaps (Vite dev server exposed in production,
+> no Fastify backend reachable, no security headers) that are
+> documented in `docs/REMEDIATION_PLAN_ROUND_8.md`. Round 8 hardens
+> the repository to prevent these gaps from recurring: added
+> `pretypecheck` script (so `npm run typecheck` works on a fresh
+> clone), added `scripts/verify-fresh-clone-typecheck.mjs` +
+> `scripts/verify-production-build.mjs` (CI gates), added
+> `e2e/live.spec.ts` (opt-in live-deployment audit via
+> `LIVE_BASE_URL=... npm run test:e2e:live`), and silenced all 6
+> React `act()` warnings in `LoginPage` + `RegisterPage` tests.
+> See `docs/REMEDIATION_PLAN_ROUND_8.md` for the full audit + 6-item
+> TDD breakdown. The architecture notes below remain accurate for
+> `apps/web/` unchanged.
 
 ---
 
@@ -57,8 +73,12 @@
 | Dev server (web) | `npm run dev --workspace @embers/web` | Vite, default `:5173` |
 | Dev server (server) | `npm run dev --workspace @embers/server` | `tsx watch`, default `:4000` |
 | Production build (all) | `npm run build` | Topological: `shared → db → server → web` |
-| Typecheck (all) | `npm run typecheck` | Same topological order |
+| Typecheck (all) | `npm run typecheck` | Same topological order. R8.1: a `pretypecheck` hook builds `@embers/shared` + `@embers/db` first, so this works on a fresh clone. |
 | Test (all) | `npm test` | Uses `--workspaces` — **do NOT run `vitest run` from root** (it won't discover workspace configs) |
+| E2E (local API) | `npm run test:e2e` | Playwright smoke + auth lifecycle (18 tests). Bootstraps a fresh seeded DB. |
+| E2E (live audit) | `LIVE_BASE_URL=… npm run test:e2e:live` | R8.3: opt-in live-deployment audit (12 tests). Skipped when `LIVE_BASE_URL` is unset. |
+| Build verification | `npm run test:build` | R8.4: asserts the built `dist/index.html` is a production bundle (no Vite dev modules). |
+| Fresh-clone check | `npm run test:fresh-clone` | R8.1: simulates a fresh clone (removes `dist/`) and asserts `npm run typecheck` succeeds. |
 | DB migrate | `npm run db:migrate --workspace @embers/db` | Drizzle migrations |
 | DB seed | `npm run db:seed --workspace @embers/db` | 49 users, 320 posts, ~3000 comments |
 
@@ -166,8 +186,8 @@ The server follows a **composition root** pattern — `buildApp(opts)` in `src/a
 - `buildApp({ env, db, rawDb })` wires repositories + routes for integration tests
 - **Helmet/rate-limit** can be skipped via `skipHelmet`/`skipRateLimit` options (rate-limit auto-disabled in `NODE_ENV=test`)
 - **Auth tests** use the seeded demo user; **vote concurrency tests** seed 100 users directly via Drizzle insert (bypassing Argon2id for speed)
-- Test files: 8 in `apps/server/src/` (5 in `routes/`, 2 in `auth/`, 1 `config.test.ts` in root), 2 in `packages/db/src/`, 3 in `packages/shared/src/`, 17 in `apps/web/src/` (including `lib/api.test.ts` from Round 5, `auth/AuthProvider.test.tsx` + `auth/RequireAuth.test.tsx` from Rounds 6-7, `pages/LoginPage.test.tsx` from Round 6, `pages/RegisterPage.test.tsx` + `components/layout/Navbar.test.tsx` from Round 7), 2 E2E specs (`e2e/smoke.spec.ts` + `e2e/auth.spec.ts`)
-- **Total vitest count: 453** = 95 (server) + 67 (shared) + 29 (db) + 262 (web). Round 7 added 25 new web tests (11 RegisterPage + 8 Navbar + 5 RequireAuth + 1 api register-displayName) on top of the Round 6 baseline of 428. **E2E: 18** (9 smoke + 9 auth lifecycle, added in Round 7).
+- Test files: 8 in `apps/server/src/` (5 in `routes/`, 2 in `auth/`, 1 `config.test.ts` in root), 2 in `packages/db/src/`, 3 in `packages/shared/src/`, 17 in `apps/web/src/` (including `lib/api.test.ts` from Round 5, `auth/AuthProvider.test.tsx` + `auth/RequireAuth.test.tsx` from Rounds 6-7, `pages/LoginPage.test.tsx` from Round 6, `pages/RegisterPage.test.tsx` + `components/layout/Navbar.test.tsx` from Round 7), 3 E2E specs (`e2e/smoke.spec.ts` + `e2e/auth.spec.ts` + `e2e/live.spec.ts` from Round 8)
+- **Total vitest count: 453** = 95 (server) + 67 (shared) + 29 (db) + 262 (web). Round 7 added 25 new web tests (11 RegisterPage + 8 Navbar + 5 RequireAuth + 1 api register-displayName) on top of the Round 6 baseline of 428. Round 8 did not add vitest tests — it silenced 6 React `act()` warnings in `LoginPage` + `RegisterPage` tests. **E2E: 18 local** (9 smoke + 9 auth lifecycle, added in Round 7) + **12 live-audit** (Round 8, opt-in via `LIVE_BASE_URL`).
 
 ### Backend Pitfalls
 

@@ -10,6 +10,22 @@
 > the full monorepo layout and `docs/REMEDIATION_EXECUTION_PLAN.md` for
 > the execution log (B0–B16 done, B17–B22 deferred, B23 + B24 done in
 > Round 3, ESLint added in Round 4 — see §9 / §10 of that file).
+>
+> **Round 8 (2026-08-10) — live-deployment audit + codebase hardening:**
+> Round 8 ran a browser-based E2E audit against the live deployment at
+> `https://reddit.jesspete.shop/` and found 3 critical deployment gaps
+> (Vite dev server exposed, no Fastify backend reachable, no security
+> headers) — see `docs/REMEDIATION_PLAN_ROUND_8.md`. Round 8 hardens the
+> repository to prevent these gaps from recurring: (1) a `pretypecheck`
+> script was added so `npm run typecheck` works on a fresh clone;
+> (2) `npm run test:build` asserts the production `dist/index.html`
+> contains no Vite dev-only modules; (3) `npm run test:fresh-clone`
+> simulates a fresh clone and asserts typecheck succeeds;
+> (4) `e2e/live.spec.ts` is an opt-in audit suite run via
+> `LIVE_BASE_URL=… npm run test:e2e:live`; (5) all 6 React `act()`
+> warnings in `LoginPage` + `RegisterPage` tests were silenced. The
+> deferred B17 / B19–B22 status is unchanged — Round 8 is hardening
+> only, not new features.
 
 ---
 
@@ -232,26 +248,33 @@ Tests use **Vitest** with **Fastify's `inject()`** — no port binding needed.
 
 ```bash
 npm run lint        # ESLint flat config — 0 errors, 0 warnings (Round 4)
-npm run typecheck   # tsc --noEmit — must pass clean
-npm test            # vitest run (all workspaces) — all 453 tests must pass
+npm run typecheck   # tsc --noEmit — must pass clean (R8.1: pretypecheck hook builds shared+db first)
+npm test            # vitest run (all workspaces) — all 453 tests must pass (0 act() warnings, R8.2)
 npm run test:e2e    # playwright run — 18 tests must pass (9 smoke + 9 auth lifecycle)
+npm run test:build  # R8.4: asserts dist/index.html is a production build (no Vite dev modules)
 npm run build       # topological build — must succeed
 git ls-files | grep -E '(^|/)dist/' | wc -l   # must be 0 (no dist/ tracked)
 ```
 
-> **Test count breakdown (453 vitest + 18 e2e):** `@embers/web` = 262
+> **Opt-in checks (not in pre-commit):**
+> - `npm run test:fresh-clone` — R8.1: simulates a fresh clone and asserts `npm run typecheck` succeeds.
+> - `LIVE_BASE_URL=https://reddit.jesspete.shop/ npm run test:e2e:live` — R8.3: opt-in live-deployment audit (12 tests). Skipped when `LIVE_BASE_URL` is unset.
+
+> **Test count breakdown (453 vitest + 18 e2e + 12 opt-in live):** `@embers/web` = 262
 > (incl. 22 in `src/lib/api.test.ts` from Round 5, 20 in
 > `src/auth/AuthProvider.test.tsx` + 9 api refresh-and-retry + 10 in
 > `src/pages/LoginPage.test.tsx` from Round 6, 11 in
 > `src/pages/RegisterPage.test.tsx` + 8 in `src/components/layout/Navbar.test.tsx`
 > + 5 in `src/auth/RequireAuth.test.tsx` + 1 api register-displayName from
 > Round 7), `@embers/server` = 95, `@embers/shared` = 67, `@embers/db` = 29.
-> E2E = 18 (9 smoke from Round 3 + 9 auth lifecycle from Round 7).
+> E2E = 18 local (9 smoke from Round 3 + 9 auth lifecycle from Round 7) +
+> 12 live-audit (Round 8, opt-in via `LIVE_BASE_URL`).
 > The previously documented total of 428 (Round 6) was superseded when
 > Round 7 added the RegisterPage + Navbar + RequireAuth test suites +
-> the E2E auth lifecycle suite.
+> the E2E auth lifecycle suite. Round 8 did not add vitest tests — it
+> silenced 6 React `act()` warnings in `LoginPage` + `RegisterPage` tests.
 
-**Build-before-test prerequisite (Round 5):** `@embers/server`'s test suites import
+**Build-before-test prerequisite (Round 5, extended in Round 8):** `@embers/server`'s test suites import
 `@embers/db` and `@embers/shared` as runtime packages, so their `dist/` builds
 must exist before `npm test --workspaces` runs. The root `package.json` has a
 `pretest` script that builds `@embers/shared` and `@embers/db` first, so a fresh
@@ -260,6 +283,13 @@ If you skip the pretest (e.g. `npm test --ignore-scripts`), run
 `npm run build --workspace @embers/shared && npm run build --workspace @embers/db`
 first or the server's 4 route test suites will fail with
 `Failed to resolve entry for package "@embers/db"`.
+
+> **R8.1 — Same applies to `npm run typecheck`:** the root `package.json` now
+> has a `pretypecheck` script (added in Round 8) that mirrors `pretest`. Without
+> it, `npm run typecheck` on a fresh clone fails with
+> `error TS2307: Cannot find module '@embers/db'` because the `@embers/server`
+> typecheck imports types from `@embers/db`'s not-yet-built `dist/`. Verify
+> with `npm run test:fresh-clone`.
 
 ### Coverage (Round 5)
 

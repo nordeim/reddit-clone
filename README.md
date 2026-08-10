@@ -239,16 +239,74 @@ host (ADR-003 single-file build is still in force for the client).
 | `@embers/db` | 29 | `npm test --workspace @embers/db` |
 | `@embers/server` | 95 | `npm test --workspace @embers/server` |
 | **Vitest total** | **453** | `npm test --workspaces --if-present` |
-| E2E (Playwright) | 18 | `npm run test:e2e` |
+| E2E — local API (Playwright) | 18 | `npm run test:e2e` |
+| E2E — live audit (opt-in) | 12 | `LIVE_BASE_URL=… npm run test:e2e:live` |
+| Production-build check | 1 script | `npm run test:build` |
+| Fresh-clone typecheck | 1 script | `npm run test:fresh-clone` |
 | Lint (ESLint) | 0 errors, 0 warnings | `npm run lint` |
 
 All 453 vitest tests + 18 Playwright E2E tests pass (`npm test` — do NOT
 run `vitest run` from root; it won't discover workspace configs), ESLint is
-clean, and typecheck + build succeed as of Round 7 (2026-08-10).
+clean, and typecheck + build succeed as of Round 8 (2026-08-10).
 
-> **Run tests correctly:** always use `npm test` (which triggers `pretest`
+> **Run tests correctly:** always use `npm test` (which triggers `pretest`)
 to build `@embers/shared` + `@embers/db` first via `--workspaces`). Running
 `vitest run` directly from root discovers 0 workspace configs.
+>
+> **R8.1 -- `npm run typecheck` works on a fresh clone too:** a `pretypecheck`
+> hook (added in Round 8) mirrors `pretest` and builds `@embers/shared` +
+> `@embers/db` before invoking `tsc --noEmit` on each workspace. Verify with
+> `npm run test:fresh-clone`.
+>
+> **R8.3 -- Live-deployment audit is opt-in:** `e2e/live.spec.ts` is excluded
+> from `npm run test:e2e` (it would add 12 always-skipped tests). Run it
+> explicitly via `LIVE_BASE_URL=https://reddit.jesspete.shop/ npm run test:e2e:live`.
+
+Round 8 (2026-08-10) was a **live-deployment audit + codebase hardening**
+round. A browser-based E2E audit against `https://reddit.jesspete.shop/`
+surfaced 3 critical deployment gaps (Vite dev server exposed in production,
+no Fastify backend reachable, no security headers) -- documented in
+`docs/REMEDIATION_PLAN_ROUND_8.md`. Round 8 hardens the repository to
+prevent these gaps from recurring: added `pretypecheck` script,
+`scripts/verify-fresh-clone-typecheck.mjs`, `scripts/verify-production-build.mjs`,
+`e2e/live.spec.ts` (opt-in), and silenced all 6 React `act()` warnings in
+`LoginPage` + `RegisterPage` tests. No new vitest tests; the deferred
+B17 / B19--B22 status is unchanged.
+
+## Live Deployment
+
+The embers SPA is deployed at **`https://reddit.jesspete.shop/`**.
+
+### Known gaps (audited 2026-08-10, see `docs/REMEDIATION_PLAN_ROUND_8.md`)
+
+| ID | Severity | Gap | Operator fix |
+|----|----------|-----|--------------|
+| LIVE-CRIT-1 | Critical | The live site serves the Vite **dev server**, not a production build (`/@react-refresh` + `/@vite/client` are present in the HTML). | Build the SPA with `npm run build --workspace @embers/web` and serve `apps/web/dist/index.html` (a single-file ~525 KB bundle). Do NOT run `npm run dev` in production. |
+| LIVE-CRIT-2 | Critical | The Fastify backend is **not reachable** from the live URL. `/api/auth/login` returns 404; `/api/posts`, `/api/communities`, `/api/search`, `/health` all return the SPA `index.html` (1579 bytes, `text/html`) instead of JSON. | Start the Fastify backend (`npm run server:start` or `docker compose up`) and configure the reverse proxy to route `/api/*` and `/health` to the Fastify port. |
+| LIVE-CRIT-3 | Critical | No production security headers are set (CSP, HSTS, X-Content-Type-Options, X-Frame-Options, Referrer-Policy all absent). | Add the 5 required security headers at the CDN/reverse-proxy layer. Fastify Helmet already sets them on the backend -- the proxy must not strip them. |
+| LIVE-HIGH-2 | High | `/api/*` requests receive the SPA `index.html` with HTTP 200, masking API failures as successful responses. | Configure the reverse proxy to return 502/503 when the backend is down, not the SPA fallback. SPA fallback should only apply to non-`/api/*` routes. |
+
+### How to verify the live deployment
+
+```bash
+# Opt-in live audit (12 tests, ~30s):
+LIVE_BASE_URL=https://reddit.jesspete.shop/ npm run test:e2e:live
+
+# Or curl probes:
+curl -sS -o /dev/null -w "%{http_code} %{content_type}\n" https://reddit.jesspete.shop/
+curl -sS -o /dev/null -w "%{http_code} %{content_type}\n" https://reddit.jesspete.shop/api/posts
+curl -sS -o /dev/null -w "%{http_code} %{content_type}\n" https://reddit.jesspete.shop/health
+# Expected after fix: 200 text/html, 200 application/json, 200 application/json
+```
+
+### What works on the live site today
+
+- The deterministic SPA feed renders (8 articles on initial load, 48 after scroll).
+- Dark-mode toggle persists to `localStorage` (zustand `persist`).
+- Infinite scroll via `IntersectionObserver`.
+- `/notifications` route guard redirects unauthenticated users to `/login`.
+- No browser console errors on initial load.
+- The HashRouter-based SPA works on any static host with no rewrite rules.
 
 Round 7 completed B18: added `/register` page, auth-aware Navbar (replaced
 hardcoded `CURRENT_USER` with `useAuth()`), `<RequireAuth>` route guard
@@ -310,6 +368,7 @@ TDD breakdown + the rationale for deferring B17 (build refactor) again.
 | `docs/REMEDIATION_PLAN_ROUND_5.md` | Round 5 changelog + detailed B17–B22 TDD breakdown |
 | `docs/REMEDIATION_PLAN_ROUND_6.md` | Round 6 changelog — B18 (Auth Provider) execution, 7-slice TDD breakdown |
 | `docs/REMEDIATION_PLAN_ROUND_7.md` | Round 7 changelog — B18 completion (RegisterPage, auth-aware Navbar, RequireAuth, E2E auth lifecycle), 5-slice TDD breakdown + B17 deferral rationale |
+| `docs/REMEDIATION_PLAN_ROUND_8.md` | Round 8 changelog -- live-deployment audit (3 critical gaps found) + codebase hardening (pretypecheck, test:build, test:fresh-clone, e2e/live.spec.ts, act() fixes), 6-item TDD breakdown |
 | `docs/REMEDIATION_PLAN_2.md` | Original 10-ADR remediation proposal (status annotations added) |
 | `docs/IMPLEMENTATION_PLAN.md` | Original greenfield plan that produced `apps/web` |
 | `docs/MANUAL_QA.md` | Manual QA matrix for the client SPA |
