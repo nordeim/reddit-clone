@@ -26,6 +26,28 @@
 > warnings in `LoginPage` + `RegisterPage` tests were silenced. The
 > deferred B17 / B19–B22 status is unchanged — Round 8 is hardening
 > only, not new features.
+>
+> **Between Round 8 and Round 9** (session 6, 2026-08-10): the operator
+> added production-deployment support -- `dotenv@^17.4.2` dependency,
+> `.env` / `.env.local` loading in `config.ts`, `.env.example` +
+> `.env.local.example` templates, `server:prod` + `server:start-prod`
+> npm scripts, and `start_production.sh` orchestrator. The live site
+> was fixed to serve a production build (LIVE-CRIT-1 resolved). See
+> `docs/session_6.md` for the full session-6 worklog.
+>
+> **Round 9 (2026-08-10) — security incident response + CI hardening:**
+> A post-session-6 audit found that `.env` (with real JWT secrets) was
+> committed to git history (commits `89f1012` + `526a836`). Round 9
+> response: (R9.1) removed `.env` + `env.bak` from tracking +
+> `scripts/verify-no-secrets-tracked.sh`; (R9.2) added gitleaks
+> `security` job to `.github/workflows/ci.yml`; (R9.3) added
+> `scripts/verify-gitignore-enforced.sh`; (R9.4) updated README Live
+> Deployment section (LIVE-CRIT-1 FIXED, LIVE-CRIT-2/3 still broken,
+> LIVE-CRIT-4 new); (R9.5) aligned AGENTS.md + CLAUDE.md; (R9.6) added
+> `docs/SECRET_ROTATION_GUIDE.md` -- **the operator MUST rotate the
+> leaked JWT secrets**. See `docs/REMEDIATION_PLAN_ROUND_9.md`. New
+> pre-commit checks: `npm run test:no-secrets`, `npm run test:gitignore`,
+> `npm run test:ci-config`.
 
 ---
 
@@ -252,6 +274,9 @@ npm run typecheck   # tsc --noEmit — must pass clean (R8.1: pretypecheck hook 
 npm test            # vitest run (all workspaces) — all 453 tests must pass (0 act() warnings, R8.2)
 npm run test:e2e    # playwright run — 18 tests must pass (9 smoke + 9 auth lifecycle)
 npm run test:build  # R8.4: asserts dist/index.html is a production build (no Vite dev modules)
+npm run test:no-secrets  # R9.1: asserts no .env / env.bak / *.env files are tracked by git
+npm run test:gitignore   # R9.3: asserts no tracked file matches a .gitignore pattern
+npm run test:ci-config   # R9.2: asserts .github/workflows/ci.yml has a gitleaks job
 npm run build       # topological build — must succeed
 git ls-files | grep -E '(^|/)dist/' | wc -l   # must be 0 (no dist/ tracked)
 ```
@@ -598,3 +623,4 @@ This is why vote keys are namespaced (`post:` / `comment:`) — to avoid collisi
 14. **Don't skip the `requestId` plugin.** The error handler depends on `req.id`.
 15. **Don't forget `.js` extensions in ESM imports.** All backend workspaces are `"type": "module"`.
 16. **Don't forget WAL is skipped for `:memory:` DBs.** `openDb()` handles this — don't override.
+17. **Don't commit `.env` or `.env.local`.** (R9.1 incident.) `config.ts` loads them via `dotenv` from the repo root — they contain real JWT secrets. `.gitignore` already lists them, but `git add -f` can bypass that. `npm run test:no-secrets` + `npm run test:gitignore` catch this locally; CI runs `gitleaks` (R9.2). If you need to share env config, use `.env.example` (committed template with placeholder values).

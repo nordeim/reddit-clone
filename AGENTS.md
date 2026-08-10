@@ -59,6 +59,35 @@
 > See `docs/REMEDIATION_PLAN_ROUND_8.md` for the full audit + 6-item
 > TDD breakdown. The architecture notes below remain accurate for
 > `apps/web/` unchanged.
+>
+> **Between Round 8 and Round 9** (session 6, 2026-08-10): the operator
+> added production-deployment support -- `dotenv@^17.4.2` dependency,
+> `.env` / `.env.local` loading in `apps/server/src/config.ts` (with
+> precedence: shell vars > .env.local > .env > loadEnv() defaults),
+> `.env.example` + `.env.local.example` templates, `server:prod` +
+> `server:start-prod` npm scripts, and `start_production.sh`
+> orchestrator. The live site was also fixed to serve a production
+> build (LIVE-CRIT-1 resolved). See `docs/session_6.md` for the full
+> session-6 worklog.
+>
+> Round 9 (2026-08-10) was a **security incident response + CI
+> hardening + doc alignment** round. A post-session-6 audit found
+> that `.env` (containing real JWT signing secrets) had been
+> committed to git history (commits `89f1012` + `526a836`) and
+> pushed to GitHub. Round 9: (R9.1) removed `.env` + `env.bak` from
+> git tracking via `git rm --cached` + added
+> `scripts/verify-no-secrets-tracked.sh`; (R9.2) added a `security`
+> job to `.github/workflows/ci.yml` running `gitleaks/gitleaks-action`
+> on every push/PR; (R9.3) added `scripts/verify-gitignore-enforced.sh`
+> to catch force-added gitignored files; (R9.4) updated the README
+> "Live Deployment" section -- LIVE-CRIT-1 now FIXED, LIVE-CRIT-2/3
+> still broken, LIVE-CRIT-4 new (501 on /api/auth/login); (R9.5)
+> aligned AGENTS.md + CLAUDE.md with session-6 changes; (R9.6) added
+> `docs/SECRET_ROTATION_GUIDE.md` -- **the operator MUST rotate the
+> leaked JWT secrets**. The secrets remain in git history (history
+> rewriting is out of scope -- rotation is the primary remediation).
+> See `docs/REMEDIATION_PLAN_ROUND_9.md` for the full incident report
+> + 6-item TDD breakdown.
 
 ---
 
@@ -79,6 +108,12 @@
 | E2E (live audit) | `LIVE_BASE_URL=… npm run test:e2e:live` | R8.3: opt-in live-deployment audit (12 tests). Skipped when `LIVE_BASE_URL` is unset. |
 | Build verification | `npm run test:build` | R8.4: asserts the built `dist/index.html` is a production bundle (no Vite dev modules). |
 | Fresh-clone check | `npm run test:fresh-clone` | R8.1: simulates a fresh clone (removes `dist/`) and asserts `npm run typecheck` succeeds. |
+| No-secrets check | `npm run test:no-secrets` | R9.1: asserts no secret-bearing files (`.env`, `env.bak`, `*.env`) are tracked by git. |
+| Gitignore enforcement | `npm run test:gitignore` | R9.3: asserts no tracked file matches a `.gitignore` pattern (catches `git add -f` bypasses). |
+| CI config check | `npm run test:ci-config` | R9.2: asserts `.github/workflows/ci.yml` has a gitleaks secret-scanning job. |
+| Production server (bare) | `npm run server:prod` | Session 6: starts Fastify in production mode (`node dist/index.js`), default port 4000. |
+| Production server (explicit) | `npm run server:start-prod` | Session 6: starts Fastify on port 5000 in production mode with `NODE_ENV=production`. |
+| Production orchestrator | `./start_production.sh` | Session 6: builds + starts backend (5000) + frontend (5173) + health check + PID tracking. `./start_production.sh stop` to stop. |
 | DB migrate | `npm run db:migrate --workspace @embers/db` | Drizzle migrations |
 | DB seed | `npm run db:seed --workspace @embers/db` | 49 users, 320 posts, ~3000 comments |
 
@@ -191,13 +226,14 @@ The server follows a **composition root** pattern — `buildApp(opts)` in `src/a
 
 ### Backend Pitfalls
 
-1. **Don't read `process.env` directly** — use `loadEnv()` (zod-validated, production-safe with required-field checks)
+1. **Don't read `process.env` directly** — use `loadEnv()` (zod-validated, production-safe with required-field checks). As of session 6, `config.ts` loads `.env` and `.env.local` from the repo root via `dotenv` before `loadEnv()` runs -- precedence: shell vars > `.env.local` > `.env` > `loadEnv()` defaults. Never commit `.env` or `.env.local` (R9.1 incident -- see `docs/SECRET_ROTATION_GUIDE.md`).
 2. **Don't forget WAL is skipped for `:memory:` DBs** — `openDb()` handles this automatically
 3. **Don't use `db.transaction()` with the `tx` parameter** — better-sqlite3 is synchronous; the outer `db` already executes within the transaction. Use `db.transaction(() => { ... })`
 4. **Don't add `import type` for Drizzle table imports** — tables are values (runtime objects), not types
 5. **Don't rate-limit `/health`** — it's excluded from the auth rate limiter; the global limiter allows 100/min
 6. **Don't leak stack traces** — `errorHandler` returns structured `{ error: { code, message, requestId } }` only
 7. **Don't skip `requestId` plugin** — the error handler depends on `req.id` being set
+8. **Don't commit secret-bearing files** (R9.1) — `.env`, `.env.local`, `env.bak`, and any `*.env` file must stay gitignored. CI runs `gitleaks` on every push (R9.2) and `npm run test:no-secrets` + `npm run test:gitignore` catch force-added files locally.
 
 ## TypeScript conventions
 
