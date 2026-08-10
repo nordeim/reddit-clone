@@ -1,4 +1,11 @@
-import { createContext, useContext, useMemo, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 
 /**
  * AuthProvider (Round 6, B18) — React context for embers auth.
@@ -8,15 +15,14 @@ import { createContext, useContext, useMemo, type ReactNode } from "react";
  * triple should). Exposes `useAuth()` returning
  * `{ user, status, error, login, logout }`.
  *
- * Slice 1 (this file): initial state + stub login/logout that reject
- * with "not implemented". Later slices replace the stubs:
- *   - Slice 2: introduces `useState` for user/status/error, `login`
- *     calls `api.login(username, password)`, stores the access token,
- *     sets `user` + `status="authenticated"`.
- *   - Slice 3: `logout` calls `api.logout()`, clears the token, resets
- *     state to anonymous.
- *   - Slice 5: wires `tryRefreshOn401` on the api client so 401s on
- *     authenticated requests silently refresh and retry once.
+ * Slice 1: initial state + stub login/logout that reject with
+ * "not implemented".
+ * Slice 2 (this file): `login` calls `api.login(username, password)`,
+ * stores the access token in a ref, sets `user` + `status="authenticated"`.
+ * Slice 3 (next): `logout` calls `api.logout()`, clears the token ref,
+ * resets state to anonymous.
+ * Slice 5 (later): wires `tryRefreshOn401` on the api client so 401s
+ * on authenticated requests silently refresh and retry once.
  *
  * The provider accepts an optional `apiClientFactory` prop so tests can
  * inject a stub `createApiClient`. Production code (main.tsx) uses the
@@ -64,17 +70,33 @@ export function useAuth(): AuthContextValue {
   return ctx;
 }
 
+/**
+ * The minimal subset of the `ApiClient` (from `lib/api.ts`) that
+ * `AuthProvider` actually calls. The factory returns `unknown` from
+ * the public prop type to keep this module decoupled from `lib/api.ts`
+ * at the type level, but internally we cast to this interface.
+ *
+ * Slice 5 will widen this to include `refresh`.
+ */
+interface AuthApiClient {
+  login: (
+    username: string,
+    password: string
+  ) => Promise<{ accessToken: string; user: AuthUser }>;
+  logout: () => Promise<void>;
+}
+
 export interface AuthProviderProps {
   children: ReactNode;
   /**
-   * Factory for the API client. Defaults to the production factory
-   * (which calls `createApiClient` from `lib/api.ts`). Tests pass a
-   * stub that returns a mocked client.
+   * Factory for the API client. Defaults to a factory that throws
+   * "not implemented" — production code (main.tsx) passes the real
+   * factory which calls `createApiClient` from `lib/api.ts`. Tests
+   * pass a stub that returns a mocked client.
    *
-   * Typed loosely here so the AuthProvider module has no static import
-   * on `lib/api.ts` — that keeps the Slice 1 test surface minimal and
-   * lets Slice 2 swap in the real client without touching the test
-   * scaffolding.
+   * Typed as `() => unknown` so the AuthProvider module has no static
+   * import on `lib/api.ts` — this keeps the test surface minimal and
+   * lets tests inject stubs without importing the real client.
    */
   apiClientFactory?: () => unknown;
 }
@@ -82,31 +104,66 @@ export interface AuthProviderProps {
 /**
  * Top-level auth provider. Wrap `<App />` (or `<HashRouter>`) with this
  * so every route can read auth state via `useAuth()`.
- *
- * Slice 1: returns a static context value with stub login/logout that
- * reject with "not implemented". Slice 2 introduces real state.
  */
-export function AuthProvider({ children }: AuthProviderProps): ReactNode {
-  // Slice 1: state is a constant. Slice 2 will replace this with
-  // `useState` so `login`/`logout` can mutate it.
-  const user: AuthUser | null = null;
-  const status: AuthStatus = "anonymous";
-  const error: string | null = null;
+export function AuthProvider({
+  children,
+  apiClientFactory,
+}: AuthProviderProps): ReactNode {
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [status, setStatus] = useState<AuthStatus>("anonymous");
+  const [error, setError] = useState<string | null>(null);
 
-  const value = useMemo<AuthContextValue>(
-    () => ({
+  // The access token is stored in a ref so it can be read synchronously
+  // by `getToken` callbacks (Slice 5) without triggering re-renders.
+  const tokenRef = useRef<string | null>(null);
+
+  const value = useMemo<AuthContextValue>(() => {
+    /**
+     * Lazily instantiate the api client on first login. If the caller
+     * didn't pass a factory, reject loudly so the mistake surfaces at
+     * the call site rather than causing a silent no-op.
+     */
+    function getClient(): AuthApiClient {
+      if (!apiClientFactory) {
+        throw new Error(
+          "AuthProvider: apiClientFactory is required (Slice 2). main.tsx must pass createApiClient from lib/api.ts."
+        );
+      }
+      return apiClientFactory() as AuthApiClient;
+    }
+
+    return {
       user,
       status,
       error,
-      login: async () => {
-        throw new Error("not implemented");
+      login: async (username: string, password: string) => {
+        setStatus("loading");
+        setError(null);
+        try {
+          const client = getClient();
+          const { accessToken, user: loggedInUser } = await client.login(
+            username,
+            password
+          );
+          tokenRef.current = accessToken;
+          setUser(loggedInUser);
+          setStatus("authenticated");
+        } catch (err) {
+          // Revert state and surface the error message.
+          tokenRef.current = null;
+          setUser(null);
+          setStatus("anonymous");
+          setError(err instanceof Error ? err.message : String(err));
+          throw err;
+        }
       },
       logout: async () => {
+        // Slice 3 will implement this. For now, reject to keep the
+        // contract honest — login works, logout doesn't.
         throw new Error("not implemented");
       },
-    }),
-    [user, status, error]
-  );
+    };
+  }, [user, status, error, apiClientFactory]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
