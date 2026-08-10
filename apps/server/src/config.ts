@@ -1,4 +1,8 @@
 import { z } from "zod";
+import dotenv from "dotenv";
+import { resolve, join, isAbsolute } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 /**
  * Server configuration — zod-validated environment loader (ADR-101).
@@ -7,10 +11,36 @@ import { z } from "zod";
  *   - In development/test: every required var has a safe default.
  *   - In production: DATABASE_URL, JWT_ACCESS_SECRET, JWT_REFRESH_SECRET,
  *     CORS_ORIGIN are required and the loader refuses to start without them.
+ *   - Environment files (.env, .env.local) are loaded from the repo root
+ *     before validation. Precedence (highest → lowest):
+ *       1. Shell env vars (process.env from command line)
+ *       2. .env.local (local dev overrides)
+ *       3. .env (base values / production secrets)
+ *       4. loadEnv() defaults (dev/test safe defaults)
  *
  * The schema is the single source of truth for what the server reads from
  * the environment; no other code path should read process.env directly.
  */
+
+// Resolve repo root from this file's location.
+//   Compiled: apps/server/dist/config.js → ../../../ = repo root
+//   tsx dev:  apps/server/src/config.ts  → ../../../ = repo root
+const __dirname = fileURLToPath(new URL(".", import.meta.url));
+const REPO_ROOT = resolve(__dirname, "../../../");
+
+// Load .env (base values) — does not override existing process.env vars.
+dotenv.config({ path: join(REPO_ROOT, ".env") });
+
+// Load .env.local (local overrides) — overrides .env but not shell vars.
+const envLocalPath = join(REPO_ROOT, ".env.local");
+if (existsSync(envLocalPath)) {
+  const parsed = dotenv.parse(readFileSync(envLocalPath, "utf8"));
+  for (const [key, value] of Object.entries(parsed)) {
+    if (process.env[key] === undefined) {
+      process.env[key] = value;
+    }
+  }
+}
 
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
@@ -74,7 +104,18 @@ export function loadEnv(overrides: Partial<Record<string, string | undefined>> =
   for (const [k, v] of Object.entries(merged)) {
     if (v !== undefined) cleaned[k] = v;
   }
-  return envSchema.parse(cleaned);
+  const env = envSchema.parse(cleaned);
+
+  // Resolve DATABASE_URL relative to the repo root (where .env lives),
+  // not the CWD. This makes the path work regardless of where the server
+  // is started from (repo root via npm scripts, or apps/server/ via
+  // `npm run start --workspace @embers/server`). Absolute paths and the
+  // special `:memory:` value are passed through unchanged.
+  if (env.DATABASE_URL && !isAbsolute(env.DATABASE_URL) && env.DATABASE_URL !== ":memory:") {
+    env.DATABASE_URL = resolve(REPO_ROOT, env.DATABASE_URL);
+  }
+
+  return env;
 }
 
 export { envSchema };

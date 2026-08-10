@@ -104,6 +104,33 @@ npm run server:start
 # → Fastify listening at http://localhost:5000
 ```
 
+### Environment Variables
+
+The server reads configuration from environment variables, loaded from `.env`
+and `.env.local` files in the repo root (via `dotenv`). Precedence (highest →
+lowest):
+
+1. Shell env vars (command line — e.g. `PORT=5000 npm run server:start`)
+2. `.env.local` (local dev overrides — gitignored)
+3. `.env` (base values / production secrets — gitignored)
+4. `loadEnv()` defaults (dev/test safe defaults)
+
+```bash
+# 1. Create your local env files
+cp .env.example .env
+cp .env.local.example .env.local
+
+# 2. Fill in production secrets in .env (required when NODE_ENV=production)
+#    JWT_ACCESS_SECRET, JWT_REFRESH_SECRET, CORS_ORIGIN
+#    Generate secrets: openssl rand -hex 32
+```
+
+The web app (`apps/web`) uses Vite's built-in `.env` support. To override
+the API base URL, add to `.env.local`:
+```
+VITE_API_URL=http://localhost:5000
+```
+
 ### 2. Frontend (React SPA)
 
 Open a **second terminal** (the backend must keep running), then:
@@ -116,6 +143,56 @@ npm run dev --workspace @embers/web
 
 Open **`http://localhost:5173`** in a browser — that's the Reddit-style
 SPA with the feed, voting, comments, communities, and dark mode.
+
+### 3. Production Deployment
+
+For production, build both workspaces and run the compiled backend (`node dist/index.js`)
+instead of the dev server (`tsx watch`). The production server reads `NODE_ENV=production`
+from the environment — Fastify then enables HSTS hardening and `loadEnv()` requires
+all production secrets to be present.
+
+```bash
+# 1. Build all workspaces (topological: shared → db → server → web)
+npm run build
+# → apps/server/dist/index.js  (Fastify production bundle)
+# → apps/web/dist/index.html    (single-file SPA, ~525 KB)
+
+# 2. Initialize the database (if not already done)
+npm run db:setup
+
+# 3. Fill in production secrets in .env (required when NODE_ENV=production)
+#    JWT_ACCESS_SECRET, JWT_REFRESH_SECRET, CORS_ORIGIN
+#    Generate secrets: openssl rand -hex 32
+
+# 4. Start the backend in production mode (port 5000)
+npm run server:start-prod
+# → Fastify listening at http://localhost:5000 (NODE_ENV=production)
+
+# 5. Serve the frontend from a web root
+#    HashRouter means no server rewrite rules needed.
+#    Any static host works: nginx, S3, GitHub Pages, `python -m http.server`.
+cp -r apps/web/dist/* /var/www/html/
+```
+
+Verify the production deployment:
+
+```bash
+# Health check
+curl http://localhost:5000/health
+# → {"status":"ok","timestamp":"...","uptime":...}
+
+# Production secrets are enforced — this will fail without them:
+# (server refuses to start if JWT_ACCESS_SECRET or JWT_REFRESH_SECRET
+#  are missing or shorter than 32 chars, per loadEnv())
+```
+
+| Variable | Required | Notes |
+|---|---|---|
+| `JWT_ACCESS_SECRET` | Yes | Min 32 chars |
+| `JWT_REFRESH_SECRET` | Yes | Min 32 chars |
+| `CORS_ORIGIN` | Yes | Your frontend origin |
+| `DATABASE_URL` | No | Defaults to `packages/db/dev.db` |
+| `PORT` | No | Defaults to 5000 |
 
 ### Architecture
 
@@ -163,39 +240,18 @@ curl http://localhost:5000/api/posts
 | `npm run db:setup` | Migrate + seed the SQLite database |
 | `npm run db:migrate` | Apply Drizzle migrations only |
 | `npm run db:seed` | Seed deterministic demo data only |
-| `npm run server:start` | Start Fastify API on port 5000 |
+| `npm run server:start` | Start Fastify API on port 5000 in **development** mode (`tsx watch`, `NODE_ENV=development`) |
+| `npm run server:prod` | Start Fastify API in **production** mode (`node dist/index.js`, bare) |
+| `npm run server:start-prod` | Start Fastify API on port 5000 in **production** mode (explicit env: `NODE_ENV=production`) |
 | `npm run dev --workspace @embers/web` | Start Vite dev server on port 5173 |
 
 ### Production Deployment
 
-For a real deployment, build the SPA to static files and serve it from a
-web root (no Vite dev server needed):
-
-```bash
-# Build the SPA (single-file output)
-npm run build --workspace @embers/web
-# → dist/index.html (~538 KB, all JS/CSS inlined)
-
-# Serve dist/ from any web root
-# (HashRouter means no server rewrite rules needed)
-```
-
-Start the backend with production secrets:
-
-```bash
-JWT_ACCESS_SECRET=$(openssl rand -hex 32) \
-JWT_REFRESH_SECRET=$(openssl rand -hex 32) \
-CORS_ORIGIN=https://your-frontend.com \
-npm run server:start
-```
-
-| Variable | Required | Notes |
-|---|---|---|
-| `JWT_ACCESS_SECRET` | Yes | Min 32 chars |
-| `JWT_REFRESH_SECRET` | Yes | Min 32 chars |
-| `CORS_ORIGIN` | Yes | Your frontend origin |
-| `DATABASE_URL` | No | Defaults to `packages/db/dev.db` |
-| `PORT` | No | Defaults to 5000 |
+See **§3. Production Deployment** above for the full production walkthrough
+(`npm run build` → `npm run server:start-prod` → serve `apps/web/dist/*`).
+The key difference from development: the production server runs the compiled
+`node dist/index.js` bundle (not `tsx watch`) with `NODE_ENV=production`, which
+enables HSTS hardening and requires all production secrets via `loadEnv()`.
 
 ### Run All Quality Gates Before Deploying
 
@@ -204,25 +260,6 @@ npm run lint        # ESLint — 0 errors, 0 warnings
 npm run typecheck   # tsc --noEmit — all 4 workspaces clean
 npm test            # 453 vitest tests (pretest auto-builds shared + db)
 npm run build       # topological build — all workspaces succeed
-```
-
-```bash
-# 1. Create a .env file with the required production secrets
-cat > .env <<EOF
-JWT_ACCESS_SECRET=$(openssl rand -hex 32)
-JWT_REFRESH_SECRET=$(openssl rand -hex 32)
-CORS_ORIGIN=http://localhost:5173
-EOF
-
-# 2. Build and start the server container (port 4000, persistent SQLite volume)
-docker compose up --build -d
-
-# 3. Verify
-curl http://localhost:4000/health   # → {"status":"ok",…}
-docker compose logs -f embers-server
-
-# 4. Stop and remove the container (volume persists)
-docker compose down
 ```
 
 The Dockerfile is a multi-stage Node 20 build that produces a production image
