@@ -91,7 +91,7 @@
 
 ---
 
-**embers** — a Reddit-style community feed. The original client-only React SPA lives at `apps/web/` (`@embers/web`): **no backend, no API, no `fetch`** — every post, user, community, comment and notification is generated deterministically in the browser. Three backend workspaces (`@embers/server`, `@embers/db`, `@embers/shared`) were added in the monorepo transition and provide a Fastify REST API, Drizzle ORM data layer, and shared Zod schema contracts.
+**embers** — a Reddit-style community feed. The client SPA lives at `apps/web/` (`@embers/web`): all content is generated deterministically in the browser via seeded PRNGs (FNV-1a → mulberry32) — no network calls needed for the core feed experience. A fetch-based API client (`apps/web/src/lib/api.ts`) wires the auth flow to the backend. Three backend workspaces (`@embers/server`, `@embers/db`, `@embers/shared`) were added in the monorepo transition and provide a Fastify REST API, Drizzle ORM data layer, and shared Zod schema contracts. Backend integration for feeds/search pages is deferred (B17–B22).
 
 ## Commands
 
@@ -114,8 +114,8 @@
 | Production server (bare) | `npm run server:prod` | Session 6: starts Fastify in production mode (`node dist/index.js`), default port 4000. |
 | Production server (explicit) | `npm run server:start-prod` | Session 6: starts Fastify on port 5000 in production mode with `NODE_ENV=production`. |
 | Production orchestrator | `./start_production.sh` | Session 6: builds + starts backend (5000) + frontend (5173) + health check + PID tracking. `./start_production.sh stop` to stop. |
-| DB migrate | `npm run db:migrate --workspace @embers/db` | Drizzle migrations |
-| DB seed | `npm run db:seed --workspace @embers/db` | 49 users, 320 posts, ~3000 comments |
+| DB migrate | `npm run db:migrate` | Drizzle migrations (root delegates to `@embers/db`) |
+| DB seed | `npm run db:seed` | 49 users, 320 posts, ~3000 comments (root delegates to `@embers/db`) |
 
 ### Per-workspace (run from root with `--workspace`)
 
@@ -234,6 +234,10 @@ The server follows a **composition root** pattern — `buildApp(opts)` in `src/a
 6. **Don't leak stack traces** — `errorHandler` returns structured `{ error: { code, message, requestId } }` only
 7. **Don't skip `requestId` plugin** — the error handler depends on `req.id` being set
 8. **Don't commit secret-bearing files** (R9.1) — `.env`, `.env.local`, `env.bak`, and any `*.env` file must stay gitignored. CI runs `gitleaks` on every push (R9.2) and `npm run test:no-secrets` + `npm run test:gitignore` catch force-added files locally.
+
+## Tech Stack
+
+> See `CLAUDE.md` §Tech Stack for the full version table (React 19.2.6, Vite 7.3.2, Fastify 5.11.3, Drizzle 0.36.4, etc.). Versions are pinned in each workspace's `package.json`.
 
 ## TypeScript conventions
 
@@ -466,7 +470,26 @@ with `NODE_ENV=test` env vars. Playwright reports are uploaded as artifacts.
 - If you see `dist/` files in `git status`, you probably ran `npm run build`
   and then `git add .` — use `git add -A` followed by `git status` to verify,
   or use `git add <specific files>` instead.
-- Pre-commit check: `git ls-files | grep -E '(^|/)dist/' | wc -l` must return 0.
+### Pre-commit checklist
+
+```bash
+npm run lint        # ESLint flat config — 0 errors, 0 warnings
+npm run typecheck   # tsc --noEmit — must pass clean (pretypecheck hook builds shared+db first)
+npm test            # vitest run (all workspaces) — all 453 tests must pass
+npm run test:e2e    # playwright run — 18 tests must pass (9 smoke + 9 auth lifecycle)
+npm run test:build  # asserts dist/index.html is a production build (no Vite dev modules)
+npm run test:no-secrets  # asserts no .env / env.bak / *.env files are tracked by git
+npm run test:gitignore   # asserts no tracked file matches a .gitignore pattern
+npm run test:ci-config   # asserts .github/workflows/ci.yml has a gitleaks job
+npm run build       # topological build — must succeed
+git ls-files | grep -E '(^|/)dist/' | wc -l   # must be 0 (no dist/ tracked)
+```
+
+> **Opt-in checks (not in pre-commit):**
+> - `npm run test:fresh-clone` — simulates a fresh clone and asserts `npm run typecheck` succeeds.
+> - `LIVE_BASE_URL=https://reddit.jesspete.shop/ npm run test:e2e:live` — opt-in live-deployment audit (12 tests). Skipped when `LIVE_BASE_URL` is unset.
+
+See `CLAUDE.md` §Pre-commit checklist for the canonical list.
 
 ## ESLint (Round 4)
 

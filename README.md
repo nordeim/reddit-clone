@@ -46,8 +46,8 @@ npm install
 npm run dev --workspace @embers/web      # http://localhost:5173
 
 # 3. (Backend) Apply migrations + seed dev.db, then start the server
-npm run db:migrate --workspace @embers/db
-npm run db:seed    --workspace @embers/db
+npm run db:migrate
+npm run db:seed
 npm run dev        --workspace @embers/server   # http://localhost:4000
 ```
 
@@ -322,7 +322,7 @@ The embers SPA is deployed at **`https://reddit.jesspete.shop/`**.
 | LIVE-CRIT-2 | Critical | **Still broken** | The Fastify backend is **not reachable** from the live URL. `/api/posts`, `/api/communities`, `/api/search`, `/health` all return HTTP 404 (335 bytes, `text/html`). `/api/auth/login` returns HTTP 501. | Start the Fastify backend (`npm run server:start-prod` or `docker compose up`) and configure the reverse proxy to route `/api/*` and `/health` to the Fastify port (5000). |
 | LIVE-CRIT-3 | Critical | **Still broken** | No production security headers are set (CSP, HSTS, X-Content-Type-Options, X-Frame-Options, Referrer-Policy all absent). | Add the 5 required security headers at the CDN/reverse-proxy layer. Fastify Helmet already sets them on the backend -- the proxy must not strip them. |
 | LIVE-CRIT-4 | Critical | **New (Round 9)** | `/api/auth/login` returns HTTP 501 (Not Implemented) instead of 404 or 200. This suggests the reverse proxy has a partial route to the backend but the route is misconfigured. | Investigate the reverse proxy config -- the `/api/auth/*` route may be pointing to the wrong upstream or the backend may not be running. All other `/api/*` routes return 404 (SPA fallback), but `/api/auth/login` returns 501 (proxy error). |
-| LIVE-HIGH-2 | High | **Still broken** | `/api/*` requests receive the SPA `index.html` (or a proxy error page) instead of JSON, masking API failures. | Configure the reverse proxy to return 502/503 when the backend is down, not the SPA fallback. SPA fallback should only apply to non-`/api/*` routes. |
+| LIVE-HIGH-2 | High | **Still broken** | `/api/*` requests receive a Python 404 error page (not the SPA `index.html`) instead of JSON, masking API failures. | Configure the reverse proxy to return 502/503 when the backend is down, not a generic 404. Ensure the Fastify backend is running and reachable. |
 
 ### SECRET ROTATION REQUIRED (R9.1, 2026-08-10)
 

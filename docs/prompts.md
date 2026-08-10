@@ -84,6 +84,8 @@ please meticulously plan to review and validate @AGENTS.md , @CLAUDE.md and @REA
 please meticulously plan to review @README.md and @docs/Project-Architecture-Document.md and update them to be aligned with the current codebase
 
 please meticulously plan to run lint, typecheck and build tests to check for any issues and bugs                                                                                                                                           
+
+please meticulously plan to apply precise edits to relevant documentation for recommended fixes P0 to P2. but first re-evaluate and re-validate the findings against the codebase to ensure alignment.
                                                                                                                                                                                                                                             
 ---
 

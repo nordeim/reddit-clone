@@ -99,8 +99,8 @@ Tests are colocated with source as `*.test.ts(x)`. The vitest config lives in ea
 | `npm run build` | Build all — **topological**: `shared → db → server → web` |
 | `npm run typecheck` | Typecheck all — same order |
 | `npm test` | Test all via `--workspaces` (do NOT run `vitest run` from root) |
-| `npm run db:migrate --workspace @embers/db` | Apply Drizzle migrations |
-| `npm run db:seed --workspace @embers/db` | Seed dev.db (49 users, 320 posts, etc.) |
+| `npm run db:migrate` | Apply Drizzle migrations (root delegates to `@embers/db`) |
+| `npm run db:seed` | Seed dev.db (49 users, 320 posts, etc.) (root delegates to `@embers/db`) |
 
 ### Per-workspace
 
@@ -186,7 +186,7 @@ Nominal-typed string aliases (`UserId`, `PostId`, etc.) that prevent passing the
 
 ### Migrations & Seed
 
-- **Migrations**: `npm run db:generate` (drizzle-kit) → SQL in `src/migrations/`, applied via `npm run db:migrate`
+- **Migrations**: `npm run db:generate --workspace @embers/db` (drizzle-kit) → SQL in `src/migrations/`, applied via `npm run db:migrate`
 - **Seed**: `npm run db:seed` — deterministic PRNG → 49 users, 18 communities, 320 posts, ~3037 comments, 18 notifications. Demo user: `you` / `embers-demo`
 
 ### SQLite Hardening
@@ -624,3 +624,29 @@ This is why vote keys are namespaced (`post:` / `comment:`) — to avoid collisi
 15. **Don't forget `.js` extensions in ESM imports.** All backend workspaces are `"type": "module"`.
 16. **Don't forget WAL is skipped for `:memory:` DBs.** `openDb()` handles this — don't override.
 17. **Don't commit `.env` or `.env.local`.** (R9.1 incident.) `config.ts` loads them via `dotenv` from the repo root — they contain real JWT secrets. `.gitignore` already lists them, but `git add -f` can bypass that. `npm run test:no-secrets` + `npm run test:gitignore` catch this locally; CI runs `gitleaks` (R9.2). If you need to share env config, use `.env.example` (committed template with placeholder values).
+
+## Live Deployment
+
+The embers SPA is deployed at **`https://reddit.jesspete.shop/`**.
+
+### Known gaps (re-audited 2026-08-10, see `docs/REMEDIATION_PLAN_ROUND_8.md` + `docs/REMEDIATION_PLAN_ROUND_9.md`)
+
+| ID | Severity | Status | Gap | Operator fix |
+|----|----------|--------|-----|--------------|
+| LIVE-CRIT-1 | Critical | **FIXED** (2026-08-10) | The live site was serving the Vite dev server. | Now resolved -- the live site serves a production build (no `/@react-refresh` or `/@vite/client`). |
+| LIVE-CRIT-2 | Critical | **Still broken** | The Fastify backend is **not reachable** from the live URL. All `/api/*` and `/health` return HTTP 404 or 501. | Start the Fastify backend and configure the reverse proxy to route `/api/*` and `/health` to port 5000. |
+| LIVE-CRIT-3 | Critical | **Still broken** | No production security headers (CSP, HSTS, X-Content-Type-Options, X-Frame-Options, Referrer-Policy all absent). | Add security headers at the CDN/reverse-proxy layer. |
+| LIVE-CRIT-4 | Critical | **New (Round 9)** | `/api/auth/login` returns HTTP 501 (Not Implemented) instead of 404 or 200. | Investigate the reverse proxy config -- the `/api/auth/*` route may be misconfigured. |
+| LIVE-HIGH-2 | High | **Still broken** | `/api/*` requests receive a Python 404 error page (not the SPA `index.html`) instead of JSON, masking API failures. | Configure the reverse proxy to return 502/503 when the backend is down. |
+
+### SECRET ROTATION REQUIRED (R9.1, 2026-08-10)
+
+A `.env` file containing real JWT signing secrets was committed to git history (commits `89f1012` + `526a836`). The secrets have been removed from tracking but **remain in git history**. **Rotate immediately:**
+
+1. Generate new secrets: `openssl rand -hex 32` (run twice -- use a DIFFERENT value for each)
+2. Update `.env` (gitignored): set `JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET`
+3. Restart the backend: `npm run server:start-prod`
+
+All existing JWT tokens become invalid -- users must log in again. See `docs/SECRET_ROTATION_GUIDE.md` for the full guide.
+
+See `README.md` §Live Deployment for the full section including verify-commands and what-works-today.
