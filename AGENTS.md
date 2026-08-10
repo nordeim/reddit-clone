@@ -88,6 +88,60 @@
 > rewriting is out of scope -- rotation is the primary remediation).
 > See `docs/REMEDIATION_PLAN_ROUND_9.md` for the full incident report
 > + 6-item TDD breakdown.
+>
+> Round 10 (2026-08-10) was a **comprehensive audit-driven remediation**
+> round, triggered by validating `audit_report_1.md`,
+> `audit_report_2.md`, and `session_8.md` against the codebase and
+> running an extended browser-based E2E audit
+> (`e2e/live_extended.spec.ts`, 16 tests) against the live deployment
+> at `https://reddit.jesspete.shop/`. The audit surfaced 4 real bugs
+> and 7 plan/code drift points, all fixed in this round:
+> - **BUG-R10-2 (Critical):** `apps/web/src/pages/PostPage.tsx:24` used
+>   `useAppStore((s) => s.localComments[postId] ?? [])` -- the `?? []`
+>   returned a new array reference every render, causing React 19's
+>   `useSyncExternalStore` (zustand) to infinite-loop with "Maximum
+>   update depth exceeded" (React error #185). The ErrorBoundary
+>   caught the crash and rendered the fallback UI on EVERY post detail
+>   page on the live site. Fix: module-scope `EMPTY_COMMENTS` constant.
+> - **BUG-R10-3 (Medium):** `apps/web/src/pages/NotFoundPage.tsx`
+>   rendered "Nothing here yet" with no "404" or "not found" text.
+>   Fix: h1 now reads "404 — Page not found".
+> - **BUG-R10-4 (Medium):** `apps/web/src/components/layout/Navbar.tsx`
+>   lacked `min-w-0` on the SearchBar wrapper, causing 37px horizontal
+>   overflow on a 375px mobile viewport. Fix: added `min-w-0` to the
+>   wrapper div.
+> - **BUG-R10-5 (Medium):** `apps/web/src/pages/RegisterPage.tsx`
+>   submit button stayed enabled when passwords mismatched -- the
+>   `disabled` check only verified fields were non-empty, not that
+>   passwords matched. Fix: added `password !== confirmPassword` to the
+>   disabled check + a real-time inline hint explaining why the button
+>   is disabled.
+> - **Plan/code drift (audit F1-F7):** `docs/REMEDIATION_PLAN.md`
+>   proposed an RPC framework, a non-npm package manager, asymmetric
+>   JWT, and UUID primary keys -- all contradicting the implemented
+>   REST + Zod / npm-workspaces / HS256 / branded-string-ID stack.
+>   Fix: rewrote §1, §2, §3.1, §4.1, §4.4, §5.1 to align with the
+>   codebase. Added `scripts/verify-plan-alignment.mjs` (R10 CI gate)
+>   that asserts no forbidden tokens remain -- enforced via
+>   `npm run test:plan-alignment`.
+> - **session_8 deferred fixes:** added "428 total at Round 6" note
+>   (M2), pinned React to 19.2.6 (m8), standardized "argon2 (Argon2id
+>   algorithm)" naming (m5), noted hooks in `index.ts` (m7).
+> - **R9.1 regression:** `.env` + `env.bak` (containing real JWT
+>   secrets) were re-added to git tracking in commit `e09e425` after
+>   Round 9 had removed them. Re-ran `git rm --cached .env env.bak` to
+>   restore the R9.1 fix. **Operator must rotate
+>   `JWT_ACCESS_SECRET` + `JWT_REFRESH_SECRET` again** (see updated
+>   `docs/SECRET_ROTATION_GUIDE.md`).
+> - 9 new TDD tests (3 PostPage + 4 NotFoundPage + 1 Navbar + 1
+>   RegisterPage mismatch + 1 RegisterPage regression + 0 from the
+>   replaced alert-on-mismatch test = net +9). Web suite: 262 → 271.
+>   Total: 453 → 462.
+> - 2 new Playwright configs (`playwright.local-prod.config.ts`,
+>   `playwright.repro.config.ts`) and 2 new E2E specs
+>   (`e2e/live_extended.spec.ts` 16 tests + `e2e/repro_r10_postpage.spec.ts`
+>   2 tests as a regression guard). See `docs/REMEDIATION_PLAN_ROUND_10.md`
+>   for the full plan, TDD breakdown, and verification ledger.
 
 ---
 
@@ -111,6 +165,9 @@
 | No-secrets check | `npm run test:no-secrets` | R9.1: asserts no secret-bearing files (`.env`, `env.bak`, `*.env`) are tracked by git. |
 | Gitignore enforcement | `npm run test:gitignore` | R9.3: asserts no tracked file matches a `.gitignore` pattern (catches `git add -f` bypasses). |
 | CI config check | `npm run test:ci-config` | R9.2: asserts `.github/workflows/ci.yml` has a gitleaks secret-scanning job. |
+| Plan-alignment check | `npm run test:plan-alignment` | R10: asserts `docs/REMEDIATION_PLAN.md` does not contain forbidden tokens (RPC framework names, non-npm package managers, asymmetric JWT algorithm names, or UUID primary-key specs) that contradict the implemented stack. |
+| Local prod-build audit | `npm run test:local-prod` | R10: runs `e2e/live_extended.spec.ts` (16 tests) against a locally-served production build (`PROD_BASE_URL=...`). Verifies Round 10 bug fixes work end-to-end. |
+| R10 regression guard | `npm run test:repro` | R10: runs `e2e/repro_r10_postpage.spec.ts` against a local prod build — asserts the PostPage React error #185 has not regressed. |
 | Production server (bare) | `npm run server:prod` | Session 6: starts Fastify in production mode (`node dist/index.js`), default port 4000. |
 | Production server (explicit) | `npm run server:start-prod` | Session 6: starts Fastify on port 5000 in production mode with `NODE_ENV=production`. |
 | Production orchestrator | `./start_production.sh` | Session 6: builds + starts backend (5000) + frontend (5173) + health check + PID tracking. `./start_production.sh stop` to stop. |
@@ -221,8 +278,8 @@ The server follows a **composition root** pattern — `buildApp(opts)` in `src/a
 - `buildApp({ env, db, rawDb })` wires repositories + routes for integration tests
 - **Helmet/rate-limit** can be skipped via `skipHelmet`/`skipRateLimit` options (rate-limit auto-disabled in `NODE_ENV=test`)
 - **Auth tests** use the seeded demo user; **vote concurrency tests** seed 100 users directly via Drizzle insert (bypassing Argon2id for speed)
-- Test files: 8 in `apps/server/src/` (5 in `routes/`, 2 in `auth/`, 1 `config.test.ts` in root), 2 in `packages/db/src/`, 3 in `packages/shared/src/`, 17 in `apps/web/src/` (including `lib/api.test.ts` from Round 5, `auth/AuthProvider.test.tsx` + `auth/RequireAuth.test.tsx` from Rounds 6-7, `pages/LoginPage.test.tsx` from Round 6, `pages/RegisterPage.test.tsx` + `components/layout/Navbar.test.tsx` from Round 7), 3 E2E specs (`e2e/smoke.spec.ts` + `e2e/auth.spec.ts` + `e2e/live.spec.ts` from Round 8)
-- **Total vitest count: 453** = 95 (server) + 67 (shared) + 29 (db) + 262 (web). Round 7 added 25 new web tests (11 RegisterPage + 8 Navbar + 5 RequireAuth + 1 api register-displayName) on top of the Round 6 baseline of 428. Round 8 did not add vitest tests — it silenced 6 React `act()` warnings in `LoginPage` + `RegisterPage` tests. **E2E: 18 local** (9 smoke + 9 auth lifecycle, added in Round 7) + **12 live-audit** (Round 8, opt-in via `LIVE_BASE_URL`).
+- Test files: 8 in `apps/server/src/` (5 in `routes/`, 2 in `auth/`, 1 `config.test.ts` in root), 2 in `packages/db/src/`, 3 in `packages/shared/src/`, 19 in `apps/web/src/` (including `lib/api.test.ts` from Round 5, `auth/AuthProvider.test.tsx` + `auth/RequireAuth.test.tsx` from Rounds 6-7, `pages/LoginPage.test.tsx` from Round 6, `pages/RegisterPage.test.tsx` + `components/layout/Navbar.test.tsx` from Round 7, `pages/PostPage.test.tsx` + `pages/NotFoundPage.test.tsx` from Round 10), 5 E2E specs (`e2e/smoke.spec.ts` + `e2e/auth.spec.ts` + `e2e/live.spec.ts` from Round 8 + `e2e/live_extended.spec.ts` + `e2e/repro_r10_postpage.spec.ts` from Round 10)
+- **Total vitest count: 462** = 95 (server) + 67 (shared) + 29 (db) + 271 (web). The previously documented total of 428 (Round 6) was superseded when Round 7 added 25 new web tests (11 RegisterPage + 8 Navbar + 5 RequireAuth + 1 api register-displayName) to reach 453; Round 10 added 9 new web tests (3 PostPage + 4 NotFoundPage + 1 Navbar min-w-0 + 1 RegisterPage mismatch + 1 RegisterPage regression - 1 replaced alert-on-mismatch test = net +9) to reach 462. Round 8 did not add vitest tests — it silenced 6 React `act()` warnings in `LoginPage` + `RegisterPage` tests. **E2E: 18 local** (9 smoke + 9 auth lifecycle, added in Round 7) + **12 live-audit** (Round 8, opt-in via `LIVE_BASE_URL`) + **16 extended-live-audit** (Round 10, opt-in via `LIVE_BASE_URL` against the live site OR `PROD_BASE_URL` against a local prod build) + **2 R10 regression guard** (Round 10, opt-in via `PROD_BASE_URL`).
 
 ### Backend Pitfalls
 
@@ -475,19 +532,22 @@ with `NODE_ENV=test` env vars. Playwright reports are uploaded as artifacts.
 ```bash
 npm run lint        # ESLint flat config — 0 errors, 0 warnings
 npm run typecheck   # tsc --noEmit — must pass clean (pretypecheck hook builds shared+db first)
-npm test            # vitest run (all workspaces) — all 453 tests must pass
+npm test            # vitest run (all workspaces) — all 462 tests must pass (R10: was 453)
 npm run test:e2e    # playwright run — 18 tests must pass (9 smoke + 9 auth lifecycle)
 npm run test:build  # asserts dist/index.html is a production build (no Vite dev modules)
 npm run test:no-secrets  # asserts no .env / env.bak / *.env files are tracked by git
 npm run test:gitignore   # asserts no tracked file matches a .gitignore pattern
 npm run test:ci-config   # asserts .github/workflows/ci.yml has a gitleaks job
+npm run test:plan-alignment  # R10: asserts REMEDIATION_PLAN.md has no forbidden tokens
 npm run build       # topological build — must succeed
 git ls-files | grep -E '(^|/)dist/' | wc -l   # must be 0 (no dist/ tracked)
 ```
 
 > **Opt-in checks (not in pre-commit):**
 > - `npm run test:fresh-clone` — simulates a fresh clone and asserts `npm run typecheck` succeeds.
-> - `LIVE_BASE_URL=https://reddit.jesspete.shop/ npm run test:e2e:live` — opt-in live-deployment audit (12 tests). Skipped when `LIVE_BASE_URL` is unset.
+> - `LIVE_BASE_URL=https://reddit.jesspete.shop/ npm run test:e2e:live` — opt-in live-deployment audit (12 + 16 tests). Skipped when `LIVE_BASE_URL` is unset.
+> - `PROD_BASE_URL=http://localhost:8765/ npm run test:local-prod` — R10: runs the extended audit suite against a locally-served prod build.
+> - `PROD_BASE_URL=http://localhost:8765/ npm run test:repro` — R10: runs the React-error-#185 regression guard against a local prod build.
 
 See `CLAUDE.md` §Pre-commit checklist for the canonical list.
 

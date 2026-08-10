@@ -1,3 +1,28 @@
+> **Round 10 status (2026-08-10):** All 7 findings (F1-F7) below have been
+> addressed in Round 10:
+> - **F1 (tRPC vs REST+Zod)**, **F2 (pnpm/Turborepo vs npm)**,
+>   **F3 (RS256 vs HS256)**, **F4 (UUID vs Branded/Sequential IDs)** —
+>   FIXED via `docs/REMEDIATION_PLAN.md` alignment (removed all drift
+>   references) + new `npm run test:plan-alignment` CI gate
+>   (`scripts/verify-plan-alignment.mjs`) that asserts the plan never
+>   re-drifts.
+> - **F5 (ADR revocation vs deferred)** — `REMEDIATION_PLAN.md` §1 now
+>   says "Target State (Pending B17 Execution)" instead of "Revoke".
+>   The ADRs (ADR-001, ADR-003, ADR-004) remain ACTIVE until B17 is
+>   executed.
+> - **F6 (frontend integration deadlock)** — Remains an open design
+>   decision. B17 (BrowserRouter + chunked build) is intentionally
+>   deferred to preserve the "deploy-anywhere" static-hosting story.
+>   No change in Round 10.
+> - **F7 (loss of offline capability)** — `REMEDIATION_PLAN.md` §4.4
+>   now documents the **Hybrid Data Strategy**: React Query attempts
+>   the API first, and on failure / initial load, falls back to the
+>   deterministic `src/data/*` layer.
+>
+> See `docs/REMEDIATION_PLAN_ROUND_10.md` for the full plan.
+
+---
+
 ### 1. Audit & Validation of `docs/REMEDIATION_PLAN.md`
 
 A systematic review of the provided remediation plan against the current codebase state reveals that while the high-level target architecture is sound, the document contains severe internal contradictions and mismatches with the actual implementation.

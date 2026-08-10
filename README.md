@@ -9,7 +9,7 @@ monorepo.
 reddit-clone/
 ├── apps/
 │   ├── web/          ← @embers/web — the original client-only React SPA
-│   │                   (HashRouter, vite-plugin-singlefile, 262 tests;
+│   │                   (HashRouter, vite-plugin-singlefile, 271 tests;
 │   │                    includes `src/lib/api.ts` foundational fetch client
 │   │                    added in Round 5, `src/auth/AuthProvider.tsx` React
 │   │                    context + `useAuth()` hook + 401 refresh-and-retry
@@ -55,7 +55,7 @@ npm run dev        --workspace @embers/server   # http://localhost:4000
 - Client: `http://localhost:5173` — the embers feed (320 posts across 18 communities, generated deterministically in-browser)
 - Server: `curl http://localhost:4000/health` → `{"status":"ok",…}`
 - Demo login (server): `POST /api/auth/login` with `{"username":"you","password":"embers-demo"}` → access token + refresh cookie
-- All tests pass: `npm test` (453 vitest + 18 Playwright E2E)
+- All tests pass: `npm test` (462 vitest + 18 Playwright E2E; plus 30 opt-in live-audit E2E — see Test Status)
 
 ### Quick Start (Docker)
 
@@ -258,7 +258,7 @@ enables HSTS hardening and requires all production secrets via `loadEnv()`.
 ```bash
 npm run lint        # ESLint — 0 errors, 0 warnings
 npm run typecheck   # tsc --noEmit — all 4 workspaces clean
-npm test            # 453 vitest tests (pretest auto-builds shared + db)
+npm test            # 462 vitest tests (pretest auto-builds shared + db)
 npm run build       # topological build — all workspaces succeed
 ```
 
@@ -271,18 +271,20 @@ host (ADR-003 single-file build is still in force for the client).
 
 | Workspace | Tests | Command |
 |-----------|-------|---------|
-| `@embers/web` | 262 | `npm test --workspace @embers/web` |
+| `@embers/web` | 271 | `npm test --workspace @embers/web` |
 | `@embers/shared` | 67 | `npm test --workspace @embers/shared` |
 | `@embers/db` | 29 | `npm test --workspace @embers/db` |
 | `@embers/server` | 95 | `npm test --workspace @embers/server` |
-| **Vitest total** | **453** | `npm test --workspaces --if-present` |
+| **Vitest total** | **462** | `npm test --workspaces --if-present` |
 | E2E — local API (Playwright) | 18 | `npm run test:e2e` |
-| E2E — live audit (opt-in) | 12 | `LIVE_BASE_URL=… npm run test:e2e:live` |
+| E2E — live audit, Round 8 (opt-in) | 12 | `LIVE_BASE_URL=… npm run test:e2e:live` |
+| E2E — extended live, Round 10 (opt-in) | 16 | `npm run test:local-prod` |
+| E2E — repro regression, Round 10 (opt-in) | 2 | `npm run test:repro` |
 | Production-build check | 1 script | `npm run test:build` |
 | Fresh-clone typecheck | 1 script | `npm run test:fresh-clone` |
 | Lint (ESLint) | 0 errors, 0 warnings | `npm run lint` |
 
-All 453 vitest tests + 18 Playwright E2E tests pass (`npm test` — do NOT
+All 462 vitest tests + 18 Playwright E2E tests pass (`npm test` — do NOT
 run `vitest run` from root; it won't discover workspace configs), ESLint is
 clean, and typecheck + build succeed as of Round 8 (2026-08-10).
 
@@ -298,6 +300,15 @@ to build `@embers/shared` + `@embers/db` first via `--workspaces`). Running
 > **R8.3 -- Live-deployment audit is opt-in:** `e2e/live.spec.ts` is excluded
 > from `npm run test:e2e` (it would add 12 always-skipped tests). Run it
 > explicitly via `LIVE_BASE_URL=https://reddit.jesspete.shop/ npm run test:e2e:live`.
+>
+> **R10.4 — Round 10 extended the live-audit E2E coverage:**
+> - `e2e/live_extended.spec.ts` (16 tests) — broader live-deployment assertions;
+>   run via `npm run test:local-prod` (uses `playwright.local-prod.config.ts`).
+> - `e2e/repro_r10_postpage.spec.ts` (2 tests) — regression guard for the
+>   BUG-R10-2 PostPage crash; run via `npm run test:repro` (uses
+>   `playwright.repro.config.ts`).
+> Total opt-in E2E count is now 12 + 16 + 2 = 30 (Round 8 live-audit +
+> Round 10 extended-live + Round 10 repro regression).
 
 Round 8 (2026-08-10) was a **live-deployment audit + codebase hardening**
 round. A browser-based E2E audit against `https://reddit.jesspete.shop/`
@@ -340,6 +351,51 @@ The embers SPA is deployed at **`https://reddit.jesspete.shop/`**.
 
 See `docs/SECRET_ROTATION_GUIDE.md` for the full step-by-step guide.
 See `docs/REMEDIATION_PLAN_ROUND_9.md` for the full incident report and remediation plan.
+
+### Round 10 status (2026-08-10)
+
+Round 10 was a **comprehensive audit-driven remediation round** responding
+to two fresh audit reports (`docs/audit_report_1.md`, `docs/audit_report_2.md`).
+See `docs/REMEDIATION_PLAN_ROUND_10.md` for the full plan.
+
+**Client-side bug fixes (live after the operator redeploys):**
+
+| ID | Fix | Status |
+|----|-----|--------|
+| BUG-R10-2 | `PostPage` React error #185 crash (crash when navigating to a post detail page) | Fixed via TDD |
+| BUG-R10-3 | `NotFoundPage` did not render the `404` text expected by users | Fixed via TDD |
+| BUG-R10-4 | Mobile horizontal overflow (page exceeded viewport width on small screens) | Fixed via TDD |
+| BUG-R10-5 | `RegisterPage` accepted mismatched passwords (no validation) | Fixed via TDD |
+
+These four fixes are committed but **will only be live after the operator
+rebuilds (`npm run build --workspace @embers/web`) and redeploys the SPA**
+to `https://reddit.jesspete.shop/`.
+
+**R9.1 regression — secrets re-leaked in commit `e09e425`:** After Round 9
+had removed `.env` + `env.bak` from git tracking (R9.1), they were
+accidentally re-added to tracking in commit `e09e425 add auti reports`.
+Round 10 removed them again via `git rm --cached .env env.bak`. **The
+secrets are STILL in git history** — now in three commits: `89f1012`,
+`526a836`, AND `e09e425`.
+
+**The operator MUST rotate `JWT_ACCESS_SECRET` + `JWT_REFRESH_SECRET` again**
+(even if they were already rotated after Round 9). The leaked secrets in
+`e09e425` are the same ones Round 9 warned about. See
+`docs/SECRET_ROTATION_GUIDE.md` for the step-by-step guide. Round 10 did
+NOT rewrite git history (force-push risk) — rotation remains the primary
+remediation.
+
+**Other Round 10 changes (repo-side, not deployment-side):**
+
+- `docs/REMEDIATION_PLAN.md` aligned with the codebase — removed tRPC /
+  pnpm / Turborepo / RS256 / UUID drift called out by `audit_report_2`
+  findings F1-F4.
+- New `npm run test:plan-alignment` CI gate
+  (`scripts/verify-plan-alignment.mjs`) asserts the plan never re-drifts.
+- New E2E: `e2e/live_extended.spec.ts` (16 tests) +
+  `e2e/repro_r10_postpage.spec.ts` (2 regression-guard tests), via
+  `npm run test:local-prod` and `npm run test:repro`.
+- Vitest count: 453 → 462 (+9 new `@embers/web` tests; web suite 262 → 271).
 
 ### How to verify the live deployment
 

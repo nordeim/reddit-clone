@@ -1,5 +1,32 @@
-  
- I have thoroughly reviewed all key documentation files fetched directly from the GitHub repository. Below is my comprehensive analysis, validation, and a detailed remediation execution plan.
+> **Round 10 status (2026-08-10):** All 6 findings (F1-F6) below have been
+> addressed in Round 10:
+> - **F1 (tRPC drift)** and **F2 (pnpm drift)** — FIXED via
+>   `docs/REMEDIATION_PLAN.md` alignment (removed tRPC / pnpm / Turborepo
+>   references) + new `npm run test:plan-alignment` CI gate
+>   (`scripts/verify-plan-alignment.mjs`) that asserts the plan never
+>   re-drifts.
+> - **F3 (B17-B22 deferral)** — Remains an open design decision. The
+>   B17 (BrowserRouter + chunked build) refactor is intentionally
+>   deferred to preserve the "deploy-anywhere" static-hosting story.
+>   No change in Round 10.
+> - **F4 (live deployment gaps)** — Confirmed via Round 10 E2E
+>   (`e2e/live_extended.spec.ts`, 16 tests). Operator action is STILL
+>   required: start the Fastify backend + configure the reverse proxy
+>   to route `/api/*` and `/health` to port 5000.
+> - **F5 (secrets in git history)** — **R9.1 regression found and
+>   re-fixed in R10.** `.env` + `env.bak` were re-added to git tracking
+>   in commit `e09e425` (after Round 9 had removed them). Round 10
+>   removed them again via `git rm --cached`. **The secrets are now in
+>   THREE commits:** `89f1012`, `526a836`, AND `e09e425`. **The operator
+>   MUST rotate `JWT_ACCESS_SECRET` + `JWT_REFRESH_SECRET` again.**
+> - **F6 (test infra gaps)** — Prettier config + backend coverage
+>   thresholds are STILL OPEN. No change in Round 10.
+>
+> See `docs/REMEDIATION_PLAN_ROUND_10.md` for the full plan.
+
+---
+
+I have thoroughly reviewed all key documentation files fetched directly from the GitHub repository. Below is my comprehensive analysis, validation, and a detailed remediation execution plan.
 
 ---
 

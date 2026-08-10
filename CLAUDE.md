@@ -48,6 +48,30 @@
 > leaked JWT secrets**. See `docs/REMEDIATION_PLAN_ROUND_9.md`. New
 > pre-commit checks: `npm run test:no-secrets`, `npm run test:gitignore`,
 > `npm run test:ci-config`.
+>
+> **Round 10 (2026-08-10) — audit-driven remediation + R9.1 regression
+> fix:** Round 10 was a comprehensive audit-driven remediation round
+> responding to two fresh audit reports (`docs/audit_report_1.md`,
+> `docs/audit_report_2.md`). (R10.1) Four TDD bug fixes: BUG-R10-2
+> PostPage React error #185 crash, BUG-R10-3 NotFoundPage 404 text,
+> BUG-R10-4 mobile horizontal overflow, BUG-R10-5 RegisterPage
+> password-mismatch validation. (R10.2) `docs/REMEDIATION_PLAN.md`
+> aligned with the codebase — removed tRPC / pnpm / Turborepo / RS256 /
+> UUID drift called out by `audit_report_2` F1-F4. (R10.3) New
+> `npm run test:plan-alignment` CI gate
+> (`scripts/verify-plan-alignment.mjs`) asserts the plan never
+> re-drifts. (R10.4) New E2E: `e2e/live_extended.spec.ts` (16 tests) +
+> `e2e/repro_r10_postpage.spec.ts` (2 regression-guard tests), plus
+> `playwright.local-prod.config.ts` + `playwright.repro.config.ts` and
+> npm scripts `test:local-prod` / `test:repro`. (R10.5) **R9.1
+> regression fixed:** `.env` + `env.bak` were re-added to git tracking
+> in commit `e09e425` (after Round 9 had removed them) — Round 10
+> removed them again via `git rm --cached`. **The operator MUST rotate
+> `JWT_ACCESS_SECRET` + `JWT_REFRESH_SECRET` again** (see
+> `docs/SECRET_ROTATION_GUIDE.md` — the secrets are now in three
+> commits: `89f1012`, `526a836`, `e09e425`). Test count: 453 → 462
+> (+9 new `@embers/web` tests; web suite now 271). See
+> `docs/REMEDIATION_PLAN_ROUND_10.md` for the full plan.
 
 ---
 
@@ -271,7 +295,7 @@ Tests use **Vitest** with **Fastify's `inject()`** — no port binding needed.
 ```bash
 npm run lint        # ESLint flat config — 0 errors, 0 warnings (Round 4)
 npm run typecheck   # tsc --noEmit — must pass clean (R8.1: pretypecheck hook builds shared+db first)
-npm test            # vitest run (all workspaces) — all 453 tests must pass (0 act() warnings, R8.2)
+npm test            # vitest run (all workspaces) — all 462 tests must pass (0 act() warnings, R8.2; R10 added +9 web tests)
 npm run test:e2e    # playwright run — 18 tests must pass (9 smoke + 9 auth lifecycle)
 npm run test:build  # R8.4: asserts dist/index.html is a production build (no Vite dev modules)
 npm run test:no-secrets  # R9.1: asserts no .env / env.bak / *.env files are tracked by git
@@ -281,23 +305,30 @@ npm run build       # topological build — must succeed
 git ls-files | grep -E '(^|/)dist/' | wc -l   # must be 0 (no dist/ tracked)
 ```
 
+> See `AGENTS.md` §Repo Hygiene for dist/ rules and the full pre-commit
+> checklist (session_8 issue M3 was deferred — fixed in Round 10).
+
 > **Opt-in checks (not in pre-commit):**
 > - `npm run test:fresh-clone` — R8.1: simulates a fresh clone and asserts `npm run typecheck` succeeds.
 > - `LIVE_BASE_URL=https://reddit.jesspete.shop/ npm run test:e2e:live` — R8.3: opt-in live-deployment audit (12 tests). Skipped when `LIVE_BASE_URL` is unset.
 
-> **Test count breakdown (453 vitest + 18 e2e + 12 opt-in live):** `@embers/web` = 262
+> **Test count breakdown (462 vitest + 18 e2e + 30 opt-in live):** `@embers/web` = 271
 > (incl. 22 in `src/lib/api.test.ts` from Round 5, 20 in
 > `src/auth/AuthProvider.test.tsx` + 9 api refresh-and-retry + 10 in
 > `src/pages/LoginPage.test.tsx` from Round 6, 11 in
 > `src/pages/RegisterPage.test.tsx` + 8 in `src/components/layout/Navbar.test.tsx`
 > + 5 in `src/auth/RequireAuth.test.tsx` + 1 api register-displayName from
-> Round 7), `@embers/server` = 95, `@embers/shared` = 67, `@embers/db` = 29.
+> Round 7, +9 from Round 10 covering PostPage / NotFoundPage / mobile
+> overflow / RegisterPage validation), `@embers/server` = 95, `@embers/shared` = 67, `@embers/db` = 29.
 > E2E = 18 local (9 smoke from Round 3 + 9 auth lifecycle from Round 7) +
-> 12 live-audit (Round 8, opt-in via `LIVE_BASE_URL`).
+> 12 live-audit (Round 8, opt-in via `LIVE_BASE_URL`) + 16 extended-live
+> (Round 10, `npm run test:local-prod`) + 2 repro regression-guard
+> (Round 10, `npm run test:repro`) = 48 E2E total.
 > The previously documented total of 428 (Round 6) was superseded when
 > Round 7 added the RegisterPage + Navbar + RequireAuth test suites +
 > the E2E auth lifecycle suite. Round 8 did not add vitest tests — it
 > silenced 6 React `act()` warnings in `LoginPage` + `RegisterPage` tests.
+> Round 10 added +9 vitest tests (web suite 262 → 271; total 453 → 462)
 
 **Build-before-test prerequisite (Round 5, extended in Round 8):** `@embers/server`'s test suites import
 `@embers/db` and `@embers/shared` as runtime packages, so their `dist/` builds
@@ -518,7 +549,7 @@ Custom variant, not v3 `darkMode: 'class'`:
 ```
 reddit-clone/
 ├── apps/
-│   ├── web/                 ← @embers/web (React SPA, Vite, 262 tests)
+│   ├── web/                 ← @embers/web (React SPA, Vite, 271 tests)
 │   │   └── src/             # See AGENTS.md for full web tree.
 │   │                        # Note: `lib/api.ts` (Round 5) is the foundational
 │   │                        # fetch-based client, wired into the React tree via
