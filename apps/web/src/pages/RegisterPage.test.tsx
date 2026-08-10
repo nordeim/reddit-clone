@@ -142,7 +142,7 @@ describe("RegisterPage (Slice 1)", () => {
     });
   });
 
-  it("renders an error alert when passwords don't match (client-side validation)", async () => {
+  it("disables the submit button and shows an inline hint when passwords don't match (BUG-R10-5)", async () => {
     const stub = makeStubClient();
     renderRegister({ stubClient: stub });
 
@@ -150,13 +150,48 @@ describe("RegisterPage (Slice 1)", () => {
     await user.type(screen.getByLabelText(/username/i), "newuser");
     await user.type(screen.getByLabelText(/^password$/i), "Password123!");
     await user.type(screen.getByLabelText(/confirm password/i), "DifferentPassword!");
-    await user.click(screen.getByRole("button", { name: /sign up|register|create/i }));
 
+    // Round 10 BUG-R10-5: the submit button MUST be disabled when
+    // passwords don't match (previously only disabled when fields were
+    // empty — the mismatch was caught only on submit).
+    const submitBtn = screen.getByRole("button", { name: /sign up|register|create/i });
     await waitFor(() => {
-      expect(screen.getByRole("alert")).toHaveTextContent(/passwords do not match/i);
+      expect(submitBtn).toBeDisabled();
     });
-    // login should NOT have been called
+
+    // The user must see an inline hint explaining WHY the button is
+    // disabled — purely disabling without feedback is bad UX.
+    expect(screen.getByText(/passwords do not match/i)).toBeInTheDocument();
+
+    // Clicking a disabled button must NOT trigger the form submit.
+    // (userEvent refuses to click disabled elements, so we just assert
+    // the api was never called.)
     expect(stub.calls.login).toHaveLength(0);
+    expect(stub.calls.register).toHaveLength(0);
+  });
+
+  it("regression: submit is enabled and registration succeeds when passwords match", async () => {
+    const stub = makeStubClient();
+    renderRegister({ stubClient: stub });
+
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText(/username/i), "newuser");
+    await user.type(screen.getByLabelText(/^password$/i), "Password123!");
+    await user.type(screen.getByLabelText(/confirm password/i), "Password123!");
+
+    // Button must be ENABLED when all fields are valid.
+    const submitBtn = screen.getByRole("button", { name: /sign up|register|create/i });
+    await waitFor(() => {
+      expect(submitBtn).toBeEnabled();
+    });
+
+    await user.click(submitBtn);
+
+    // Both register and login must have been called.
+    await waitFor(() => {
+      expect(stub.calls.register).toHaveLength(1);
+      expect(stub.calls.login).toHaveLength(1);
+    });
   });
 
   it("renders an error alert when username is too short (client-side validation)", async () => {

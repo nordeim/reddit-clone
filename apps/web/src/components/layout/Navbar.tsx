@@ -40,7 +40,7 @@ export function Navbar({ onMenuClick }: { onMenuClick: () => void }) {
         </span>
       </Link>
 
-      <div className="mx-auto w-full max-w-xl flex-1">
+      <div className="mx-auto w-full max-w-xl flex-1 min-w-0">
         <SearchBar />
       </div>
 

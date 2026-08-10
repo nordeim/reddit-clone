@@ -206,3 +206,27 @@ describe("Navbar — auth-aware (Slice 2)", () => {
     });
   });
 });
+
+/**
+ * Round 10 BUG-R10-4 — mobile horizontal overflow.
+ *
+ * The Navbar's search-bar wrapper lacked `min-w-0`, so on a 375px
+ * viewport the SearchBar's <input> (intrinsic min ~200px) prevented
+ * the flex item from shrinking, pushing the right-side
+ * `Create + Log in + Sign up` cluster past the viewport (37px overflow).
+ *
+ * The fix: add `min-w-0` to the wrapper so flexbox can shrink it below
+ * the input's intrinsic size.
+ */
+describe("Navbar — mobile overflow fix (BUG-R10-4)", () => {
+  it("the SearchBar wrapper has `min-w-0` so flex can shrink it on mobile", () => {
+    const stub = makeStubClient();
+    renderNavbar({ stubClient: stub });
+    // The SearchBar wrapper is a <div> with classes that include
+    // "mx-auto w-full max-w-xl flex-1". After the fix, it must also
+    // include "min-w-0".
+    const searchBarWrapper = document.querySelector("header > div.mx-auto.w-full.max-w-xl");
+    expect(searchBarWrapper, "SearchBar wrapper div must exist").not.toBeNull();
+    expect(searchBarWrapper?.className, "must contain min-w-0").toContain("min-w-0");
+  });
+});

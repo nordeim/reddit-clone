@@ -166,6 +166,16 @@ export function RegisterPage() {
               disabled={submitting}
               className="w-full rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-2 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50"
             />
+            {/* Round 10 BUG-R10-5: real-time inline hint so the user knows
+                why the submit button is disabled when passwords don't match. */}
+            {confirmPassword.length > 0 && password !== confirmPassword && (
+              <p
+                role="note"
+                className="text-xs text-red-600 dark:text-red-400"
+              >
+                Passwords do not match.
+              </p>
+            )}
           </div>
 
           {error && (
@@ -183,7 +193,13 @@ export function RegisterPage() {
               submitting ||
               username.length === 0 ||
               password.length === 0 ||
-              confirmPassword.length === 0
+              confirmPassword.length === 0 ||
+              // Round 10 BUG-R10-5: disable when passwords don't match so
+              // the user gets immediate feedback (the inline hint above
+              // the button explains why). Previously the button stayed
+              // enabled and the mismatch was only caught on submit,
+              // causing confusing UX where clicking produced an error.
+              password !== confirmPassword
             }
             aria-busy={submitting}
             className="w-full rounded-md bg-orange-600 hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium px-4 py-2 transition-colors"

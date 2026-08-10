@@ -18,10 +18,23 @@ import { timeAgo } from "../utils/format";
 import { CURRENT_USER } from "../data/users";
 import type { Comment } from "../types";
 
+// Module-scope stable empty array (Round 10, BUG-R10-2).
+// The previous selector `s.localComments[postId] ?? []` returned a NEW
+// array reference on every render. React 19's stricter useSyncExternalStore
+// (used internally by zustand) detected the unstable snapshot and
+// infinite-looped with "Maximum update depth exceeded" (React error
+// #185). The ErrorBoundary caught the crash and rendered the fallback
+// UI on every post detail page on the live site.
+//
+// Using a module-scope constant keeps the snapshot referentially stable
+// when `s.localComments[postId]` is undefined, which is the initial
+// state for every post the user has not yet commented on.
+const EMPTY_COMMENTS: readonly Comment[] = [];
+
 export function PostPage() {
   const { postId = "" } = useParams();
   const localPosts = useAppStore((s) => s.localPosts);
-  const localComments = useAppStore((s) => s.localComments[postId] ?? []);
+  const localComments = useAppStore((s) => s.localComments[postId] ?? EMPTY_COMMENTS);
   const addLocalComment = useAppStore((s) => s.addLocalComment);
 
   const post = useMemo(
