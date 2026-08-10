@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import {
@@ -211,10 +211,16 @@ describe("RegisterPage (Slice 1)", () => {
       expect(screen.getByRole("button")).toBeDisabled();
     });
 
-    // Cleanup: resolve so the test doesn't hang.
-    resolveLogin({
-      accessToken: "tok",
-      user: makeUser("newuser"),
+    // Cleanup: resolve so the test doesn't hang. Wrap in act() so React
+    // flushes the resulting AuthProvider state update (status: authenticated)
+    // before the test unmounts — otherwise React emits
+    // "An update to AuthProvider inside a test was not wrapped in act(...)".
+    await act(async () => {
+      resolveLogin({
+        accessToken: "tok",
+        user: makeUser("newuser"),
+      });
+      await Promise.resolve();
     });
   });
 
