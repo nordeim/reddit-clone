@@ -255,9 +255,9 @@ Each phase requires passing automated tests before proceeding.
 *   [ ] **B21: Optimistic UI.** Implement React Query `onMutate` and `onError` for voting and commenting. *Test: Network throttling shows instant UI update, and API failure rolls back the UI.*
 *   [ ] **B22: Notification UI.** Wire polling/websockets for unread counts. *Test: Creating a comment in another tab updates the notification bell count.*
 
-**Phase B23-B24: Deployment & Final Gates** *(DEFERRED — pre-deployment concern)*
-*   [ ] **B23: CI/CD & Docker.** Multi-stage Dockerfile (Node Alpine). GitHub Actions pipeline. *Test: Pipeline runs lint, typecheck, unit tests, and builds image.*
-*   [ ] **B24: E2E Testing.** Playwright tests for critical paths. *Test: Playwright registers user, creates post, votes, and logs out successfully.*
+**Phase B23-B24: Deployment & Final Gates** *(Done in Round 3 — 2026-08-10)*
+*   [x] **B23: CI/CD & Docker.** Multi-stage Dockerfile (Node 20 bookworm-slim). GitHub Actions pipeline (`.github/workflows/ci.yml`) with 3 jobs: `test` → `build` → `e2e`. *Test: Pipeline runs lint, typecheck, unit tests, and builds image.* (See `Dockerfile`, `.dockerignore`, `docker-compose.yml`, `.github/workflows/ci.yml`. Round 3 also added a `test:e2e` job that runs the Playwright suite.)
+*   [x] **B24: E2E Testing.** Playwright tests for critical paths. *Test: Playwright hits /health, registers a user, logs in, lists posts, queries search, lists communities.* (See `e2e/smoke.spec.ts` — 9 tests, all green. `e2e/start-server.ts` bootstraps a fresh seeded DB at `/tmp/embers-e2e.db` before starting the server.)
 
 ---
 

@@ -9,9 +9,14 @@
 >   - `@embers/db` (`packages/db/`) — Drizzle ORM + SQLite + FTS5 + seed
 >
 > See `docs/REMEDIATION_EXECUTION_PLAN.md` for the full execution log
-> (Phases B0–B16 done, B17–B24 deferred). The architecture notes below
-> remain accurate for `apps/web/` unchanged — every path mentioned is
-> relative to `apps/web/` (e.g. `src/data/posts.ts` is `apps/web/src/data/posts.ts`).
+> (Phases B0–B16 done, B17–B22 deferred, B23 + B24 done in Round 3).
+> Round 3 (2026-08-10) also fixed a pre-existing failing test in
+> `apps/server/src/routes/api.test.ts` and untracked 96 accidentally-committed
+> `dist/` build artifacts. See `docs/REMEDIATION_PLAN_ROUND_3.md` for the
+> full Round 3 plan and verification ledger.
+> The architecture notes below remain accurate for `apps/web/` unchanged —
+> every path mentioned is relative to `apps/web/` (e.g. `src/data/posts.ts`
+> is `apps/web/src/data/posts.ts`).
 
 ---
 
@@ -214,3 +219,59 @@ Local ids are timestamp-based (`local-${Date.now()}` for posts, `${postId}-c${Da
 ## Routes (`src/App.tsx`)
 
 `/`, `/popular`, `/all` and `/explore` all render `HomePage`, which derives its scope from `location.pathname`. Remaining: `/r/:name`, `/comments/:postId`, `/u/:username`, `/search?q=`, `/notifications`, and `*` → `NotFoundPage`. All pages render inside `AppShell` via `<Outlet />`.
+
+## Docker (B23 — Round 3)
+
+A multi-stage `Dockerfile` at the repo root builds a production image for
+`@embers/server` only. The client SPA is not containerised (ADR-003 single-file
+build is still in force).
+
+| File | Purpose |
+| --- | --- |
+| `Dockerfile` | Multi-stage Node 20 build: builder stage runs `npm ci` + `npm run build` + `npm prune --omit=dev`; runner stage copies `dist/` + production `node_modules/`. `CMD ["node", "apps/server/dist/index.js"]`. |
+| `.dockerignore` | Excludes `node_modules`, `**/dist`, `*.db*`, `.git`, `skills/`, `docs/`, `e2e/` from the build context. |
+| `docker-compose.yml` | Single `embers-server` service: builds from `Dockerfile`, maps port 4000, mounts `embers-data` volume for `/data/dev.db`, requires `JWT_ACCESS_SECRET` + `JWT_REFRESH_SECRET` from `.env`. |
+| `.github/workflows/ci.yml` | GitHub Actions: `test` (typecheck + vitest) → `build` (all workspaces) → `e2e` (Playwright). Runs on push + PR to `main`. |
+
+**Production secrets:** the image refuses to start without `JWT_ACCESS_SECRET`
+and `JWT_REFRESH_SECRET` (each ≥32 chars) — enforced by `loadEnv()` in
+`apps/server/src/config.ts`. Provide them via `docker compose --env-file .env`
+or `docker run -e JWT_ACCESS_SECRET=… -e JWT_REFRESH_SECRET=…`.
+
+## E2E Testing — Playwright (B24 — Round 3)
+
+| File | Purpose |
+| --- | --- |
+| `playwright.config.ts` | Single chromium project, `webServer` that runs `npx tsx e2e/start-server.ts` with a fresh seeded DB at `/tmp/embers-e2e.db`. |
+| `e2e/start-server.ts` | Bootstrap script: deletes prior DB → opens + migrates + seeds → starts Fastify on the same process (shares the DB handle). |
+| `e2e/smoke.spec.ts` | 9 smoke tests: `/health`, register+login, login demo user, login wrong password, feed list, single post, search, empty-q 422, communities list. |
+
+**Run locally:**
+
+```bash
+npm run test:e2e:install   # one-time: install chromium browser
+npm run test:e2e           # runs the 9 smoke tests against a fresh seeded DB
+```
+
+**Run in CI:** the GitHub Actions `e2e` job (see `.github/workflows/ci.yml`)
+installs Playwright, builds the server workspaces, and runs `npx playwright test`
+with `NODE_ENV=test` env vars. Playwright reports are uploaded as artifacts.
+
+**Conventions:**
+- The `webServer` config starts the server with `DATABASE_URL=/tmp/embers-e2e.db`
+  (file-based, not in-memory — better-sqlite3 in-memory DBs are per-connection,
+  so a separate seed process and server process would each get an empty DB).
+- `reuseExistingServer: !process.env.CI` — local dev reuses a running server
+  on port 4000 if one exists; CI always starts a fresh one.
+- `workers: 1` — the seeded DB is shared across tests; parallel workers would
+  race on auth state. Tests are sequential by design.
+- `fullyParallel: false` — same reason.
+
+## Repo Hygiene (Round 3)
+
+- `dist/` directories are gitignored (`.gitignore` lines: `dist/`,
+  `apps/server/dist/`, `packages/*/dist/`). **Never commit build artifacts.**
+- If you see `dist/` files in `git status`, you probably ran `npm run build`
+  and then `git add .` — use `git add -A` followed by `git status` to verify,
+  or use `git add <specific files>` instead.
+- Pre-commit check: `git ls-files | grep -E '(^|/)dist/' | wc -l` must return 0.

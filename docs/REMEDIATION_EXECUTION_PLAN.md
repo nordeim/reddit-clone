@@ -718,3 +718,113 @@ directly via the JWT helpers. Each vote request only does JWT verification
 | **Total** | **346** | **367** | **+21** |
 
 End of Round 2.
+
+---
+
+## 9. Round 3 — Test fix, repo hygiene, B23 Docker + CI, B24 Playwright (2026-08-10)
+
+Round 3 was triggered by re-validating `docs/REMEDIATION_PLAN.md` against the
+codebase. Two real gaps were found that the Round 2 verification ledger had
+not surfaced, plus the deferred B23 + B24 were finally landed.
+
+### 9.1 Root causes found by re-validation
+
+**Gap R3-1 — A failing test that was reported as passing.**
+
+`apps/server/src/routes/api.test.ts` → "returns a tree with children arrays"
+had been failing silently. The Round 2 ledger (§8.3) claims "367 tests pass"
+but the actual count was 366 passing + 1 failing.
+
+Root cause: the test iterated the first 5 posts and inspected only
+`body.data[0]` (the highest-scored root comment) per post, asserting
+`Array.isArray(first.children)`. When the highest-scored root comment had no
+replies (a function of seed-data ordering, not a bug), the test silently
+moved on. If none of the top 5 posts had a highest-scored root comment with
+replies, the test failed with `expected false to be true`.
+
+**Fix:** rewrote the test to iterate *all* root comments of each post (not
+just `body.data[0]`), assert `Array.isArray(children)` on every node, and
+verify that at least one post has a root comment with non-empty `children`.
+The contract is unchanged; only the iteration logic is more robust. Test
+count unchanged at 46 in `api.test.ts`.
+
+**Gap R3-2 — 96 accidentally-committed `dist/` build artifacts.**
+
+Commit `16d482c` "remediation 3" force-added 96 compiled files under
+`apps/server/dist/`, `apps/web/dist/`, `packages/db/dist/`, and
+`packages/shared/dist/`. The `.gitignore` already listed these paths but
+gitignore rules don't apply to already-tracked files.
+
+**Fix:** `git rm -r --cached apps/server/dist apps/web/dist packages/db/dist packages/shared/dist` — untracks without deleting from disk. Files
+remain locally for development; they simply are no longer in git's index.
+Pre-commit check added to `CLAUDE.md`: `git ls-files | grep -E '(^|/)dist/' | wc -l` must return 0.
+
+### 9.2 B23 — Docker + GitHub Actions CI (lands in Round 3)
+
+| File | Purpose |
+| --- | --- |
+| `Dockerfile` | Multi-stage Node 20 build. Builder stage: `npm ci` + `npm run build` + `npm prune --omit=dev`. Runner stage: copies only `dist/` + production `node_modules/` + migrations. `CMD ["node", "apps/server/dist/index.js"]`. Healthcheck via `node -e "fetch('/health')…"`. |
+| `.dockerignore` | Excludes `node_modules`, `**/dist`, `*.db*`, `.git`, `skills/`, `docs/`, `e2e/` from the build context. |
+| `docker-compose.yml` | Single `embers-server` service: builds from `Dockerfile`, port 4000, `embers-data` volume for `/data/dev.db`, requires `JWT_ACCESS_SECRET` + `JWT_REFRESH_SECRET` from `.env`. |
+| `.github/workflows/ci.yml` | Three jobs: `test` (typecheck + vitest) → `build` (all workspaces, upload `dist/` artifacts) → `e2e` (Playwright smoke). Runs on push + PR to `main`. Concurrency cancels in-progress runs for the same ref. |
+
+### 9.3 B24 — Playwright E2E smoke suite (lands in Round 3)
+
+| File | Purpose |
+| --- | --- |
+| `playwright.config.ts` | Single chromium project, `webServer` runs `npx tsx e2e/start-server.ts` with a fresh seeded DB at `/tmp/embers-e2e.db`. `workers: 1`, `fullyParallel: false` (shared DB). |
+| `e2e/start-server.ts` | Bootstrap: deletes prior DB → opens + migrates + seeds → starts Fastify on the same process (shares the DB handle). Uses workspace-relative imports because `e2e/` is not a workspace package. |
+| `e2e/smoke.spec.ts` | 9 smoke tests covering: `/health`, register+login, login demo user, login wrong password, feed list, single post, search, empty-q 422, communities list. |
+
+The suite uses a file-based DB (`/tmp/embers-e2e.db`) rather than `:memory:`
+because better-sqlite3 in-memory DBs are per-connection — a separate seed
+process and server process would each get their own empty DB.
+
+### 9.4 Documentation updates
+
+- `README.md` — test status table updated (added Playwright row, "Vitest total"
+  label); added Docker quick-start section; updated "Deferred" list to mark
+  B23 + B24 as done in Round 3.
+- `AGENTS.md` — added "Docker (B23)" section, "E2E Testing — Playwright (B24)"
+  section, "Repo Hygiene (Round 3)" section. Updated the header banner.
+- `CLAUDE.md` — updated pre-commit checklist with `npm run test:e2e` and
+  `git ls-files | grep dist` checks. Added "Round 3 additions" subsection.
+- `docs/REMEDIATION_PLAN.md` §6 — B23 and B24 status updated from
+  "DEFERRED" to "Done in Round 3".
+- `docs/REMEDIATION_PLAN_ROUND_3.md` — new file documenting the full Round 3
+  plan, pre-mortem, and verification ledger.
+
+### 9.5 Verification (Round 3)
+
+| Check | Result |
+|---|---|
+| Previously-failing test | 95/95 passing in `@embers/server` (was 94/95) |
+| All vitest workspaces | 367/367 passing (176 web + 67 shared + 29 db + 95 server) |
+| `npm run typecheck` (topological order) | Exit 0 for all 4 workspaces |
+| `npm run build` | All 4 `dist/` folders emitted, exit 0 |
+| `npm run test:e2e` (Playwright) | 9/9 passing |
+| `dist/` untracked | `git ls-files \| grep -E '(^\|/)dist/" \| wc -l` returns 0 |
+| `Dockerfile` syntax | Valid (multi-stage, healthcheck, non-root-friendly) |
+| `docker-compose.yml` syntax | Valid (single service, volume, env vars) |
+| GitHub Actions YAML | Valid (3 jobs, dependency chain, artifact uploads) |
+
+### 9.6 Test count delta (Round 3)
+
+| Workspace | Round 2 | Round 3 | Delta |
+|---|---|---|---|
+| `@embers/web` | 176 | 176 | 0 |
+| `@embers/shared` | 67 | 67 | 0 |
+| `@embers/db` | 29 | 29 | 0 |
+| `@embers/server` | 95 (1 failing) | 95 (0 failing) | 0 (count unchanged; 1 previously-failing test now passes) |
+| Playwright E2E | 0 | 9 | +9 (new) |
+| **Total** | **367 (1 failing)** | **367 + 9 E2E (all green)** | **+9 E2E, +1 previously-failing now passing** |
+
+### 9.7 Still deferred (B17–B22)
+
+The frontend refactor (B17 BrowserRouter + remove singlefile, B18–B22 React
+Query + Axios + optimistic UI + auth-aware UI + notification UI) remains
+deferred. It requires breaking changes to the working client SPA's 176 tests
+and is tracked for a dedicated frontend refactor pass. See §5 of this
+document.
+
+End of Round 3.

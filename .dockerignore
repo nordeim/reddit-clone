@@ -1,0 +1,57 @@
+# embers — .dockerignore
+# Keep the build context small so `docker build` is fast.
+
+# VCS
+.git
+.gitignore
+.gitattributes
+
+# Dependencies (installed inside the builder stage)
+node_modules
+**/node_modules
+
+# Build artifacts (regenerated inside the builder stage)
+**/dist
+**/.tsbuildinfo
+
+# Test artifacts
+**/coverage
+**/.nyc_output
+
+# Database files (mounted as volumes in production)
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+packages/db/dev.db
+
+# Environment files (must be provided at runtime, not baked into the image)
+.env
+.env.local
+.env.*.local
+
+# Editor / OS cruft
+.DS_Store
+Thumbs.db
+.vscode
+.idea
+*.swp
+
+# Local skill library (not needed in the production image)
+skills/
+
+# Documentation (not needed at runtime)
+docs/
+README.md
+AGENTS.md
+CLAUDE.md
+
+# Playwright / E2E test artifacts
+playwright-report/
+test-results/
+e2e/.auth/
+
+# Plan / scratch
+plan/
+backup/
+bak.git/

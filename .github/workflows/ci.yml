@@ -1,0 +1,146 @@
+# embers — Continuous Integration
+#
+# Runs on every push to main and every pull request targeting main.
+# Jobs:
+#   1. test    — install deps, typecheck, run all vitest workspaces
+#   2. build   — build all workspaces, upload dist/ artifacts
+#   3. e2e     — Playwright smoke tests against a fresh server
+#
+# The workflow uses Node 20 (matches the engines constraint in package.json
+# and the Dockerfile base image).
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel in-progress runs for the same ref when a new commit lands.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test (Node 20, ubuntu-latest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Typecheck (all workspaces)
+        run: npm run typecheck
+
+      - name: Test (all workspaces)
+        run: npm test --workspaces --if-present
+
+      - name: Upload vitest coverage (if produced)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vitest-coverage
+          path: |
+            **/coverage/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  build:
+    name: Build (all workspaces)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: test
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Build (topological order)
+        run: npm run build
+
+      - name: Verify build artifacts exist
+        run: |
+          test -f apps/server/dist/index.js
+          test -f apps/web/dist/index.html
+          test -f packages/shared/dist/index.js
+          test -f packages/db/dist/index.js
+
+      - name: Upload server dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-dist
+          path: apps/server/dist/
+          retention-days: 7
+
+      - name: Upload web dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: apps/web/dist/
+          retention-days: 7
+
+  e2e:
+    name: E2E smoke (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: build
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Build server + shared + db (for E2E)
+        run: |
+          npm run build --workspace @embers/shared
+          npm run build --workspace @embers/db
+          npm run build --workspace @embers/server
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright smoke tests
+        run: npx playwright test
+        env:
+          # E2E tests use a fresh in-memory DB; no persistent secrets needed.
+          NODE_ENV: test
+          JWT_ACCESS_SECRET: e2e-test-access-secret-32-chars-minimum-length
+          JWT_REFRESH_SECRET: e2e-test-refresh-secret-32-chars-minimum-length
+          CORS_ORIGIN: "*"
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7

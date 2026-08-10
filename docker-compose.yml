@@ -1,0 +1,51 @@
+# embers — local Docker Compose orchestration
+# Starts the Fastify backend in a container with a persistent SQLite volume.
+#
+# Usage:
+#   docker compose up --build      # build + start
+#   docker compose up              # start (uses existing image)
+#   docker compose down            # stop + remove container (volume persists)
+#   docker compose logs -f         # tail logs
+#
+# The client SPA is NOT containerised here — it is built separately via
+# `npm run build --workspace @embers/web` and served from a static host.
+# See docs/REMEDIATION_PLAN.md §4 (ADR-003 single-file build is still in force).
+
+services:
+  embers-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: embers/server:latest
+    container_name: embers-server
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 4000
+      DATABASE_URL: /data/dev.db
+      LOG_LEVEL: info
+      # Required secrets — read from .env (gitignored). The server refuses to
+      # start if these are missing or shorter than 32 chars (enforced by loadEnv()).
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?must be set in .env — minimum 32 chars}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?must be set in .env — minimum 32 chars}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
+    volumes:
+      # Persistent SQLite database — survives container recreation.
+      - embers-data:/data
+      # Optionally mount the seed script for one-off `docker compose exec` runs:
+      #   docker compose exec embers-server node packages/db/scripts/seed.js
+      - ./packages/db/scripts:/app/packages/db/scripts:ro
+      - ./packages/db/src/migrations:/app/packages/db/src/migrations:ro
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+volumes:
+  embers-data:
+    driver: local

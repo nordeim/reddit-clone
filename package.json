@@ -10,6 +10,8 @@
     "dev": "npm run dev --workspaces --if-present",
     "build": "npm run build --workspace @embers/shared && npm run build --workspace @embers/db && npm run build --workspace @embers/server && npm run build --workspace @embers/web",
     "test": "npm run test --workspaces --if-present",
+    "test:e2e": "playwright test",
+    "test:e2e:install": "playwright install --with-deps chromium",
     "typecheck": "npm run typecheck --workspace @embers/shared && npm run typecheck --workspace @embers/db && npm run typecheck --workspace @embers/server && npm run typecheck --workspace @embers/web",
     "db:migrate": "npm run migrate --workspace @embers/db --if-present",
     "db:seed": "npm run seed --workspace @embers/db --if-present",
@@ -23,5 +25,8 @@
     "esbuild": true,
     "argon2@0.41.1": true,
     "better-sqlite3@13.0.3": true
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1"
   }
 }

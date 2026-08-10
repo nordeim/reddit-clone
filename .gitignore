@@ -27,3 +27,11 @@ packages/*/dist/
 .env
 .env.local
 .env.*.local
+
+# Playwright / E2E test artifacts (B24)
+playwright-report/
+test-results/
+e2e/.auth/
+blob-report/
+playwright/.cache/
+

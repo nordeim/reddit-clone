@@ -8,7 +8,8 @@
 > Run workspace-scoped commands via `npm test --workspace @embers/web`,
 > `npm run typecheck --workspace @embers/web`, etc. See `README.md` for
 > the full monorepo layout and `docs/REMEDIATION_EXECUTION_PLAN.md` for
-> the execution log.
+> the execution log (B0–B16 done, B17–B22 deferred, B23 + B24 done in
+> Round 3 — see §9 of that file).
 
 ---
 
@@ -232,8 +233,21 @@ Tests use **Vitest** with **Fastify's `inject()`** — no port binding needed.
 ```bash
 npm run typecheck   # tsc --noEmit — must pass clean
 npm test            # vitest run (all workspaces) — all 367 tests must pass
+npm run test:e2e    # playwright run — 9 smoke tests must pass (B24, Round 3)
 npm run build       # topological build — must succeed
+git ls-files | grep -E '(^|/)dist/' | wc -l   # must be 0 (no dist/ tracked)
 ```
+
+**Round 3 additions:**
+- `Dockerfile` + `docker-compose.yml` + `.dockerignore` at repo root (B23).
+- `.github/workflows/ci.yml` runs typecheck + test + build + e2e on push/PR.
+- `playwright.config.ts` + `e2e/smoke.spec.ts` + `e2e/start-server.ts` (B24).
+- `npm run test:e2e` runs the 9 Playwright smoke tests.
+- `npm run test:e2e:install` installs the chromium browser (one-time).
+- `dist/` artifacts must NEVER be committed. The previous `remediation 3`
+  commit (16d482c) accidentally force-added 96 build artifacts; Round 3
+  untracked them via `git rm -r --cached`. Pre-commit check above enforces
+  this going forward.
 
 ## UI Conventions
 

@@ -44,6 +44,32 @@ npm run dev        --workspace @embers/server   # http://localhost:4000
 - Server: `curl http://localhost:4000/health` → `{"status":"ok",…}`
 - Demo login (server): `POST /api/auth/login` with `{"username":"you","password":"embers-demo"}`
 
+### Quick Start (Docker)
+
+```bash
+# 1. Create a .env file with the required production secrets
+cat > .env <<EOF
+JWT_ACCESS_SECRET=$(openssl rand -hex 32)
+JWT_REFRESH_SECRET=$(openssl rand -hex 32)
+CORS_ORIGIN=http://localhost:5173
+EOF
+
+# 2. Build and start the server container (port 4000, persistent SQLite volume)
+docker compose up --build -d
+
+# 3. Verify
+curl http://localhost:4000/health   # → {"status":"ok",…}
+docker compose logs -f embers-server
+
+# 4. Stop and remove the container (volume persists)
+docker compose down
+```
+
+The Dockerfile is a multi-stage Node 20 build that produces a production image
+for `@embers/server` only. The client SPA is not containerised — it is built
+separately via `npm run build --workspace @embers/web` and served from a static
+host (ADR-003 single-file build is still in force for the client).
+
 ## Test Status
 
 | Workspace | Tests | Command |
@@ -52,7 +78,12 @@ npm run dev        --workspace @embers/server   # http://localhost:4000
 | `@embers/shared` | 67 | `npm test --workspace @embers/shared` |
 | `@embers/db` | 29 | `npm test --workspace @embers/db` |
 | `@embers/server` | 95 | `npm test --workspace @embers/server` |
-| **Total** | **367** | `npm test --workspaces --if-present` |
+| **Vitest total** | **367** | `npm test --workspaces --if-present` |
+| E2E (Playwright) | 9 | `npm run test:e2e` |
+
+All 367 vitest tests + 9 Playwright E2E smoke tests pass as of Round 3 (2026-08-10).
+See `docs/REMEDIATION_EXECUTION_PLAN.md` §9 for the Round 3 changelog (test fix,
+`dist/` untracking, B23 Docker + CI, B24 Playwright).
 
 ## Architecture Decision Records
 
@@ -76,8 +107,9 @@ npm run dev        --workspace @embers/server   # http://localhost:4000
 **Deferred (B17–B24, see `docs/REMEDIATION_EXECUTION_PLAN.md` §5):**
 - ADR-105 — React Query + Zustand split (requires breaking client refactor)
 - ADR-106 — BrowserRouter + chunked Vite build (requires removing single-file)
-- B23 — Docker, GitHub Actions
-- B24 — Playwright E2E
+- B17–B22 — Frontend integration (React Query, Axios, optimistic UI, auth-aware UI)
+- ~~B23 — Docker, GitHub Actions~~ **Done in Round 3** (see `Dockerfile`, `docker-compose.yml`, `.github/workflows/ci.yml`)
+- ~~B24 — Playwright E2E~~ **Done in Round 3** (see `e2e/smoke.spec.ts`, `playwright.config.ts`)
 
 ## Documentation Map
 
