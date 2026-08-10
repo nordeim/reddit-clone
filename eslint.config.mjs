@@ -202,4 +202,27 @@ export default tseslint.config(
       'no-console': 'off', // CLI scripts use console.log for user-facing output
     },
   },
+
+  // ---------------------------------------------------------------------------
+  // 8. Repo-root scripts/ (R8.1, R8.4) — Node.js ESM verification scripts
+  // ---------------------------------------------------------------------------
+  {
+    files: ['scripts/**/*.{mjs,js,cjs,ts}'],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+      },
+    },
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'error',
+      '@typescript-eslint/consistent-type-imports': 'error',
+      'no-console': 'off', // verification scripts log to stdout
+      'no-unused-vars': 'off',
+      '@typescript-eslint/no-unused-vars': ['error', {
+        argsIgnorePattern: '^_',
+        varsIgnorePattern: '^_',
+        caughtErrorsIgnorePattern: '^_',
+      }],
+    },
+  },
 );
