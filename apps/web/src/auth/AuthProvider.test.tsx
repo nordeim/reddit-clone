@@ -98,7 +98,7 @@ describe("AuthProvider — initial state (Slice 1)", () => {
     });
   });
 
-  it("logout stub rejects with 'not implemented' (Slice 1 — replaced in Slice 3)", async () => {
+  it("logout() when already anonymous is a no-op (Slice 3 — replaced the Slice 1 'not implemented' stub)", async () => {
     const { captured, Captor } = captureAuth();
     render(
       <AuthProvider>
@@ -106,10 +106,9 @@ describe("AuthProvider — initial state (Slice 1)", () => {
       </AuthProvider>
     );
     await act(async () => {
-      await expect(captured.current!.logout()).rejects.toThrow(
-        "not implemented"
-      );
+      await expect(captured.current!.logout()).resolves.toBeUndefined();
     });
+    expect(captured.current!.status).toBe("anonymous");
   });
 
   it("useAuth() throws when called outside the provider", () => {
@@ -250,8 +249,14 @@ describe("AuthProvider — login() (Slice 2)", () => {
       expect(captured.current!.status).toBe("authenticated");
     });
   });
+});
 
-  it("login() stores the access token internally so subsequent api calls can use it (Slice 5 will exercise this)", async () => {
+// ---------------------------------------------------------------------------
+// Slice 3 — logout() clears state
+// ---------------------------------------------------------------------------
+
+describe("AuthProvider — logout() (Slice 3)", () => {
+  it("logout() calls api.logout() exactly once", async () => {
     const stub = makeStubClient();
     const { captured, Captor } = captureAuth();
     render(
@@ -259,11 +264,129 @@ describe("AuthProvider — login() (Slice 2)", () => {
         <Captor />
       </AuthProvider>
     );
+
     await act(async () => {
       await captured.current!.login("you", "embers-demo");
     });
+    await act(async () => {
+      await captured.current!.logout();
+    });
+    expect(stub.calls.logout).toBe(1);
+  });
+
+  it("logout() resets user to null and status to anonymous", async () => {
+    const stub = makeStubClient();
+    const { captured, Captor } = captureAuth();
+    render(
+      <AuthProvider apiClientFactory={() => stub}>
+        <Captor />
+      </AuthProvider>
+    );
+
+    await act(async () => {
+      await captured.current!.login("you", "embers-demo");
+    });
+    await waitFor(() => expect(captured.current!.status).toBe("authenticated"));
+
+    await act(async () => {
+      await captured.current!.logout();
+    });
     await waitFor(() => {
-      expect(captured.current!.status).toBe("authenticated");
+      expect(captured.current!.status).toBe("anonymous");
+    });
+    expect(captured.current!.user).toBeNull();
+  });
+
+  it("logout() clears the access token internally", async () => {
+    // Indirect assertion: after logout, status='anonymous' which only
+    // happens if the token ref was cleared. Slice 5 will exercise the
+    // getToken path directly.
+    const stub = makeStubClient();
+    const { captured, Captor } = captureAuth();
+    render(
+      <AuthProvider apiClientFactory={() => stub}>
+        <Captor />
+      </AuthProvider>
+    );
+
+    await act(async () => {
+      await captured.current!.login("you", "embers-demo");
+    });
+    await act(async () => {
+      await captured.current!.logout();
+    });
+    await waitFor(() => {
+      expect(captured.current!.status).toBe("anonymous");
+    });
+    expect(captured.current!.user).toBeNull();
+  });
+
+  it("logout() resolves even if api.logout() rejects (best-effort client-side cleanup)", async () => {
+    const stub = makeStubClient({
+      logout: async () => {
+        throw new Error("network failure");
+      },
+    });
+    const { captured, Captor } = captureAuth();
+    render(
+      <AuthProvider apiClientFactory={() => stub}>
+        <Captor />
+      </AuthProvider>
+    );
+
+    await act(async () => {
+      await captured.current!.login("you", "embers-demo");
+    });
+    // logout should NOT reject — client-side state is cleared regardless
+    // of whether the server-side revocation succeeded.
+    await act(async () => {
+      await expect(captured.current!.logout()).resolves.toBeUndefined();
+    });
+    await waitFor(() => {
+      expect(captured.current!.status).toBe("anonymous");
+    });
+    expect(captured.current!.user).toBeNull();
+  });
+
+  it("logout() sets error when api.logout() rejects", async () => {
+    const stub = makeStubClient({
+      logout: async () => {
+        throw new Error("network failure");
+      },
+    });
+    const { captured, Captor } = captureAuth();
+    render(
+      <AuthProvider apiClientFactory={() => stub}>
+        <Captor />
+      </AuthProvider>
+    );
+
+    await act(async () => {
+      await captured.current!.login("you", "embers-demo");
+    });
+    await act(async () => {
+      await captured.current!.logout();
+    });
+    await waitFor(() => {
+      expect(captured.current!.error).toBe("network failure");
     });
   });
+
+  it("logout() when already anonymous is a no-op (does not call api.logout)", async () => {
+    const stub = makeStubClient();
+    const { captured, Captor } = captureAuth();
+    render(
+      <AuthProvider apiClientFactory={() => stub}>
+        <Captor />
+      </AuthProvider>
+    );
+
+    expect(captured.current!.status).toBe("anonymous");
+    await act(async () => {
+      await captured.current!.logout();
+    });
+    expect(stub.calls.logout).toBe(0);
+    expect(captured.current!.status).toBe("anonymous");
+  });
 });
+

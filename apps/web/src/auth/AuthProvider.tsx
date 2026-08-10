@@ -158,9 +158,24 @@ export function AuthProvider({
         }
       },
       logout: async () => {
-        // Slice 3 will implement this. For now, reject to keep the
-        // contract honest — login works, logout doesn't.
-        throw new Error("not implemented");
+        // No-op when already anonymous — saves a network call and avoids
+        // setting an error if the user double-logs-out.
+        if (status === "anonymous" && user === null) {
+          return;
+        }
+        // Best-effort: clear client-side state regardless of whether the
+        // server-side revocation succeeds. A failed /logout should not
+        // leave the user stuck authenticated client-side.
+        try {
+          const client = getClient();
+          await client.logout();
+        } catch (err) {
+          setError(err instanceof Error ? err.message : String(err));
+        } finally {
+          tokenRef.current = null;
+          setUser(null);
+          setStatus("anonymous");
+        }
       },
     };
   }, [user, status, error, apiClientFactory]);
