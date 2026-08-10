@@ -24,6 +24,14 @@
 > TDD breakdown. The architecture notes below remain accurate for `apps/web/`
 > unchanged — every path mentioned is relative to `apps/web/` (e.g.
 > `src/data/posts.ts` is `apps/web/src/data/posts.ts`).
+> Round 6 (2026-08-10) executed Phase B18 (Auth Provider): added
+> `apps/web/src/auth/AuthProvider.tsx` + `useAuth()` hook, added 401
+> refresh-and-retry to `apps/web/src/lib/api.ts`, added a real
+> `apps/web/src/pages/LoginPage.tsx` + `/login` route, and wrapped
+> `<App />` in `<AuthProvider>` in `main.tsx`. 39 new TDD tests
+> (20 AuthProvider + 9 api refresh-and-retry + 10 LoginPage) bring
+> the web suite to 237. See `docs/REMEDIATION_PLAN_ROUND_6.md` for
+> the Round 6 changelog + 7-slice TDD breakdown.
 
 ---
 
@@ -147,8 +155,8 @@ The server follows a **composition root** pattern — `buildApp(opts)` in `src/a
 - `buildApp({ env, db, rawDb })` wires repositories + routes for integration tests
 - **Helmet/rate-limit** can be skipped via `skipHelmet`/`skipRateLimit` options (rate-limit auto-disabled in `NODE_ENV=test`)
 - **Auth tests** use the seeded demo user; **vote concurrency tests** seed 100 users directly via Drizzle insert (bypassing Argon2id for speed)
-- Test files: 8 in `apps/server/src/` (5 in `routes/`, 2 in `auth/`, 1 `config.test.ts` in root), 2 in `packages/db/src/`, 3 in `packages/shared/src/`, 12 in `apps/web/src/` (including `lib/api.test.ts` added in Round 5)
-- **Total vitest count: 389** = 95 (server) + 67 (shared) + 29 (db) + 198 (web, of which 22 cover `lib/api.ts`). The previously documented 367 (Round 4) was superseded when Round 5 added the foundational web API client suite.
+- Test files: 8 in `apps/server/src/` (5 in `routes/`, 2 in `auth/`, 1 `config.test.ts` in root), 2 in `packages/db/src/`, 3 in `packages/shared/src/`, 14 in `apps/web/src/` (including `lib/api.test.ts` from Round 5, `auth/AuthProvider.test.tsx` from Round 6, `pages/LoginPage.test.tsx` from Round 6)
+- **Total vitest count: 428** = 95 (server) + 67 (shared) + 29 (db) + 237 (web). Round 6 added 39 new web tests (20 AuthProvider + 9 api refresh-and-retry + 10 LoginPage) on top of the Round 5 baseline of 389.
 
 ### Backend Pitfalls
 
@@ -226,7 +234,7 @@ Local ids are timestamp-based (`local-${Date.now()}` for posts, `${postId}-c${Da
 
 ## Routes (`src/App.tsx`)
 
-`/`, `/popular`, `/all` and `/explore` all render `HomePage`, which derives its scope from `location.pathname`. Remaining: `/r/:name`, `/comments/:postId`, `/u/:username`, `/search?q=`, `/notifications`, and `*` → `NotFoundPage`. All pages render inside `AppShell` via `<Outlet />`.
+`/`, `/popular`, `/all` and `/explore` all render `HomePage`, which derives its scope from `location.pathname`. `/r/:name`, `/comments/:postId`, `/u/:username`, `/search?q=`, `/notifications`, and `*` → `NotFoundPage` all render inside `AppShell` via `<Outlet />`. **`/login`** (added in Round 6, B18) renders `LoginPage` **outside** `AppShell` — no sidebar/navbar, just a centered form. The route is added before the `<Route element={<AppShell />}>` wrapper in `App.tsx` so it bypasses the layout entirely.
 
 ## Foundational API client (Round 5 — `apps/web/src/lib/api.ts`)
 
@@ -249,7 +257,59 @@ untouched.
 - `baseUrl` defaults to `import.meta.env.VITE_API_URL ?? "http://localhost:4000"`. The `import.meta.env` access is cast through `unknown` so the file typechecks outside Vite (e.g. in unit tests).
 - All paths use `encodeURIComponent` on dynamic segments — vote targets, post IDs, community slugs, search queries.
 
-**Test coverage:** `apps/web/src/lib/api.test.ts` — 22 tests covering constructor defaults, every endpoint, auth header injection, cursor encoding, 4xx/5xx error mapping, and 204 No Content handling.
+**Test coverage:** `apps/web/src/lib/api.test.ts` — 22 tests covering constructor defaults, every endpoint, auth header injection, cursor encoding, 4xx/5xx error mapping, and 204 No Content handling. Plus 9 new tests added in Round 6 (Slice 4) covering the 401 refresh-and-retry path (see "AuthProvider & LoginPage" below).
+
+## AuthProvider & LoginPage (Round 6 — B18)
+
+Round 6 executes Phase B18 (Auth Provider) from the Round 5 TDD breakdown. It is the first end-user-visible step of the deferred B17–B22 frontend integration: it wires the Round 5 `apps/web/src/lib/api.ts` client into a React context, adds a real `/login` page, and adds 401-refresh-retry logic to the API client — all without breaking the existing deterministic data layer or the 9 e2e smoke tests.
+
+### What landed in Round 6
+
+| File | Status | Purpose |
+| --- | --- | --- |
+| `apps/web/src/auth/AuthProvider.tsx` | New | React context + `useAuth()` hook. Holds the access token in a `useRef`, exposes `{ user, status, error, login, logout }`. |
+| `apps/web/src/auth/AuthProvider.test.tsx` | New | 20 TDD tests covering initial state, login flow, logout flow, refresh-path wiring. |
+| `apps/web/src/lib/api.ts` | Modified | Added `tryRefreshOn401` option + `onTokenRefresh` callback. On 401 with `tryRefreshOn401=true` && `getToken()` returning a token, calls `POST /api/auth/refresh` once and retries the original request with the new token. The `refresh()` method itself passes `skipRefresh: true` to prevent infinite loops. |
+| `apps/web/src/lib/api.test.ts` | Modified | 9 new tests covering the refresh-and-retry path (3-fetch happy path, refresh-failure propagation, no-refresh-when-no-token, no-refresh-on-non-401, etc.). |
+| `apps/web/src/pages/LoginPage.tsx` | New | Form with username + password inputs, submit handler calls `useAuth().login` then navigates to `/`, error alert with `role="alert"`, button with `aria-busy`, disabled-on-empty-credentials. |
+| `apps/web/src/pages/LoginPage.test.tsx` | New | 10 TDD tests covering form rendering, submit, loading, error, navigation, accessibility. |
+| `apps/web/src/App.tsx` | Modified | Added `/login` route OUTSIDE `AppShell` (no sidebar/navbar on login). |
+| `apps/web/src/main.tsx` | Modified | Wrapped `<App />` in `<AuthProvider apiClientFactory={(opts) => createApiClient(opts)}>`. |
+
+### Architecture decisions
+
+1. **B18 before B17.** The Round 5 plan called for B17 (build refactor: remove singlefile, switch to BrowserRouter) first. Round 6 reverses this: B18 (auth provider) can be executed under the existing `HashRouter` + single-file build because `/login` works equally well as `#/login`. This trades a small amount of architectural purity for a much smaller blast radius. B17 becomes a future round that can lean on the auth context introduced here.
+2. **The AuthProvider owns the token ref, not the api client.** The api client is built ONCE via `useMemo` with stable deps `[apiClientFactory, getToken, onTokenRefresh]`. `getToken` reads `tokenRef.current`; `onTokenRefresh` writes to it. The client never needs to be rebuilt when the token changes — it sees the live value via the closure.
+3. **Refresh-and-retry is opt-in via `tryRefreshOn401`.** Defaults to `false` so all 22 pre-Round-6 api tests (which don't set the flag) continue to assert the original behavior. The AuthProvider sets it to `true` when wiring the factory.
+4. **Refresh failure propagates the ORIGINAL 401.** If `POST /api/auth/refresh` itself returns 401 (refresh token revoked) or throws (network error), the original 401 is propagated to the caller — the refresh error is intentionally swallowed. The caller (a React Query hook, in B19+) decides whether to surface a re-login prompt. The AuthProvider does NOT intercept 401s on its own.
+5. **logout() is best-effort.** Always clears client-side state regardless of whether the server-side `/api/auth/logout` call succeeds. A failed server logout must NOT leave the user stuck authenticated client-side.
+6. **`/login` renders OUTSIDE AppShell.** No sidebar, no navbar, no right panel — just a centered form. The route is added before the `<Route element={<AppShell />}>` wrapper in `App.tsx`.
+
+### AuthProvider API
+
+```tsx
+import { AuthProvider, useAuth } from "./auth/AuthProvider";
+
+// Production wiring (already done in main.tsx):
+<AuthProvider apiClientFactory={(opts) => createApiClient(opts)}>
+  <App />
+</AuthProvider>
+
+// Consuming auth in a component:
+function Header() {
+  const { user, status, login, logout } = useAuth();
+  if (status === "authenticated" && user) {
+    return <button onClick={logout}>Log out {user.username}</button>;
+  }
+  return <Link to="/login">Log in</Link>;
+}
+```
+
+### Testing conventions
+
+- Tests inject a stub `apiClientFactory` that captures the options (`getToken`, `tryRefreshOn401`, `onTokenRefresh`) and returns a mocked client. No network calls.
+- All async state updates are wrapped in `act()` from `@testing-library/react` to silence the React 18 testing-library warning.
+- The `captureAuth()` helper grabs the latest `useAuth()` value into an outer ref-like object so tests can assert against it after async settles.
 
 ## Docker (B23 — Round 3)
 

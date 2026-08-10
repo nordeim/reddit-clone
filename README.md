@@ -9,9 +9,12 @@ monorepo.
 reddit-clone/
 ├── apps/
 │   ├── web/          ← @embers/web — the original client-only React SPA
-│   │                   (HashRouter, vite-plugin-singlefile, 198 tests;
+│   │                   (HashRouter, vite-plugin-singlefile, 237 tests;
 │   │                    includes `src/lib/api.ts` foundational fetch client
-│   │                    added in Round 5 for the deferred B17–B22 integration)
+│   │                    added in Round 5, `src/auth/AuthProvider.tsx` React
+│   │                    context + `useAuth()` hook + 401 refresh-and-retry
+│   │                    added in Round 6 B18, `src/pages/LoginPage.tsx`
+│   │                    real /login form)
 │   └── server/       ← @embers/server — Fastify REST API + auth + FTS5 search
 │                       (95 tests, /health, /api/auth, /api/posts,
 │                        /api/communities, /api/votes, /api/comments,
@@ -77,21 +80,23 @@ host (ADR-003 single-file build is still in force for the client).
 
 | Workspace | Tests | Command |
 |-----------|-------|---------|
-| `@embers/web` | 198 | `npm test --workspace @embers/web` |
+| `@embers/web` | 237 | `npm test --workspace @embers/web` |
 | `@embers/shared` | 67 | `npm test --workspace @embers/shared` |
 | `@embers/db` | 29 | `npm test --workspace @embers/db` |
 | `@embers/server` | 95 | `npm test --workspace @embers/server` |
-| **Vitest total** | **389** | `npm test --workspaces --if-present` |
+| **Vitest total** | **428** | `npm test --workspaces --if-present` |
 | E2E (Playwright) | 9 | `npm run test:e2e` |
 | Lint (ESLint) | 0 errors, 0 warnings | `npm run lint` |
 
-All 389 vitest tests + 9 Playwright E2E smoke tests pass, ESLint is clean, and
-typecheck + build succeed as of Round 5 (2026-08-10). The 22-test delta over
-the previously documented 367 (Round 4) is the new `apps/web/src/lib/api.test.ts`
-suite covering the foundational fetch-based API client (`apps/web/src/lib/api.ts`)
-introduced in Round 5 as the basis for the deferred B17–B22 frontend integration.
-See `docs/REMEDIATION_PLAN_ROUND_5.md` for the Round 5 changelog (doc-alignment +
-`pretest` script + `@vitest/coverage-v8` + foundational web API client).
+All 428 vitest tests + 9 Playwright E2E smoke tests pass, ESLint is clean, and
+typecheck + build succeed as of Round 6 (2026-08-10). Round 6 executed Phase
+B18 (Auth Provider): added `apps/web/src/auth/AuthProvider.tsx` + `useAuth()`
+hook, added 401 refresh-and-retry to `apps/web/src/lib/api.ts`, added a real
+`apps/web/src/pages/LoginPage.tsx` + `/login` route, and wrapped `<App />`
+in `<AuthProvider>` in `main.tsx`. 39 new TDD tests (20 AuthProvider + 9 api
+refresh-and-retry + 10 LoginPage) bring the web suite to 237. See
+`docs/REMEDIATION_PLAN_ROUND_6.md` for the Round 6 changelog + 7-slice TDD
+breakdown.
 
 ## Architecture Decision Records
 
@@ -115,7 +120,8 @@ See `docs/REMEDIATION_PLAN_ROUND_5.md` for the Round 5 changelog (doc-alignment 
 **Deferred (B17–B24, see `docs/REMEDIATION_EXECUTION_PLAN.md` §5):**
 - ADR-105 — React Query + Zustand split (requires breaking client refactor)
 - ADR-106 — BrowserRouter + chunked Vite build (requires removing single-file)
-- B17–B22 — Frontend integration (React Query, Axios, optimistic UI, auth-aware UI)
+- ~~B18 — Auth Provider~~ **Partially done in Round 6** — `apps/web/src/auth/AuthProvider.tsx` + `useAuth()` hook + `apps/web/src/pages/LoginPage.tsx` + 401 refresh-and-retry in `lib/api.ts`. See `docs/REMEDIATION_PLAN_ROUND_6.md`.
+- B17, B19–B22 — Build refactor, React Query, Axios, optimistic UI, auth-aware UI (depend on B17)
 - ~~B23 — Docker, GitHub Actions~~ **Done in Round 3** (see `Dockerfile`, `docker-compose.yml`, `.github/workflows/ci.yml`)
 - ~~B24 — Playwright E2E~~ **Done in Round 3** (see `e2e/smoke.spec.ts`, `playwright.config.ts`)
 
@@ -124,12 +130,13 @@ See `docs/REMEDIATION_PLAN_ROUND_5.md` for the Round 5 changelog (doc-alignment 
 | Document | Purpose |
 |----------|---------|
 | `README.md` (this file) | Monorepo overview + quick start + test status |
-| `AGENTS.md` | Deep codebase reference (data layer, state, routes) |
+| `AGENTS.md` | Deep codebase reference (data layer, state, routes, auth) |
 | `CLAUDE.md` | Daily implementation conventions (TS, build, testing) |
 | `docs/Project-Architecture-Document.md` | Master PAD — full architecture + ADRs |
 | `docs/REMEDIATION_EXECUTION_PLAN.md` | Active execution plan (B0–B16 done, B17–B24 deferred) |
 | `docs/REMEDIATION_PLAN.md` | Master remediation plan (10 ADRs, B0–B24 backlog) |
 | `docs/REMEDIATION_PLAN_ROUND_5.md` | Round 5 changelog + detailed B17–B22 TDD breakdown |
+| `docs/REMEDIATION_PLAN_ROUND_6.md` | Round 6 changelog — B18 (Auth Provider) execution, 7-slice TDD breakdown |
 | `docs/REMEDIATION_PLAN_2.md` | Original 10-ADR remediation proposal (status annotations added) |
 | `docs/IMPLEMENTATION_PLAN.md` | Original greenfield plan that produced `apps/web` |
 | `docs/MANUAL_QA.md` | Manual QA matrix for the client SPA |

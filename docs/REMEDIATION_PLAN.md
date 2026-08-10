@@ -247,9 +247,9 @@ Each phase requires passing automated tests before proceeding.
 *   [x] **B15: Security Hardening.** Apply Fastify Helmet (CSP), CORS, and Rate Limiting. *Test: Verify headers in response; verify 429 Too Many Requests on brute-force attempts.*
 *   [x] **B16: Observability.** Add OpenTelemetry tracing to Fastify routes. *Test: Trace IDs are generated and propagated in logs.* (Implemented as Pino `requestId` correlation — `x-request-id` header on every response.)
 
-**Phase B17-B22: Frontend Integration** *(DEFERRED — see `docs/REMEDIATION_EXECUTION_PLAN.md` §5)*
+**Phase B17-B22: Frontend Integration** *(B18 partially done in Round 6 — see `docs/REMEDIATION_PLAN_ROUND_6.md`; B17, B19–B22 still deferred — see `docs/REMEDIATION_EXECUTION_PLAN.md` §5)*
 *   [ ] **B17: Build Refactor.** Remove `vite-plugin-singlefile`. Setup `BrowserRouter`. *Test: App loads via chunked JS files; deep linking works.*
-*   [ ] **B18: Auth Provider.** Implement Axios interceptors for JWT refresh and global Auth Context. *Test: App transparently refreshes token on 401 and redirects to login on 401 refresh-fail.*
+*   [~] **B18: Auth Provider.** Implement Axios interceptors for JWT refresh and global Auth Context. *Test: App transparently refreshes token on 401 and redirects to login on 401 refresh-fail.* **Round 6 (2026-08-10) partial:** `apps/web/src/auth/AuthProvider.tsx` + `useAuth()` hook + `apps/web/src/pages/LoginPage.tsx` + `/login` route + 401 refresh-and-retry in `apps/web/src/lib/api.ts` are all landed (39 new TDD tests, all green). The Round 6 scope intentionally did NOT include the global "401 refresh-fail → redirect to /login" interceptor — that depends on B17 (BrowserRouter) and B19 (React Query) for the call sites that would trigger it. See `docs/REMEDIATION_PLAN_ROUND_6.md` for the 7-slice TDD breakdown and the deferred-work rationale.
 *   [ ] **B19: Server State.** Replace Zustand store with React Query providers. *Test: DevTools show query caching and background refetching.*
 *   [ ] **B20: Feeds & Search.** Wire infinite scroll and debounced search UI to API. *Test: Scroll triggers API pagination; search input triggers FTS query.*
 *   [ ] **B21: Optimistic UI.** Implement React Query `onMutate` and `onError` for voting and commenting. *Test: Network throttling shows instant UI update, and API failure rolls back the UI.*

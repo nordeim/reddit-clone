@@ -233,17 +233,19 @@ Tests use **Vitest** with **Fastify's `inject()`** — no port binding needed.
 ```bash
 npm run lint        # ESLint flat config — 0 errors, 0 warnings (Round 4)
 npm run typecheck   # tsc --noEmit — must pass clean
-npm test            # vitest run (all workspaces) — all 389 tests must pass
+npm test            # vitest run (all workspaces) — all 428 tests must pass
 npm run test:e2e    # playwright run — 9 smoke tests must pass (B24, Round 3)
 npm run build       # topological build — must succeed
 git ls-files | grep -E '(^|/)dist/' | wc -l   # must be 0 (no dist/ tracked)
 ```
 
-> **Test count breakdown (389 total):** `@embers/web` = 198 (incl. 22 in
-> `src/lib/api.test.ts` added Round 5), `@embers/server` = 95,
-> `@embers/shared` = 67, `@embers/db` = 29. The previously documented total
-> of 367 (Round 4) was superseded when Round 5 added the foundational web
-> API client test suite.
+> **Test count breakdown (428 total):** `@embers/web` = 237 (incl. 22 in
+> `src/lib/api.test.ts` from Round 5, 20 in `src/auth/AuthProvider.test.tsx`
+> + 9 api refresh-and-retry tests + 10 in `src/pages/LoginPage.test.tsx`
+> from Round 6), `@embers/server` = 95, `@embers/shared` = 67,
+> `@embers/db` = 29. The previously documented total of 389 (Round 5)
+> was superseded when Round 6 added the AuthProvider + LoginPage
+> test suites.
 
 **Build-before-test prerequisite (Round 5):** `@embers/server`'s test suites import
 `@embers/db` and `@embers/shared` as runtime packages, so their `dist/` builds
@@ -319,6 +321,47 @@ already cover) but is useful for ad-hoc manual checks before a release.
 - New `docs/REMEDIATION_PLAN_ROUND_5.md` with a detailed TDD breakdown for
   B17–B22 (the still-deferred frontend integration phases).
 
+**Round 6 additions (B18 — Auth Provider):**
+- New `apps/web/src/auth/AuthProvider.tsx` — React context + `useAuth()` hook.
+  Holds the access token in a `useRef`, exposes `{ user, status, error, login,
+  logout }`. The api client factory signature is `(opts) => AuthApiClient` so
+  the AuthProvider can pass the live `getToken` / `tryRefreshOn401` /
+  `onTokenRefresh` accessors; `main.tsx` wires it to `createApiClient`.
+- New `apps/web/src/auth/AuthProvider.test.tsx` — 20 TDD tests covering
+  initial state, login flow (loading → authenticated, error reversion), logout
+  flow (best-effort, no-op when anonymous), and refresh-path wiring (getToken,
+  onTokenRefresh, factory-called-once).
+- Modified `apps/web/src/lib/api.ts` — added `tryRefreshOn401?: boolean`
+  (default `false` — opt-in) and `onTokenRefresh?: (token) => void`. On 401
+  with `tryRefreshOn401=true` && `getToken()` returning a token, calls
+  `POST /api/auth/refresh` once and retries the original request with the new
+  token. The `refresh()` method passes `skipRefresh: true` to prevent
+  infinite loops. Refresh failure (401 or network) propagates the ORIGINAL
+  401 to the caller — the AuthProvider does NOT intercept 401s on its own.
+- 9 new tests in `apps/web/src/lib/api.test.ts` covering the refresh-and-retry
+  path (3-fetch happy path, refresh-failure propagation, no-refresh-when-no-
+  token, no-refresh-on-non-401, retry-uses-new-token, etc.).
+- New `apps/web/src/pages/LoginPage.tsx` — form with username + password
+  inputs, submit handler calls `useAuth().login` then navigates to `/`, error
+  alert with `role="alert"`, button with `aria-busy`, disabled-on-empty-
+  credentials. Accessibility (WCAG 2.2 AA): each input has `<label htmlFor>`,
+  password input has `type=password`, autoComplete attributes set.
+- New `apps/web/src/pages/LoginPage.test.tsx` — 10 TDD tests covering form
+  rendering, submit, loading, error, navigation, accessibility.
+- Modified `apps/web/src/App.tsx` — added `/login` route OUTSIDE `AppShell`
+  (no sidebar/navbar on login). Other routes unchanged.
+- Modified `apps/web/src/main.tsx` — wrapped `<App />` in
+  `<AuthProvider apiClientFactory={(opts) => createApiClient(opts)}>`.
+- New `docs/REMEDIATION_PLAN_ROUND_6.md` — the comprehensive Round 6 plan
+  with the 7-slice TDD breakdown, risk assessment, and rollback strategy.
+
+**Round 6 deferred:**
+- B17 (build refactor: remove `vite-plugin-singlefile`, switch to
+  `BrowserRouter`) — Round 7 candidate. `/login` works under `HashRouter`
+  as `#/login` so B17 is no longer a blocker for B18.
+- B19–B22 (React Query, feeds/search wiring, optimistic UI, notification
+  polling) — depend on B17. Tracked in `docs/REMEDIATION_PLAN_ROUND_5.md` §2.
+
 ### ESLint Conventions (Round 4)
 
 - **Flat config** (`eslint.config.mjs`), not legacy `.eslintrc`.
@@ -375,11 +418,14 @@ Custom variant, not v3 `darkMode: 'class'`:
 ```
 reddit-clone/
 ├── apps/
-│   ├── web/                 ← @embers/web (React SPA, Vite, 198 tests)
+│   ├── web/                 ← @embers/web (React SPA, Vite, 237 tests)
 │   │   └── src/             # See AGENTS.md for full web tree.
 │   │                        # Note: `lib/api.ts` (Round 5) is the foundational
 │   │                        # fetch-based client for the deferred B17–B22
-│   │                        # frontend integration — not yet wired into pages.
+│   │                        # frontend integration — wired into the React
+│   │                        # tree via `auth/AuthProvider.tsx` (Round 6).
+│   │                        # `pages/LoginPage.tsx` (Round 6) renders the
+│   │                        # real /login form.
 │   └── server/              ← @embers/server (Fastify, 95 tests)
 │       └── src/
 │           ├── app.ts       # buildApp() composition root

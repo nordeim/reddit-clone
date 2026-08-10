@@ -3,7 +3,7 @@
 **Classification:** Internal Engineering Reference
 **Status:** DEFINITIVE, PRODUCTION-LOCKED BLUEPRINT
 **Companion Documents:** `AGENTS.md` (deep codebase reference), `CLAUDE.md` (daily implementation guide)
-**Last Updated:** 2026-08-10 (Round 5 — doc-alignment, `pretest` script, `@vitest/coverage-v8`, foundational web API client)
+**Last Updated:** 2026-08-10 (Round 6 — B18 Auth Provider execution: AuthProvider, LoginPage, 401 refresh-and-retry)
 **Audience:** Senior Engineers, Tech Leads, DevOps, and Onboarding Engineers
 **Rule:** Every architectural decision in this document traces to a specific rationale.
            Nothing is here "because it's popular."
@@ -204,7 +204,10 @@ src/
 │   └── themeBootstrap.ts       # synchronous theme application before React mounts
 │
 ├── lib/
-│   └── api.ts                  # Foundational fetch-based API client (Round 5) — basis for B17–B22
+│   └── api.ts                  # Foundational fetch-based API client (Round 5) + 401 refresh-and-retry (Round 6)
+│
+├── auth/
+│   └── AuthProvider.tsx        # React context + useAuth() hook (Round 6, B18)
 │
 ├── hooks/
 │   ├── index.ts                # useDebounce, useOnClickOutside, useInfiniteScroll
@@ -261,6 +264,7 @@ src/
 │   ├── ProfilePage.tsx         # /u/:username — user profile (posts, comments, saved, about)
 │   ├── SearchPage.tsx          # /search?q= — tabs: posts, communities, users
 │   ├── NotificationsPage.tsx   # /notifications — full notification list
+│   ├── LoginPage.tsx           # /login — real auth form (Round 6, B18) — outside AppShell
 │   └── NotFoundPage.tsx        # * — catch-all 404
 ```
 
@@ -515,7 +519,7 @@ Dark mode: Custom variant `@custom-variant dark (&:where(.dark, .dark *));` — 
 | Linter | **ESLint 9 flat config** (`eslint.config.mjs` at repo root, added Round 4 — 0 errors, 0 warnings) |
 | Coverage | **`@vitest/coverage-v8`** in `@embers/server` (added Round 5 — informational, no CI gate yet) |
 | Typechecker | `npm run typecheck` (alias for `tsc --noEmit` across all 4 workspaces) |
-| Total tests | **389 vitest** (web=198, server=95, shared=67, db=29) + **9 Playwright E2E** |
+| Total tests | **428 vitest** (web=237, server=95, shared=67, db=29) + **9 Playwright E2E** |
 
 ### 7.2 Test layout
 
@@ -535,10 +539,14 @@ src/
 │   ├── selectors.test.ts    # getVisibleScore, isPostSaved, getUnreadNotificationCount, etc.
 │   └── themeBootstrap.test.ts # applyPersistedTheme
 ├── lib/
-│   └── api.test.ts          # foundational fetch client (Round 5) — 22 tests
+│   └── api.test.ts          # foundational fetch client (Round 5) + 401 refresh-and-retry (Round 6)
+├── auth/
+│   └── AuthProvider.test.tsx # useAuth() context + login/logout + refresh wiring (Round 6 B18)
 ├── components/feed/
 │   ├── VoteControl.test.tsx     # integration: voting toggles, score updates, persistence
 │   └── CreatePostModal.test.tsx # integration: validation, URL safety, submit + store
+├── pages/
+│   └── LoginPage.test.tsx   # /login form submit, loading, error, navigation, a11y (Round 6 B18)
 └── test/
     ├── setup.ts             # jest-dom matchers + IntersectionObserver/matchMedia stubs
     └── utils.tsx            # renderWithRouter helper
@@ -555,7 +563,7 @@ src/
 The project relies on:
 
 1. **TypeScript strict mode** — catches type errors, unused variables, fallthrough cases
-2. **Vitest unit + integration tests** — 198 tests across 12 files covering pure utilities, store logic, the foundational API client, and key components (web) + 95 server tests + 67 shared tests + 29 db tests = 389 total
+2. **Vitest unit + integration tests** — 237 tests across 14 files covering pure utilities, store logic, the foundational API client (Round 5), the AuthProvider context + 401 refresh-and-retry (Round 6), the LoginPage form (Round 6), and key components (web) + 95 server tests + 67 shared tests + 29 db tests = 428 total
 3. **ESLint 9 flat config** (Round 4) — 0 errors, 0 warnings across all workspaces
 4. **Playwright E2E** (Round 3) — 9 smoke tests covering health, register, login, feed, single post, search, communities
 5. **Manual typecheck** — `npm run typecheck` before claiming a change compiles
@@ -566,7 +574,7 @@ The project relies on:
 ```bash
 npm run lint        # ESLint flat config — 0 errors, 0 warnings (Round 4)
 npm run typecheck   # tsc --noEmit across all 4 workspaces — must pass clean
-npm test            # vitest run — all 389 tests must pass (pretest auto-builds shared+db)
+npm test            # vitest run — all 428 tests must pass (pretest auto-builds shared+db)
 npm run test:e2e    # playwright run — 9 smoke tests must pass (Round 3)
 npm run build       # topological build — must succeed
 git ls-files | grep -E '(^|/)dist/' | wc -l   # must be 0 (no dist/ tracked)
@@ -685,7 +693,7 @@ The following previously-open issues are now resolved (see `docs/REMEDIATION_PLA
 
 | Issue | Resolution |
 |---|---|
-| No test runner installed | Vitest + Testing Library + jsdom installed; 198 tests across 12 files (web) + 95 server + 67 shared + 29 db = 389 total |
+| No test runner installed | Vitest + Testing Library + jsdom installed; 237 tests across 14 files (web) + 95 server + 67 shared + 29 db = 428 total |
 | No `version`/`migrate` on `persist` | `schemaVersion: 1` + custom `merge` + `migrate` hook on `persist` |
 | Corrupt localStorage could crash the app | `mergePersistedState` validates every field, drops invalid entries, never throws |
 | Theme flash on reload | Synchronous inline script in `index.html` applies `.dark` before React mounts |
@@ -749,8 +757,12 @@ The following previously-open issues are now resolved (see `docs/REMEDIATION_PLA
 | `src/components/notifications/NotificationsPanel.tsx` | Notification list with All/Unread tabs |
 | `src/pages/HomePage.tsx` | Feed with scope (home/popular/all/explore) |
 | `src/pages/PostPage.tsx` | Post detail + comment tree (500ms simulated load) |
-| `src/lib/api.ts` | Foundational fetch-based API client for the Fastify backend (Round 5) — basis for deferred B17–B22 frontend integration |
-| `src/lib/api.test.ts` | 22 tests for the API client (constructor defaults, every endpoint, auth header, cursor encoding, 4xx/5xx error mapping) |
+| `src/lib/api.ts` | Foundational fetch-based API client for the Fastify backend (Round 5) — basis for deferred B17–B22 frontend integration. Extended in Round 6 with `tryRefreshOn401` + `onTokenRefresh` for 401 refresh-and-retry. |
+| `src/lib/api.test.ts` | 22 tests for the API client (constructor defaults, every endpoint, auth header, cursor encoding, 4xx/5xx error mapping) + 9 new tests for the 401 refresh-and-retry path (Round 6). |
+| `src/auth/AuthProvider.tsx` | React context + `useAuth()` hook holding the access token in a `useRef`. Exposes `{ user, status, error, login, logout }`. Wires `tryRefreshOn401: true` on the api client. (Round 6, B18) |
+| `src/auth/AuthProvider.test.tsx` | 20 TDD tests for AuthProvider — initial state, login flow, logout flow, refresh-path wiring. (Round 6, B18) |
+| `src/pages/LoginPage.tsx` | Real `/login` form — username + password inputs, submit calls `useAuth().login`, navigates to `/` on success, error alert with `role="alert"`. WCAG 2.2 AA: labelled inputs, `type=password`, `aria-busy`. (Round 6, B18) |
+| `src/pages/LoginPage.test.tsx` | 10 TDD tests for LoginPage — form rendering, submit, loading, error, navigation, accessibility. (Round 6, B18) |
 | `vite.config.ts` | Vite + React + Tailwind + singlefile |
 | `tsconfig.json` | Strict TypeScript config |
 | `index.html` | Minimal HTML shell (title + root div + module script) |
@@ -799,6 +811,7 @@ apply to `apps/server` and the `packages/{shared,db}` workspaces.
 | ADR-108 | Transactional atomic vote counters (`UPDATE … SET col = col + delta`) | `apps/server/src/services/voteService.ts` |
 | ADR-109 | SQLite FTS5 virtual tables + BM25 ranking | `packages/db/src/fts5.ts` |
 | ADR-110 | Pino structured logging + requestId correlation | `apps/server/src/plugins/{requestId,errorHandler}.ts` |
+| ADR-104 (web) | AuthProvider context + 401 refresh-and-retry + `/login` page | `apps/web/src/auth/AuthProvider.tsx` + `apps/web/src/lib/api.ts` + `apps/web/src/pages/LoginPage.tsx` — **Round 6 (B18) partial**: wired the AuthProvider + LoginPage + 401 refresh-and-retry into the existing HashRouter + single-file build. The full B18 (Axios interceptors, global 401-refresh-fail redirect to /login) and B17–B22 (React Query, optimistic UI, notification polling) remain deferred. See `docs/REMEDIATION_PLAN_ROUND_6.md`. |
 
 ### 13.2 Backend Topology
 
@@ -806,7 +819,7 @@ apply to `apps/server` and the `packages/{shared,db}` workspaces.
 ┌──────────────────────────────────────────────────────────────┐
 │                  CLIENT (Browser) — apps/web                  │
 │   React 19 SPA (unchanged from §2, runs via HashRouter +       │
-│   vite-plugin-singlefile, 198 tests green)                    │
+│   vite-plugin-singlefile, 237 tests green)                    │
 └──────────────────────────────────────────────────────────────┘
                               │
                               │  (frontend integration deferred — §5)
