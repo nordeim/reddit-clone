@@ -18,7 +18,9 @@ import { defineConfig } from "@playwright/test";
  */
 export default defineConfig({
   testDir: "./e2e",
-  testMatch: /live\.spec\.ts/,
+  // Round 10: match both `live.spec.ts` (Round 8 audit) and
+  // `live_extended.spec.ts` (Round 10 expanded user-journey audit).
+  testMatch: /live.*\.spec\.ts/,
   fullyParallel: false,
   workers: 1,
   reporter: "list",

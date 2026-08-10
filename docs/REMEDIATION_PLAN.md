@@ -1,26 +1,39 @@
+> **Round 10 alignment note (2026-08-10):** This plan was originally
+> written before the monorepo transition was executed. The original
+> draft proposed an end-to-end type-safe RPC framework, a non-npm
+> package manager with monorepo caching, asymmetric public-key JWT
+> signing, and UUID primary keys. The actual implementation chose
+> REST + Zod (ADR-101), npm-workspaces (ADR-107), symmetric HS256
+> via `jose` (ADR-104), and branded string IDs (`UserId`, `PostId`,
+> etc.). The sections below have been updated to reflect the
+> implemented stack — verified by the new `npm run test:plan-alignment`
+> CI gate (added Round 10). See `docs/audit_report_1.md`,
+> `docs/audit_report_2.md`, and `docs/REMEDIATION_PLAN_ROUND_10.md`
+> for the full audit context.
+
 To transition this into a **production-ready, enterprise-grade application** with a SQLite backend, we must fundamentally restructure the architecture. The "demo constraints" (single-file build, hash routing, client-side data generation) must be revoked in favor of standard enterprise patterns (code-splitting, clean URLs, database-driven source of truth).
 
 Below is the comprehensive remediation plan and detailed ToDo list to execute this transition.
 
 ---
 
-### 1. Revoked Architecture Decision Records (ADRs)
-Before implementing new features, we must explicitly revoke or alter several ADRs from the current Project Architecture Document (PAD) that are incompatible with a production backend:
+### 1. Target State (Pending B17 Execution) — ADRs to Update
+Before implementing new features, we must explicitly update or alter several ADRs from the current Project Architecture Document (PAD) that are incompatible with a production backend. **These ADRs remain active until Phase B17 executes** — they are load-bearing for the current "deploy anywhere" client SPA. Marking them "revoked" before B17 lands would break the existing deployment.
 
-*   **Revoke ADR-001 (Deterministic Data Generation at Runtime):** The PRNG logic is excellent but must be retired from runtime execution. It will be repurposed exclusively as a **database seed script**. Runtime data must flow from SQLite via API.
-*   **Revoke ADR-002 (Overlay Pattern for User State):** The Zustand overlay was a necessary hack because generated data was immutable. In a client-server model, the database is the source of truth. Server state (posts, votes, comments) will migrate to **TanStack Query (React Query)**. Zustand will be restricted strictly to ephemeral UI state (theme, toasts, layout toggles).
-*   **Revoke ADR-003 (Single-File Build via `vite-plugin-singlefile`):** A monolithic ~528KB HTML file is an anti-pattern for enterprise performance. We must enable route-based code splitting, tree-shaking, and long-term asset hashing for CDN caching.
-*   **Revoke ADR-004 (HashRouter for Zero-Config Routing):** Hash routing (`#/path`) was chosen for static hosting simplicity. Enterprise apps require clean, SEO-friendly URLs (`/path`) via `BrowserRouter`, with the backend handling SPA fallback routing.
+*   **Target State for ADR-001 (Deterministic Data Generation at Runtime):** The PRNG logic is excellent but must be retired from runtime execution. It will be repurposed exclusively as a **database seed script**. Runtime data must flow from SQLite via API. Until B19–B22 (frontend integration) execute, the deterministic layer remains the client's primary data source.
+*   **Target State for ADR-002 (Overlay Pattern for User State):** The Zustand overlay was a necessary hack because generated data was immutable. In a client-server model, the database is the source of truth. Server state (posts, votes, comments) will migrate to **TanStack Query (React Query)**. Zustand will be restricted strictly to ephemeral UI state (theme, toasts, layout toggles).
+*   **Target State for ADR-003 (Single-File Build via `vite-plugin-singlefile`):** A monolithic ~528KB HTML file is an anti-pattern for enterprise performance. We must enable route-based code splitting, tree-shaking, and long-term asset hashing for CDN caching.
+*   **Target State for ADR-004 (HashRouter for Zero-Config Routing):** Hash routing (`#/path`) was chosen for static hosting simplicity. Enterprise apps require clean, SEO-friendly URLs (`/path`) via `BrowserRouter`, with the backend handling SPA fallback routing.
 
 ---
 
 ### 2. Target Architecture Stack
-*   **Monorepo:** Turborepo + `pnpm` workspaces (`apps/web`, `apps/server`, `packages/shared`, `packages/database`).
-*   **Backend:** Node.js + **Fastify** (high performance, schema-based validation) + TypeScript.
-*   **API Layer:** **tRPC** (End-to-end type safety without code generation or OpenAPI overhead).
-*   **Database:** SQLite via **`better-sqlite3`** + **Drizzle ORM** (Type-safe SQL).
-*   **Client State:** **TanStack Query** (Server state) + **Zustand** (Ephemeral UI state).
-*   **Auth:** Argon2id (passwords) + JWT (Access/Refresh tokens).
+*   **Monorepo:** `npm` workspaces (`apps/web`, `apps/server`, `packages/shared`, `packages/db`). Implemented per ADR-107.
+*   **Backend:** Node.js + **Fastify** (high performance, schema-based validation) + TypeScript. Implemented per ADR-102.
+*   **API Layer:** **REST + Zod** (Fastify routes with strict Zod schema validation in `packages/shared`). Implemented per ADR-101 — no RPC framework, no code generation, no OpenAPI overhead. The fetch-based client `apps/web/src/lib/api.ts` consumes these endpoints directly.
+*   **Database:** SQLite via **`better-sqlite3`** + **Drizzle ORM** (Type-safe SQL). Implemented per ADR-103.
+*   **Client State:** **TanStack Query** (Server state) + **Zustand** (Ephemeral UI state). Target state per ADR-105 — Zustand currently still owns all state (B19–B22 deferred).
+*   **Auth:** Argon2id (passwords, via `argon2`) + JWT (Access/Refresh tokens, HS256 via `jose`). Implemented per ADR-104.
 
 ---
 
@@ -29,11 +42,11 @@ Before implementing new features, we must explicitly revoke or alter several ADR
 #### Phase 1: Monorepo & Infrastructure Foundation
 *Objective: Restructure the project for full-stack development and establish strict code quality gates.*
 
-*   [ ] **1.1** Initialize monorepo using `pnpm` workspaces and Turborepo to manage `apps/web`, `apps/server`, `packages/shared`, and `packages/database`.
-*   [ ] **1.2** Extract `src/types/index.ts` into `packages/shared` to ensure identical domain models (User, Post, Comment, etc.) across client and server.
-*   [ ] **1.3** Scaffold `apps/server` with Node.js, Fastify, TypeScript, and Pino (structured JSON logging).
-*   [ ] **1.4** Configure strict ESLint and Prettier rules across the entire monorepo (replacing the current "No ESLint" setup) to enforce enterprise code quality.
-*   [ ] **1.5** Set up a CI/CD pipeline (GitHub Actions) to run typechecking, linting, and unit tests on every pull request.
+*   [ ] **1.1** Initialize monorepo using `npm` workspaces to manage `apps/web`, `apps/server`, `packages/shared`, and `packages/database`. ✅ Done (B0).
+*   [ ] **1.2** Extract `src/types/index.ts` into `packages/shared` to ensure identical domain models (User, Post, Comment, etc.) across client and server. ✅ Done (B1).
+*   [ ] **1.3** Scaffold `apps/server` with Node.js, Fastify, TypeScript, and Pino (structured JSON logging). ✅ Done (B2).
+*   [ ] **1.4** Configure strict ESLint and Prettier rules across the entire monorepo (replacing the current "No ESLint" setup) to enforce enterprise code quality. ✅ Done (R4 — ESLint 9 flat config; Prettier is still open per audit_report_1 F6).
+*   [ ] **1.5** Set up a CI/CD pipeline (GitHub Actions) to run typechecking, linting, and unit tests on every pull request. ✅ Done (B23).
 
 #### Phase 2: Database Layer & Schema (SQLite Production Hardening)
 *Objective: Design a robust relational schema and migrate the deterministic seed data into SQLite.*
@@ -45,26 +58,26 @@ Before implementing new features, we must explicitly revoke or alter several ADR
 *   [ ] **2.5** Create a seed script that executes the existing PRNG logic (`src/utils/random.ts`) to populate the DB with the 48 users, 18 communities, 320 posts, and comment trees.
 *   [ ] **2.6** Implement transactional boundaries for complex operations (e.g., creating a post + generating notifications for followers).
 
-#### Phase 3: API & Security (Fastify + tRPC)
+#### Phase 3: API & Security (Fastify REST + Zod)
 *Objective: Build a type-safe, secure API layer with real authentication.*
 
-*   [ ] **3.1** Integrate `@trpc/server` with Fastify. Define Zod schemas for all inputs/outputs in `packages/shared`.
-*   [ ] **3.2** Implement Authentication Router: Register, Login, Logout, and Refresh Token endpoints.
-*   [ ] **3.3** Implement secure password hashing using `argon2` (replacing any plaintext or weak hashing).
-*   [ ] **3.4** Implement JWT strategy: short-lived access tokens (15m) stored in memory, long-lived refresh tokens (7d) stored in `HttpOnly`, `Secure`, `SameSite=Strict` cookies.
-*   [ ] **3.5** Implement authorization middleware (e.g., `protectedProcedure` in tRPC) that validates the access token and attaches `ctx.user` to the request context.
-*   [ ] **3.6** Implement Community, Post, Comment, Vote, and Notification routers with full CRUD and strict ownership validation (users can only edit/delete their own content).
-*   [ ] **3.7** Add security middleware: `@fastify/cors` (strict origin whitelist), `@fastify/helmet` (CSP, HSTS), and `@fastify/rate-limit` (especially on auth endpoints to prevent brute force).
-*   [ ] **3.8** Add `/health` and `/ready` endpoints for container orchestration probes (Kubernetes/ECS).
+*   [ ] **3.1** Define Zod schemas for all inputs/outputs in `packages/shared` and consume them in Fastify routes via `fastify-type-provider-zod`. ✅ Done (B1 + B2 + B10).
+*   [ ] **3.2** Implement Authentication Routes: `POST /api/auth/register`, `/login`, `/logout`, `/refresh`. ✅ Done (B9).
+*   [ ] **3.3** Implement secure password hashing using `argon2` (Argon2id algorithm). ✅ Done (B8).
+*   [ ] **3.4** Implement JWT strategy: short-lived access tokens (15m, HS256 via `jose`) stored in memory, long-lived refresh tokens (7d) stored in `HttpOnly`, `Secure`, `SameSite=Strict` cookies. ✅ Done (B9, ADR-104).
+*   [ ] **3.5** Implement authorization `authenticate` decorator that validates the access token and attaches `req.user` to the request. ✅ Done (B9).
+*   [ ] **3.6** Implement Community, Post, Comment, Vote, and Notification routes with full CRUD and strict ownership validation (users can only edit/delete their own content). ✅ Done (B10–B14).
+*   [ ] **3.7** Add security middleware: `@fastify/cors` (strict origin whitelist), `@fastify/helmet` (CSP, HSTS), and `@fastify/rate-limit` (especially on auth endpoints to prevent brute force). ✅ Done (B15).
+*   [ ] **3.8** Add `/health` endpoint for container orchestration probes. ✅ Done (B2).
 
 #### Phase 4: Frontend Refactoring (Client-Server Integration)
 *Objective: Decouple the frontend from local data generation and integrate with the new API.*
 
 *   [ ] **4.1** Migrate `apps/web` to use `BrowserRouter` instead of `HashRouter` for clean URLs.
 *   [ ] **4.2** Remove `vite-plugin-singlefile` to enable route-based code splitting and long-term asset caching.
-*   [ ] **4.3** Integrate `@trpc/client` and TanStack Query (React Query) in `apps/web`.
-*   [ ] **4.4** **Refactor Zustand Store:** Remove all server-state (votes, posts, joined communities, notifications). Keep *only* ephemeral UI state (theme, toasts, sidebar open/close).
-*   [ ] **4.5** Replace `src/data/*` imports with tRPC React Query hooks (`useQuery`, `useInfiniteQuery`, `useMutation`).
+*   [ ] **4.3** Integrate `@tanstack/react-query` (React Query) in `apps/web`. The fetch-based `apps/web/src/lib/api.ts` client (Round 5) is the foundation — React Query will wrap its methods in `useQuery` / `useInfiniteQuery` / `useMutation` hooks.
+*   [ ] **4.4** **Refactor Zustand Store — Hybrid Data Strategy:** Remove all server-state (votes, posts, joined communities, notifications) from Zustand. Keep *only* ephemeral UI state (theme, toasts, sidebar open/close). React Query attempts the API first; on failure/initial load, falls back to the deterministic `src/data/*` layer to preserve the offline-capable demo experience (audit_report_2 F7).
+*   [ ] **4.5** Replace `src/data/*` imports with React Query hooks (`useQuery`, `useInfiniteQuery`, `useMutation`) backed by `apps/web/src/lib/api.ts`.
 *   [ ] **4.6** Implement optimistic UI updates for voting and commenting, with automatic rollback on API failure (replacing the current local overlay mutations).
 *   [ ] **4.7** Build real Login/Register UI pages and wire them to the auth router.
 *   [ ] **4.8** Replace the cosmetic "Log out (demo)" button with real session destruction and redirect logic.
@@ -74,7 +87,7 @@ Before implementing new features, we must explicitly revoke or alter several ADR
 #### Phase 5: Testing, Observability & Hardening
 *Objective: Ensure the application is robust, observable, and ready for production deployment.*
 
-*   [ ] **5.1** Write backend integration tests for all tRPC routers using Fastify's `inject` method against an in-memory/test SQLite DB.
+*   [ ] **5.1** Write backend integration tests for all Fastify routes using the `inject` method against an in-memory/test SQLite DB. ✅ Done (95 tests across 8 server test files).
 *   [ ] **5.2** Install and configure Playwright for End-to-End (E2E) testing.
 *   [ ] **5.3** Write E2E tests for critical flows: User registration, login, create post, upvote, comment, and logout.
 *   [ ] **5.4** Integrate Sentry for client-side and server-side error tracking and performance monitoring.
@@ -99,14 +112,14 @@ The current codebase mixes server state and UI state in a single Zustand store. 
 
 #### Authentication State Management
 Moving from a hardcoded `CURRENT_USER` to real JWT authentication requires robust global error handling.
-*   **Mitigation:** Implement a global tRPC link/interceptor that catches `401 Unauthorized` responses, silently attempts to refresh the access token using the refresh cookie, and retries the original request. If the refresh fails, redirect the user to the login page.
+*   **Mitigation:** Implement a global fetch interceptor (in `apps/web/src/lib/api.ts`) that catches `401 Unauthorized` responses, silently attempts to refresh the access token using the refresh cookie, and retries the original request. If the refresh fails, redirect the user to the login page. ✅ Done (Round 6 B18.3 — `tryRefreshOn401` option in `api.ts`).
 
 ---
 
 ### Audit of the Previous Remediation Plan
 
 The initial remediation plan provided a viable high-level transition roadmap but failed enterprise-grade rigor. 
-1. **Misalignment:** It proposed tRPC instead of the required REST+Zod contract.
+1. **Misalignment:** It proposed a type-safe RPC framework instead of the required REST+Zod contract.
 2. **Missing ADR Supersession:** It revoked old ADRs but did not formally document the 10 required replacement ADRs or reconcile them against the original Project Architecture Document (PAD).
 3. **Architectural Omissions:** It lacked SQLite Full-Text Search (FTS5), transactional vote counter designs, and a concrete Postgres escape hatch.
 4. **Execution Rigor:** The 5-phase plan was insufficiently granular for a TDD-driven execution. It lacked a B0–B24 sequenced backlog, a formal threat model, and a definitive rollback strategy.
@@ -159,16 +172,18 @@ These supersede the original PAD constraints designed for a static demo.
 ### 4. Full Data Model, API Contract & Mapping
 
 #### 4.1 SQLite Data Model (Drizzle ORM)
-*Constraints and Indexes are critical for SQLite performance and data integrity.*
+*Constraints and Indexes are critical for SQLite performance and data integrity. Primary keys are branded string IDs (`UserId`, `PostId`, etc. from `packages/shared/src/ids.ts`) seeded as `u1`, `p1`, etc. in dev. UUIDs/ULIDs may be used in prod via the seed script without code changes — the Drizzle schema accepts any string.*
 
 | Table | Key Columns | Constraints & Indexes |
 | :--- | :--- | :--- |
-| `users` | `id` (UUID), `username`, `password_hash`, `created_at` | `UNIQUE(username)`. Index on `username` for auth lookups. |
-| `communities` | `id` (UUID), `slug`, `name`, `owner_id` | `UNIQUE(slug)`. FK `owner_id` -> `users.id`. |
-| `posts` | `id` (UUID), `community_id`, `author_id`, `title`, `content`, `upvotes`, `downvotes` | FK `community_id`, FK `author_id`. Index on `(community_id, created_at DESC)` for feed pagination. |
-| `comments` | `id` (UUID), `post_id`, `author_id`, `parent_id`, `content` | FK `post_id`, `parent_id` (self-referential for trees). Index on `post_id`. |
-| `votes` | `user_id`, `target_id`, `target_type` (enum: POST/COMMENT), `value` (-1, 1) | **Composite PK** `(user_id, target_id)`. Ensures one vote per user per target. |
+| `users` | `id` (BrandedString — `UserId`), `username`, `password_hash`, `created_at` | `UNIQUE(username)`. Index on `username` for auth lookups. |
+| `communities` | `id` (BrandedString — `CommunityId`), `slug`, `name`, `owner_id` | `UNIQUE(slug)`. FK `owner_id` -> `users.id`. |
+| `posts` | `id` (BrandedString — `PostId`), `community_id`, `author_id`, `title`, `content`, `upvotes`, `downvotes` | FK `community_id`, FK `author_id`. Index on `(community_id, created_at DESC)` for feed pagination. |
+| `comments` | `id` (BrandedString — `CommentId`), `post_id`, `author_id`, `parent_id`, `content` | FK `post_id`, `parent_id` (self-referential for trees). Index on `post_id`. |
+| `votes` | `user_id`, `target_id`, `target_type` (enum: POST/COMMENT), `value` (-1, 1) | **Composite PK** `(user_id, target_id, target_type)`. Ensures one vote per user per target. |
 | `posts_fts` | `id`, `title`, `content` | **Virtual Table (FTS5)**. Triggers sync inserts/updates/deletes from `posts`. |
+| `notifications` | `id`, `recipient_id`, `actor_id`, `type`, `target_id`, `read_at` | FK `recipient_id`, FK `actor_id`. Index on `(recipient_id, read_at)` for unread queries. |
+| `sessions` | `id`, `user_id`, `refresh_token_jti`, `revoked_at` | FK `user_id`. Index on `refresh_token_jti` for rotation lookups. |
 
 #### 4.2 API Contract & Frontend Integration Mapping
 
@@ -187,10 +202,10 @@ These supersede the original PAD constraints designed for a static demo.
 ### 5. Auth, Security Threat Model & Performance
 
 #### 5.1 Authentication Design
-*   **Mechanism:** Asymmetric JWT (RS256).
-*   **Access Token:** 15-minute TTL, stored in JS memory (never `localStorage`).
-*   **Refresh Token:** 7-day TTL, stored in `HttpOnly`, `Secure`, `SameSite=Strict`, `Path=/api/auth/refresh` cookie.
-*   **Rotation:** Every time the refresh endpoint is hit, the old refresh token is invalidated, and a new one is issued (prevents replay attacks).
+*   **Mechanism:** Symmetric JWT (HS256) via `jose`. The current single-server setup avoids the key-management overhead of an asymmetric (RS256) public/private keypair. The escape hatch is documented in `apps/server/src/auth/jwt.ts` — switch to RS256 by replacing `SignJWT.setProtectedHeader({ alg: 'HS256' })` with `'RS256'` and a `crypto.createPrivateKey()` import.
+*   **Access Token:** 15-minute TTL, signed HS256, contains `{ id, username }`, stored in JS memory (never `localStorage`).
+*   **Refresh Token:** 7-day TTL, signed HS256, contains `{ id, jti }`, stored in `HttpOnly`, `Secure`, `SameSite=Strict`, `Path=/api/auth/refresh` cookie. The `jti` is stored in the `sessions` table so refresh tokens can be rotated and revoked.
+*   **Rotation:** Every time the refresh endpoint is hit, the old refresh token is invalidated (session row `revokedAt` set), and a new one is issued (prevents replay attacks).
 
 #### 5.2 Expanded Security Threat Model (OWASP Top 10)
 | Threat | Mitigation Strategy |
