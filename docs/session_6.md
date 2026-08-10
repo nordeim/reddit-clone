@@ -868,6 +868,80 @@ Existing scripts simplified — DATABASE_URL removed from inline args (now in .e
 
 ---
 
+Summary of All Changes 
+ 
+### 1. New dependency: dotenv 
+ 
+File: apps/server/package.json — added dotenv@^17.4.2 
+ 
+### 2. .env loading in config.ts 
+ 
+File: apps/server/src/config.ts 
+- Loads .env (base) and .env.local (overrides) from repo root at module scope 
+- Resolves relative DATABASE_URL to absolute path based on repo root 
+- Precedence: shell vars > .env.local > .env > loadEnv() defaults 
+ 
+### 3. New root scripts + simplified existing ones 
+ 
+File: root package.json 
+ 
+┌───────────────────┬────────────────────────────────────────────────────────────────────────┐ 
+│ Script            │ Command                                                                │ 
+├───────────────────┼────────────────────────────────────────────────────────────────────────┤ 
+│ server:start      │ NODE_ENV=development PORT=5000 npm run dev --workspace @embers/server  │ 
+├───────────────────┼────────────────────────────────────────────────────────────────────────┤ 
+│ server:prod       │ npm run start --workspace @embers/server --if-present                  │ 
+├───────────────────┼────────────────────────────────────────────────────────────────────────┤ 
+│ server:start-prod │ NODE_ENV=production PORT=5000 npm run start --workspace @embers/server │ 
+└───────────────────┴────────────────────────────────────────────────────────────────────────┘ 
+ 
+### 4. Environment file templates 
+ 
+- .env.example — committed, all required + optional vars documented 
+- .env.local.example — committed, local dev overrides 
+- .env, .env.local, .env.*.local already in .gitignore 
+ 
+### 5. README.md updates 
+ 
+- Added "Environment Variables" section explaining .env / .env.local usage 
+- Updated "What Each Script Does" table with new scripts + dev/prod clarification 
+- Updated §3 Production Deployment to use .env instead of inline secrets 
+ 
+### 6. start_production.sh — complete rewrite 
+ 
+File: start_production.sh (144 lines, executable) 
+ 
+┌─────────────────┬───────────────────┬──────────────────────────────────────────────────────┐ 
+│ Feature         │ Before            │ After                                                │ 
+├─────────────────┼───────────────────┼──────────────────────────────────────────────────────┤ 
+│ Error handling  │ None              │ set -euo pipefail                                    │ 
+├─────────────────┼───────────────────┼──────────────────────────────────────────────────────┤ 
+│ .env creation   │ Broken (|| chain) │ Correct (if/else with fatal on missing .env.example) │ 
+├─────────────────┼───────────────────┼──────────────────────────────────────────────────────┤ 
+│ Frontend server │ None              │ Python http.server on port 5173                      │ 
+├─────────────────┼───────────────────┼──────────────────────────────────────────────────────┤ 
+│ Log management  │ nohup.out in CWD  │ Dedicated logs in /tmp/                              │ 
+├─────────────────┼───────────────────┼──────────────────────────────────────────────────────┤ 
+│ Health check    │ None              │ Polls /health for 10s                                │ 
+├─────────────────┼───────────────────┼──────────────────────────────────────────────────────┤ 
+│ PID tracking    │ None              │ PIDs in /tmp/embers-*.pid                            │ 
+├─────────────────┼───────────────────┼──────────────────────────────────────────────────────┤ 
+│ Stop command    │ None              │ ./start_production.sh stop kills full process tree   │ 
+└─────────────────┴───────────────────┴──────────────────────────────────────────────────────┘ 
+ 
+### Verification 
+ 
+- ✅ Typecheck: all 4 workspaces clean 
+- ✅ All 453 vitest tests pass 
+- ✅ Production mode with .env: /health responds 
+- ✅ .env.local override: works 
+- ✅ Development mode: works 
+- ✅ start_production.sh: starts both servers, health check passes 
+- ✅ start_production.sh stop: kills backend + frontend + all child processes 
+- ✅ Ports 5000 and 5173 freed after stop
+
+---
+
 $ ./start_production.sh 
 === embers production startup ---
 [1/5] Installing dependencies...
