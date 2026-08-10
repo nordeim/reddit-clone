@@ -27,6 +27,8 @@ packages/*/dist/
 .env
 .env.local
 .env.*.local
+env.bak
+*.env.bak
 
 # Playwright / E2E test artifacts (B24)
 playwright-report/
