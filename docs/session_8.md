@@ -566,3 +566,32 @@ All 6 edits confirmed via direct grep:
 - session_7.md line 27: ✅ "litellm proxy — the tests needed a free port" 
 - session_7.md line 153: ✅ "required a free port due to litellm occupying :4000"
 
+---
+
+From packages/db/src/seed/users.ts: 
+ 
+┌──────────────┬─────────────┐ 
+│ Field        │ Value       │ 
+├──────────────┼─────────────┤ 
+│ Username     │ you         │ 
+├──────────────┼─────────────┤ 
+│ Password     │ embers-demo │ 
+├──────────────┼─────────────┤ 
+│ Display Name │ You         │ 
+├──────────────┼─────────────┤ 
+│ User ID      │ u-me        │ 
+└──────────────┴─────────────┘ 
+ 
+The password is hashed with Argon2id at seed time (line 39: await hashPassword("embers-demo")). This is the same CURRENT_USER that the client SPA uses (apps/web/src/data/users.ts also has id: "u-me"). 
+ 
+The seed also creates 48 generated users (u1–u48) with deterministic but unknown passwords — only the demo user you has a known password. This is confirmed in the test at seed.test.ts:55: "produces 48 generated users + 1 demo user = 
+49 rows". 
+ 
+So to log in via the API: 
+ 
+```bash 
+  curl -X POST http://localhost:4000/api/auth/login \ 
+    -H 'Content-Type: application/json' \ 
+    -d '{"username":"you","password":"embers-demo"}' 
+``` 
+
