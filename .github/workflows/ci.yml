@@ -2,9 +2,10 @@
 #
 # Runs on every push to main and every pull request targeting main.
 # Jobs:
-#   1. test    — install deps, typecheck, run all vitest workspaces
-#   2. build   — build all workspaces, upload dist/ artifacts
-#   3. e2e     — Playwright smoke tests against a fresh server
+#   1. security — gitleaks secret scan (R9.2) — runs first, fails fast on secrets
+#   2. test     — install deps, typecheck, run all vitest workspaces
+#   3. build    — build all workspaces, upload dist/ artifacts
+#   4. e2e      — Playwright smoke tests against a fresh server
 #
 # The workflow uses Node 20 (matches the engines constraint in package.json
 # and the Dockerfile base image).
@@ -23,10 +24,36 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # R9.2 — Secret scanning runs first. If secrets are detected, the entire
+  # pipeline fails fast before any build/test resources are consumed.
+  # Uses gitleaks, the industry-standard secret scanner (15k+ GitHub stars).
+  # On public repos, the default GITHUB_TOKEN suffices — no extra config needed.
+  security:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Fetch full git history so gitleaks can scan all commits, not just HEAD.
+          fetch-depth: 0
+
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          # On public repos, the default GITHUB_TOKEN works without a custom token.
+          # For private repos or to post comments on PRs, set GITLEAKS_LICENSE.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   test:
     name: Test (Node 20, ubuntu-latest)
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    needs: security
 
     steps:
       - name: Checkout
