@@ -41,6 +41,9 @@ jobs:
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
 
+      - name: Lint (ESLint flat config)
+        run: npm run lint
+
       - name: Typecheck (all workspaces)
         run: npm run typecheck
 

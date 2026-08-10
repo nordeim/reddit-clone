@@ -35,3 +35,6 @@ e2e/.auth/
 blob-report/
 playwright/.cache/
 
+# Code audit artifacts (skills/code-review-and-audit)
+.audit-report.md
+

@@ -1,4 +1,4 @@
-import { comments } from "@embers/db";
+import type { comments } from "@embers/db";
 
 type CommentRow = typeof comments.$inferSelect;
 

@@ -46,7 +46,7 @@ export function useInfiniteScroll(onIntersect: () => void, enabled = true) {
     );
     observer.observe(node);
     return () => observer.disconnect();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [onIntersect, enabled]);
 
   return sentinelRef;

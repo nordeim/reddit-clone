@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { searchQuerySchema } from "@embers/shared";
-import type { Database } from "@embers/db";
+import type { Database, DrizzleDB } from "@embers/db";
 import { searchPosts, communities, users } from "@embers/db";
 import type { CommunityRepository } from "../repositories/postRepository.js";
 import { or, like } from "drizzle-orm";
@@ -12,7 +12,7 @@ type SearchPostResult = { id: string; title: string; body: string | null; rank: 
 export interface SearchRouteDeps {
   rawDb: Database;
   communityRepo: CommunityRepository;
-  db: import("@embers/db").DrizzleDB;
+  db: DrizzleDB;
 }
 
 export function buildSearchRoutes(deps: SearchRouteDeps) {

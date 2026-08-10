@@ -828,3 +828,136 @@ and is tracked for a dedicated frontend refactor pass. See §5 of this
 document.
 
 End of Round 3.
+
+---
+
+## 10. Round 4 — ESLint setup + lint findings remediation (2026-08-10)
+
+Round 4 was triggered by the user's request to add ESLint — the one quality
+gate still missing after Rounds 1–3. The `CLAUDE.md` pre-commit checklist
+already referenced "0 ESLint warnings" as a requirement, but ESLint was never
+actually installed. Round 4 closes that gap and remediates the 6 errors + 11
+warnings the new linter surfaced.
+
+### 10.1 Skills consulted
+
+Per the user's instruction to use the repo's `skills/` folder for systematic
+code review, the following skills were loaded:
+
+- `code-review-and-audit` — orchestration layer; ran `audit_runner.py --mode standard`.
+- `code-quality-standards` — Six-Axis review constitution (Correctness,
+  Readability, Architecture, Security, Performance, Aesthetic/UX Rigor).
+- `code-review-checklist` — tactical 12-category scan.
+- `lint-and-validate` — native CLI fallback protocol (`npm run lint && tsc --noEmit`).
+- `clean-code` — pragmatic coding standards (SRP, DRY, KISS, YAGNI).
+
+The `audit_runner.py` script produced 3663 findings (117 critical, 77 high,
+2858 medium), but the vast majority were false positives from regex heuristics
+(flagging `const post = ...` as PascalCase, test passwords as hardcoded
+credentials, the word "any" in comments as a type-safety issue). The native
+CLI path (`eslint . && tsc --noEmit`) is authoritative and produces zero
+false positives. See `docs/REMEDIATION_PLAN_ROUND_4.md` §1 for the full
+skills-consultation log.
+
+### 10.2 ESLint configuration
+
+**File:** `eslint.config.mjs` (repo root).
+
+Adapted from the sample Next.js config provided by the user:
+
+| Sample config element | embers adaptation | Reason |
+| --- | --- | --- |
+| `@next/eslint-plugin-next` | Removed | `apps/web` is Vite, not Next.js |
+| 5-layer architecture enforcement | Removed | embers uses composition-root, not Next.js 5-layer |
+| React rules on all `**/*.{ts,tsx}` | Scoped to `apps/web/src/**` only | Server + packages have no JSX |
+| `no-explicit-any: error` | Kept (all workspaces) | Matches existing convention |
+| `consistent-type-imports: error` | Kept (all workspaces) | Required for `isolatedModules` |
+| `react-hooks/exhaustive-deps: error` | Kept (`apps/web` only) | Strict dependency-array enforcement |
+
+**Workspace-specific overrides:**
+- Node source: `no-console: warn` (allow warn/error/info)
+- React source: React + react-hooks recommended rules
+- Test files: Vitest globals declared as `readonly`
+- E2E bootstrap: `no-console: off`
+- CLI scripts (`packages/db/scripts/**`): `no-console: off`
+
+**Critical bug fixed during setup:** the initial config file failed to load
+with `SyntaxError: Unexpected token '*'` because the JSDoc comment block
+contained the glob pattern `**/*.{ts,tsx}`, and the `*/` sequence inside that
+string prematurely closed the comment block. Fix: rephrased the comment to
+avoid `*/` inside JSDoc.
+
+### 10.3 Lint findings remediation
+
+| # | File | Line | Rule | Severity | Fix |
+| --- | --- | --- | --- | --- | --- |
+| 1 | `apps/server/src/app.ts` | 28 | `consistent-type-imports` | error | `import("@embers/db").Database` → top-level `import type { Database }` |
+| 2 | `apps/server/src/routes/search.ts` | 15 | same | error | `import("@embers/db").DrizzleDB` → top-level `import type { DrizzleDB }` |
+| 3 | `apps/server/src/routes/voteConcurrency.test.ts` | 11 | same | error | `import("@embers/db").Database` → top-level import |
+| 4 | `apps/server/src/routes/voteConcurrency.test.ts` | 12 | same | error | `import("@embers/db").DrizzleDB` → top-level import |
+| 5 | `apps/server/src/routes/voteConcurrency.test.ts` | 14 | `prefer-const` | error | `let voterTokens` → `const voterTokens` (auto-fixed) |
+| 6 | `apps/server/src/services/commentTreeService.ts` | 1 | `consistent-type-imports` | error | `import { comments }` → `import type { comments }` (auto-fixed) |
+| 7 | `apps/web/src/hooks/index.ts` | 49 | unused eslint-disable | warning | Stale directive auto-removed |
+| 8–17 | `packages/db/scripts/migrate.ts`, `seed.ts` | various | `no-console` | warning | 10 `console.log` calls resolved via ESLint override for `packages/db/scripts/**` |
+
+### 10.4 CI integration
+
+`.github/workflows/ci.yml` `test` job updated to run `npm run lint` before
+`typecheck` and `test`. The lint step fails fast — if ESLint reports any
+error, the workflow stops before spending time on typecheck + test + build.
+
+### 10.5 Documentation updates
+
+- `README.md` — added "Lint (ESLint)" row to test status table; added
+  `npm run lint` to the quick-start command list.
+- `AGENTS.md` — added "ESLint (Round 4)" section with config block table,
+  adaptation notes, and the `*/`-in-JSDoc bug warning.
+- `CLAUDE.md` — updated pre-commit checklist (added `npm run lint` as first
+  step); added "ESLint Conventions (Round 4)" subsection; updated header
+  banner to mention Round 4.
+- `docs/Project-Architecture-Document.md` — updated §1.2 (technology stack
+  now mentions ESLint 9); updated §10 (Known Issues) to mark "No linter
+  installed" as resolved in Round 4.
+- `docs/REMEDIATION_PLAN_ROUND_4.md` — new file documenting the full Round 4
+  plan, root-cause analysis, pre-mortem, and verification ledger.
+
+### 10.6 Verification (Round 4)
+
+| Check | Result |
+|---|---|
+| `npm run lint` | 0 errors, 0 warnings |
+| `npm run typecheck` (topological order) | Exit 0 for all 4 workspaces |
+| `npm test --workspaces --if-present` | 367/367 passing |
+| `npm run build` | All 4 `dist/` folders emitted, exit 0 |
+| `npx playwright test` | 9/9 passing |
+| `git ls-files \| grep -E '(^\|/)dist/' \| wc -l` | 0 |
+| CI workflow YAML | Valid — `lint` step present before `typecheck` |
+
+### 10.7 Test count delta (Round 4)
+
+| Workspace | Round 3 | Round 4 | Delta |
+|---|---|---|---|
+| `@embers/web` | 176 | 176 | 0 |
+| `@embers/shared` | 67 | 67 | 0 |
+| `@embers/db` | 29 | 29 | 0 |
+| `@embers/server` | 95 | 95 | 0 |
+| Playwright E2E | 9 | 9 | 0 |
+| ESLint | N/A | 0 errors, 0 warnings | New gate |
+| **Total** | **367 + 9 E2E** | **367 + 9 E2E + 0 lint** | **+1 quality gate** |
+
+No test count change — the ESLint fixes (`import()` → `import type`,
+`let` → `const`, stale directive removal) are behaviourally identical at
+runtime. All 367 vitest tests + 9 E2E tests continue to pass.
+
+### 10.8 Still deferred
+
+- **B17–B22 (frontend refactor):** BrowserRouter, React Query, optimistic UI,
+  auth-aware UI. Requires breaking changes to the working client SPA's 176
+  tests. See §5.
+- **Prettier integration:** formatting is currently enforced by editor config
+  only. A Prettier setup with `prettier --check` in CI is a separate concern.
+- **ESLint strict mode (`tseslint.configs.strict`):** would add ~20 more
+  rules (e.g., `no-non-null-assertion`, `no-unnecessary-condition`) that may
+  produce findings in the existing codebase. Deferred to avoid scope creep.
+
+End of Round 4.

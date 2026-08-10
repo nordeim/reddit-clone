@@ -54,7 +54,10 @@ This PAD serves as the single source of truth for:
 | Class merging | clsx + tailwind-merge | 2.1.1 / 3.4.0 | Conditional classes without specificity conflicts |
 | Single-file | vite-plugin-singlefile | 2.3.0 | Inlines all JS/CSS into one HTML for portable deployment |
 
-Test runner: Vitest 2.1.9 + Testing Library + jsdom. No linter. No ESLint.
+Test runner: Vitest 2.1.9 + Testing Library + jsdom. Linter: ESLint 9 flat
+config (`eslint.config.mjs`) with `typescript-eslint` + `eslint-plugin-react`
++ `eslint-plugin-react-hooks` (added in Round 4, 2026-08-10). Playwright 1.62
+for E2E smoke tests (added in Round 3).
 
 ### 1.3 Architecture Decision Records (ADRs)
 
@@ -660,7 +663,7 @@ npm run preview  # → serves dist/ on a local port
 
 | Priority | Issue | Impact | Status |
 |----------|-------|--------|--------|
-| MEDIUM | No linter installed | No enforced code style | Open |
+| ~~MEDIUM~~ | ~~No linter installed~~ | ~~No enforced code style~~ | **Resolved in Round 4** — ESLint 9 flat config with `typescript-eslint` + React + react-hooks plugins |
 | LOW | Google Fonts loaded externally | Breaks when offline or blocked by CSP | Open |
 | LOW | Comment IDs (`${postId}-c${Date.now()}`) can theoretically collide if two comments are created in the same millisecond | Extremely unlikely but possible | Open |
 

@@ -9,7 +9,7 @@ import requestIdPlugin from "./plugins/requestId.js";
 import errorHandlerPlugin from "./plugins/errorHandler.js";
 import authPlugin from "./plugins/auth.js";
 import { healthRoutes } from "./routes/health.js";
-import type { DrizzleDB } from "@embers/db";
+import type { DrizzleDB, Database } from "@embers/db";
 
 export interface BuildAppOptions {
   /** Partial env overrides (primarily for tests). */
@@ -25,7 +25,7 @@ export interface BuildAppOptions {
    * search, notifications) are wired up.
    */
   db?: DrizzleDB;
-  rawDb?: import("@embers/db").Database;
+  rawDb?: Database;
 }
 
 /**

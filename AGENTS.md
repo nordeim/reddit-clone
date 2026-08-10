@@ -275,3 +275,34 @@ with `NODE_ENV=test` env vars. Playwright reports are uploaded as artifacts.
   and then `git add .` — use `git add -A` followed by `git status` to verify,
   or use `git add <specific files>` instead.
 - Pre-commit check: `git ls-files | grep -E '(^|/)dist/' | wc -l` must return 0.
+
+## ESLint (Round 4)
+
+ESLint 9 flat config at `eslint.config.mjs` (repo root). Run `npm run lint`
+from root — lints all workspaces in one pass.
+
+| Config block | Files | Key rules |
+| --- | --- | --- |
+| Base (JS + TS recommended) | all `*.{ts,tsx,js,mjs}` | `@typescript-eslint/no-explicit-any: error`, `@typescript-eslint/consistent-type-imports: error`, `@typescript-eslint/no-unused-vars: error` (with `^_` ignore pattern) |
+| Node source | `apps/server/src/**`, `packages/shared/src/**`, `packages/db/src/**` | `no-console: warn` (allow warn/error/info) |
+| React source | `apps/web/src/**/*.{ts,tsx}` | React + react-hooks recommended, `react-hooks/exhaustive-deps: error`, `react/react-in-jsx-scope: off` (jsx: react-jsx handles it) |
+| Test files | `**/*.test.{ts,tsx}`, `**/*.spec.{ts,tsx}` | Vitest globals (`describe`, `it`, `expect`, `beforeAll`, `afterAll`, `vi`) declared as `readonly` |
+| E2E bootstrap | `e2e/**/*.ts` | `no-console: off` (intentional logs) |
+| CLI scripts | `packages/db/scripts/**` | `no-console: off` (CLI user output) |
+
+**Ignores:** `node_modules/`, `**/dist/`, `coverage/`, `playwright-report/`,
+`test-results/`, `public/`, `skills/`, `docs/`, `*.config.{ts,js,mjs,cjs}`,
+`.github/`.
+
+**Adaptation notes (vs. the sample Next.js config):**
+- `@next/eslint-plugin-next` is NOT used — `apps/web` is Vite, not Next.js.
+- The 5-layer architecture enforcement block is removed — embers uses a
+  composition-root pattern, not the Next.js `proxy → app → features → domain → lib` layout.
+- React rules are scoped to `apps/web/src/**` only — server and packages have
+  no JSX.
+
+**Subtle bug fixed during Round 4:** the initial config file failed to load
+with `SyntaxError: Unexpected token '*'` because the JSDoc comment block
+contained the glob pattern `**/*.{ts,tsx}`, and the `*/` sequence inside that
+string prematurely closed the comment block. Never include `*/` inside a
+`/** ... */` comment — even inside backticks or quotes.

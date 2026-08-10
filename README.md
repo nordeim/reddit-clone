@@ -80,10 +80,12 @@ host (ADR-003 single-file build is still in force for the client).
 | `@embers/server` | 95 | `npm test --workspace @embers/server` |
 | **Vitest total** | **367** | `npm test --workspaces --if-present` |
 | E2E (Playwright) | 9 | `npm run test:e2e` |
+| Lint (ESLint) | 0 errors, 0 warnings | `npm run lint` |
 
-All 367 vitest tests + 9 Playwright E2E smoke tests pass as of Round 3 (2026-08-10).
-See `docs/REMEDIATION_EXECUTION_PLAN.md` §9 for the Round 3 changelog (test fix,
-`dist/` untracking, B23 Docker + CI, B24 Playwright).
+All 367 vitest tests + 9 Playwright E2E smoke tests pass, ESLint is clean, and
+typecheck + build succeed as of Round 4 (2026-08-10). See
+`docs/REMEDIATION_EXECUTION_PLAN.md` §10 for the Round 4 changelog (ESLint
+setup + 6 lint errors fixed + CI lint step added).
 
 ## Architecture Decision Records
 
@@ -182,6 +184,9 @@ npm run preview
 
 # Typecheck
 npm run typecheck
+
+# Lint (ESLint flat config — 0 errors, 0 warnings)
+npm run lint
 
 # Run the test suite (Vitest + Testing Library)
 npm test

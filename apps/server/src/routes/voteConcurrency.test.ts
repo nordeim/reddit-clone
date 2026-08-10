@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { openDb, runSeed } from "@embers/db";
+import type { Database, DrizzleDB } from "@embers/db";
 import { users } from "@embers/db/schema";
 import { buildApp } from "../app.js";
 import { signAccessToken } from "../auth/jwt.js";
@@ -8,10 +9,10 @@ import { signAccessToken } from "../auth/jwt.js";
 const ACCESS_SECRET = "test-access-secret-32-chars-minimum-length!";
 const REFRESH_SECRET = "test-refresh-secret-32-chars-minimum-length!";
 
-let raw: import("@embers/db").Database;
-let db: import("@embers/db").DrizzleDB;
+let raw: Database;
+let db: DrizzleDB;
 let app: FastifyInstance;
-let voterTokens: string[] = [];
+const voterTokens: string[] = [];
 
 beforeAll(async () => {
   ({ raw, db } = openDb({ path: ":memory:" }));

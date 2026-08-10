@@ -9,7 +9,7 @@
 > `npm run typecheck --workspace @embers/web`, etc. See `README.md` for
 > the full monorepo layout and `docs/REMEDIATION_EXECUTION_PLAN.md` for
 > the execution log (B0–B16 done, B17–B22 deferred, B23 + B24 done in
-> Round 3 — see §9 of that file).
+> Round 3, ESLint added in Round 4 — see §9 / §10 of that file).
 
 ---
 
@@ -231,6 +231,7 @@ Tests use **Vitest** with **Fastify's `inject()`** — no port binding needed.
 ### Pre-commit checklist
 
 ```bash
+npm run lint        # ESLint flat config — 0 errors, 0 warnings (Round 4)
 npm run typecheck   # tsc --noEmit — must pass clean
 npm test            # vitest run (all workspaces) — all 367 tests must pass
 npm run test:e2e    # playwright run — 9 smoke tests must pass (B24, Round 3)
@@ -240,7 +241,7 @@ git ls-files | grep -E '(^|/)dist/' | wc -l   # must be 0 (no dist/ tracked)
 
 **Round 3 additions:**
 - `Dockerfile` + `docker-compose.yml` + `.dockerignore` at repo root (B23).
-- `.github/workflows/ci.yml` runs typecheck + test + build + e2e on push/PR.
+- `.github/workflows/ci.yml` runs lint + typecheck + test + build + e2e on push/PR.
 - `playwright.config.ts` + `e2e/smoke.spec.ts` + `e2e/start-server.ts` (B24).
 - `npm run test:e2e` runs the 9 Playwright smoke tests.
 - `npm run test:e2e:install` installs the chromium browser (one-time).
@@ -248,6 +249,41 @@ git ls-files | grep -E '(^|/)dist/' | wc -l   # must be 0 (no dist/ tracked)
   commit (16d482c) accidentally force-added 96 build artifacts; Round 3
   untracked them via `git rm -r --cached`. Pre-commit check above enforces
   this going forward.
+
+**Round 4 additions:**
+- ESLint 9 flat config at `eslint.config.mjs` (repo root).
+- `npm run lint` and `npm run lint:fix` scripts in root `package.json`.
+- 6 lint errors fixed: 4 `import()` type annotations → top-level `import type`,
+  1 `let` → `const` (`prefer-const`), 1 stale `eslint-disable` directive removed.
+- 10 `console.log` warnings in CLI scripts resolved via ESLint override
+  (`no-console: off` for `packages/db/scripts/**`).
+- CI workflow runs `npm run lint` before `typecheck` and `test`.
+- ESLint config adapted from the sample Next.js config: `@next/eslint-plugin-next`
+  removed (not used), 5-layer architecture enforcement removed (different
+  pattern), React rules scoped to `apps/web/src/**` only.
+
+### ESLint Conventions (Round 4)
+
+- **Flat config** (`eslint.config.mjs`), not legacy `.eslintrc`.
+- **`@typescript-eslint/no-explicit-any: error`** — matches the existing
+  "Don't use `any`. Use `unknown`." convention. No exceptions.
+- **`@typescript-eslint/consistent-type-imports: error`** — all type-only
+  imports must use `import type { X }` (not inline `import("pkg").X`). This
+  is required for `isolatedModules` compatibility.
+- **`react-hooks/exhaustive-deps: error`** — strict dependency-array
+  enforcement. If you disable it for a specific line, remove the directive
+  when the code is refactored so the dependency array becomes correct.
+- **`no-console: warn`** in server/package source — use `app.log.info()` /
+  `app.log.error()` (Fastify's Pino logger) instead of `console.log`.
+  Exceptions: CLI scripts (`packages/db/scripts/**`) and E2E bootstrap
+  (`e2e/**`) where `no-console: off`.
+- **Unused vars** — `@typescript-eslint/no-unused-vars: error` with
+  `argsIgnorePattern: '^_'`, `varsIgnorePattern: '^_'`,
+  `caughtErrorsIgnorePattern: '^_'`. Prefix intentionally-unused bindings
+  with `_` (e.g., `catch (_err)`, `function handler(_req, reply) { ... }`).
+- **Never include `*/` inside a JSDoc block comment** — the `*/` sequence
+  always closes the comment, even inside backticks or quotes. This caused
+  a `SyntaxError: Unexpected token '*'` during Round 4 setup.
 
 ## UI Conventions
 

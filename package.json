@@ -13,6 +13,8 @@
     "test:e2e": "playwright test",
     "test:e2e:install": "playwright install --with-deps chromium",
     "typecheck": "npm run typecheck --workspace @embers/shared && npm run typecheck --workspace @embers/db && npm run typecheck --workspace @embers/server && npm run typecheck --workspace @embers/web",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
     "db:migrate": "npm run migrate --workspace @embers/db --if-present",
     "db:seed": "npm run seed --workspace @embers/db --if-present",
     "server:dev": "npm run dev --workspace @embers/server --if-present"
@@ -27,6 +29,13 @@
     "better-sqlite3@13.0.3": true
   },
   "devDependencies": {
-    "@playwright/test": "^1.62.1"
+    "@playwright/test": "^1.62.1",
+    "@typescript-eslint/eslint-plugin": "^8.66.0",
+    "@typescript-eslint/parser": "^8.66.0",
+    "eslint": "^9.39.5",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "globals": "^15.15.0",
+    "typescript-eslint": "^8.66.0"
   }
 }
