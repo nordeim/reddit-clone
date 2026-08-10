@@ -11,6 +11,7 @@ import { NotificationsPage } from "./pages/NotificationsPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 import { LoginPage } from "./pages/LoginPage";
 import { RegisterPage } from "./pages/RegisterPage";
+import { RequireAuth } from "./auth/RequireAuth";
 import { useAppStore } from "./store/store";
 
 export default function App() {
@@ -42,7 +43,17 @@ export default function App() {
             <Route path="/comments/:postId" element={<PostPage />} />
             <Route path="/u/:username" element={<ProfilePage />} />
             <Route path="/search" element={<SearchPage />} />
-            <Route path="/notifications" element={<NotificationsPage />} />
+            {/* /notifications is the first protected route (Round 7 B18.8).
+                Anonymous users are redirected to /login with state.from
+                so LoginPage can redirect back after successful login. */}
+            <Route
+              path="/notifications"
+              element={
+                <RequireAuth>
+                  <NotificationsPage />
+                </RequireAuth>
+              }
+            />
             <Route path="*" element={<NotFoundPage />} />
           </Route>
         </Routes>
