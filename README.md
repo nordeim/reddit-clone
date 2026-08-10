@@ -20,7 +20,8 @@ reddit-clone/
 ├── docs/             ← REMEDIATION_EXECUTION_PLAN.md (B0–B16 status),
 │                       REMEDIATION_PLAN_2.md (B17–B24 deferred),
 │                       Project-Architecture-Document.md, AGENTS.md, etc.
-├── skills/           ← local skill library (198 skills, see skills-catalog.md)
+├── skills/           ← local skill library (gitignored — not part of the
+│                       published repo; see `skills/skills-catalog.md` if present)
 └── package.json      ← root workspaces config + fan-out scripts
 ```
 
@@ -83,9 +84,9 @@ host (ADR-003 single-file build is still in force for the client).
 | Lint (ESLint) | 0 errors, 0 warnings | `npm run lint` |
 
 All 367 vitest tests + 9 Playwright E2E smoke tests pass, ESLint is clean, and
-typecheck + build succeed as of Round 4 (2026-08-10). See
-`docs/REMEDIATION_EXECUTION_PLAN.md` §10 for the Round 4 changelog (ESLint
-setup + 6 lint errors fixed + CI lint step added).
+typecheck + build succeed as of Round 5 (2026-08-10). See
+`docs/REMEDIATION_PLAN_ROUND_5.md` for the Round 5 changelog (doc-alignment +
+`pretest` script + `@vitest/coverage-v8` + foundational web API client).
 
 ## Architecture Decision Records
 
@@ -122,6 +123,8 @@ setup + 6 lint errors fixed + CI lint step added).
 | `CLAUDE.md` | Daily implementation conventions (TS, build, testing) |
 | `docs/Project-Architecture-Document.md` | Master PAD — full architecture + ADRs |
 | `docs/REMEDIATION_EXECUTION_PLAN.md` | Active execution plan (B0–B16 done, B17–B24 deferred) |
+| `docs/REMEDIATION_PLAN.md` | Master remediation plan (10 ADRs, B0–B24 backlog) |
+| `docs/REMEDIATION_PLAN_ROUND_5.md` | Round 5 changelog + detailed B17–B22 TDD breakdown |
 | `docs/REMEDIATION_PLAN_2.md` | Original 10-ADR remediation proposal (status annotations added) |
 | `docs/IMPLEMENTATION_PLAN.md` | Original greenfield plan that produced `apps/web` |
 | `docs/MANUAL_QA.md` | Manual QA matrix for the client SPA |
@@ -209,7 +212,7 @@ npm test
 | Testing | vitest + @testing-library/react | 2.1.9 / 16.x |
 | Test env | jsdom | 25.x |
 
-Tests are colocated with source as `*.test.ts(x)`. The vitest config lives in `vitest.config.ts` (kept separate from `vite.config.ts` to avoid a type clash between the project's `vite` package and the `vite` bundled inside `vitest`). No ESLint.
+Tests are colocated with source as `*.test.ts(x)`. The vitest config lives in `vitest.config.ts` (kept separate from `vite.config.ts` to avoid a type clash between the project's `vite` package and the `vite` bundled inside `vitest`). ESLint 9 flat config (`eslint.config.mjs` at repo root) was added in Round 4 — see the "ESLint Conventions (Round 4)" section of `CLAUDE.md`.
 
 ## Design System
 

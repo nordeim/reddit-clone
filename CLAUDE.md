@@ -48,7 +48,7 @@ The original client-only React SPA lives at `apps/web/` (`@embers/web`): **no ba
 | Testing | vitest + Fastify inject | 2.1.9 |
 | Runtime | Node.js | ≥20 |
 
-Tests are colocated with source as `*.test.ts(x)`. The vitest config lives in each workspace's `vitest.config.ts`. No ESLint.
+Tests are colocated with source as `*.test.ts(x)`. The vitest config lives in each workspace's `vitest.config.ts`. ESLint 9 flat config (`eslint.config.mjs` at repo root) was added in Round 4 — see the "ESLint Conventions (Round 4)" section below.
 
 ## Commands
 
@@ -172,7 +172,7 @@ Applied by `openDb()` in `packages/db/src/client.ts`:
 | ADR-109 | SQLite FTS5 virtual tables for full-text search |
 | ADR-110 | Pino structured logging + requestId correlation |
 
-Deferred: ADR-105 (React Query), ADR-106 (BrowserRouter), B23 (Docker/GHA), B24 (Playwright E2E).
+Deferred: ADR-105 (React Query), ADR-106 (BrowserRouter), B17–B22 (frontend integration — see `docs/REMEDIATION_PLAN_ROUND_5.md`). B23 (Docker/GHA) and B24 (Playwright E2E) were completed in Round 3.
 
 ## State Management
 
@@ -239,6 +239,39 @@ npm run build       # topological build — must succeed
 git ls-files | grep -E '(^|/)dist/' | wc -l   # must be 0 (no dist/ tracked)
 ```
 
+**Build-before-test prerequisite (Round 5):** `@embers/server`'s test suites import
+`@embers/db` and `@embers/shared` as runtime packages, so their `dist/` builds
+must exist before `npm test --workspaces` runs. The root `package.json` has a
+`pretest` script that builds `@embers/shared` and `@embers/db` first, so a fresh
+`git clone && npm install && npm test` works without manual `npm run build`.
+If you skip the pretest (e.g. `npm test --ignore-scripts`), run
+`npm run build --workspace @embers/shared && npm run build --workspace @embers/db`
+first or the server's 4 route test suites will fail with
+`Failed to resolve entry for package "@embers/db"`.
+
+### Coverage (Round 5)
+
+`@vitest/coverage-v8` is installed in `@embers/server`. Run server tests with
+coverage via:
+
+```bash
+npm test --workspace @embers/server -- --coverage
+```
+
+The `apps/server/vitest.config.ts` enables v8 coverage with sensible defaults
+(`src/**/*.ts`, exclude `*.test.ts` and `index.ts`). Coverage thresholds are
+NOT enforced in CI yet — they are informational. The DoD's "80% backend coverage"
+line in `docs/REMEDIATION_PLAN.md` is therefore aspirational, not enforced.
+
+### Manual smoke verification
+
+`apps/server/verify_claims.ts` is a one-off script that boots the server with an
+in-memory seeded DB and verifies four runtime invariants: login status code,
+access token presence, CSP header, and rate-limit headers. Run it via
+`npx tsx apps/server/verify_claims.ts` from the repo root. It is not part of the
+automated test suite (it duplicates what `api.test.ts` + `hardening.test.ts`
+already cover) but is useful for ad-hoc manual checks before a release.
+
 **Round 3 additions:**
 - `Dockerfile` + `docker-compose.yml` + `.dockerignore` at repo root (B23).
 - `.github/workflows/ci.yml` runs lint + typecheck + test + build + e2e on push/PR.
@@ -261,6 +294,24 @@ git ls-files | grep -E '(^|/)dist/' | wc -l   # must be 0 (no dist/ tracked)
 - ESLint config adapted from the sample Next.js config: `@next/eslint-plugin-next`
   removed (not used), 5-layer architecture enforcement removed (different
   pattern), React rules scoped to `apps/web/src/**` only.
+
+**Round 5 additions (doc-alignment + infra hygiene):**
+- Fixed stale "No ESLint" line in this file (§Tech Stack → Backend) and in
+  `README.md`. Both files originally said "No ESLint"; both now reference the
+  Round 4 flat config.
+- Fixed stale `Deferred` line in this file (§Backend Architecture → ADRs) —
+  B23 + B24 are done, not deferred.
+- Added `pretest` script to root `package.json` that builds `@embers/shared` and
+  `@embers/db` before `npm test --workspaces`, so a fresh clone passes tests
+  out-of-the-box.
+- Added `@vitest/coverage-v8` to `@embers/server` and enabled v8 coverage in
+  `apps/server/vitest.config.ts`. Coverage is informational (no CI gate yet).
+- Documented `apps/server/verify_claims.ts` (manual smoke script).
+- Added `apps/web/src/lib/api.ts` — foundational fetch-based API client for the
+  deferred B17–B22 frontend integration. Non-breaking: existing Zustand store
+  + HashRouter + deterministic data layer are untouched.
+- New `docs/REMEDIATION_PLAN_ROUND_5.md` with a detailed TDD breakdown for
+  B17–B22 (the still-deferred frontend integration phases).
 
 ### ESLint Conventions (Round 4)
 

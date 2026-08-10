@@ -14,9 +14,16 @@
 > `apps/server/src/routes/api.test.ts` and untracked 96 accidentally-committed
 > `dist/` build artifacts. See `docs/REMEDIATION_PLAN_ROUND_3.md` for the
 > full Round 3 plan and verification ledger.
-> The architecture notes below remain accurate for `apps/web/` unchanged —
-> every path mentioned is relative to `apps/web/` (e.g. `src/data/posts.ts`
-> is `apps/web/src/data/posts.ts`).
+> Round 5 (2026-08-10) was a doc-alignment + infra-hygiene pass: fixed stale
+> "No ESLint" / "B23+B24 deferred" lines in `CLAUDE.md` + `README.md`, added
+> a `pretest` script to root `package.json` (so `npm test` works on a fresh
+> clone), added `@vitest/coverage-v8` + coverage config to `@embers/server`,
+> and added `apps/web/src/lib/api.ts` — a foundational fetch-based API client
+> for the still-deferred B17–B22 frontend integration. See
+> `docs/REMEDIATION_PLAN_ROUND_5.md` for the Round 5 changelog + B17–B22
+> TDD breakdown. The architecture notes below remain accurate for `apps/web/`
+> unchanged — every path mentioned is relative to `apps/web/` (e.g.
+> `src/data/posts.ts` is `apps/web/src/data/posts.ts`).
 
 ---
 

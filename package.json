@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "npm run dev --workspaces --if-present",
     "build": "npm run build --workspace @embers/shared && npm run build --workspace @embers/db && npm run build --workspace @embers/server && npm run build --workspace @embers/web",
+    "pretest": "npm run build --workspace @embers/shared && npm run build --workspace @embers/db",
     "test": "npm run test --workspaces --if-present",
     "test:e2e": "playwright test",
     "test:e2e:install": "playwright install --with-deps chromium",
