@@ -31,12 +31,12 @@
 
 ### 1.1 Document Metadata & Purpose
 
-**embers** is a client-only Reddit-style community feed SPA. It has **no backend, no API, and no `fetch` calls**. Every piece of content — users, communities, posts, comments, notifications — is generated deterministically in the browser at module load time via seeded PRNGs.
+**embers** is a Reddit-style community feed. The original client-only React SPA lives at `apps/web/`: every piece of content — users, communities, posts, comments, notifications — is generated deterministically in the browser at module load time via seeded PRNGs. A Fastify REST API backend lives at `apps/server/` (with `packages/shared` + `packages/db`), added in the monorepo transition. The client's `src/lib/api.ts` provides a fetch-based API client — wired into the AuthProvider (B18, Rounds 6-7) but not yet into the feeds/search pages (deferred B17–B22).
 
 This PAD serves as the single source of truth for:
 
-- **New engineers:** Understand the architectural philosophy (deterministic data, overlay pattern, single-file build) before touching code.
-- **Debugging:** Trace the data flow from seed → generation → store overlay → render.
+- **New engineers:** Understand the architectural philosophy (deterministic data, overlay pattern, single-file build, dual data layers) before touching code.
+- **Debugging:** Trace the data flow from seed → generation → store overlay → render (client) or request → route → repository → database (server).
 - **Replication:** Rebuild this exact system elsewhere by following the layer model and ADRs.
 
 ### 1.2 Technology Stack Summary
@@ -50,7 +50,7 @@ This PAD serves as the single source of truth for:
 | Routing | react-router-dom | 7.18.2 | `HashRouter` for zero-config static hosting |
 | State | zustand | 5.0.14 | Minimal boilerplate; `persist` middleware for localStorage |
 | Animation | framer-motion | 13.x | Layout animations, `AnimatePresence`, gesture support |
-| Icons | lucide-react | 1.30.x | Consistent stroke-based icon set |
+| Icons | lucide-react | 1.31.0 | Consistent stroke-based icon set |
 | Class merging | clsx + tailwind-merge | 2.1.1 / 3.4.0 | Conditional classes without specificity conflicts |
 | Single-file | vite-plugin-singlefile | 2.3.0 | Inlines all JS/CSS into one HTML for portable deployment |
 
@@ -143,11 +143,12 @@ for E2E smoke tests (added in Round 3).
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-**Runtime characteristics:**
+**Runtime characteristics (client):**
 - Single-page app. No SSR. No hydration mismatch risk.
 - All "async" behavior is simulated with `setTimeout` (650ms feed load, 500ms comments).
 - No WebSocket, no SSE, no real-time updates.
 - Persistence: localStorage only. No IndexedDB, no cookies, no server sessions.
+- Auth: JWT access token (in `useRef`) + HttpOnly refresh cookie. Token refresh-and-retry on 401 (opt-in via `tryRefreshOn401`).
 
 ---
 
@@ -207,7 +208,8 @@ src/
 │   └── api.ts                  # Foundational fetch-based API client (Round 5) + 401 refresh-and-retry (Round 6)
 │
 ├── auth/
-│   └── AuthProvider.tsx        # React context + useAuth() hook (Round 6, B18)
+│   ├── AuthProvider.tsx        # React context + useAuth() hook (Round 6, B18)
+│   └── RequireAuth.tsx         # Route guard — anonymous → /login with state.from (Round 7, B18)
 │
 ├── hooks/
 │   ├── index.ts                # useDebounce, useOnClickOutside, useInfiniteScroll
@@ -420,6 +422,17 @@ type ImageCategory = "nature" | "tech" | "gaming" | "food" |
 | Notifications | 18 | `notifications-seed-v1` | `data/notifications.ts` | 4 types: upvote, reply, mention, community |
 | Images | 8 categories | N/A | `data/images.ts` | Maps `ImageCategory → /images/cat-{name}.jpg` |
 
+**Backend seed data** (deterministic PRNG ported from `apps/web/src/utils/random.ts`):
+
+| Entity | Count | Source | Notes |
+|---|---|---|---|
+| Users | 49 | `packages/db/scripts/seed.ts` | 48 generated + demo user `you` |
+| Communities | 18 | `packages/db/scripts/seed.ts` | Same seeds as client |
+| Posts | 320 | `packages/db/scripts/seed.ts` | Same generation algorithm as client |
+| Comments | ~3037 | `packages/db/scripts/seed.ts` | Per-post trees, max depth 4 |
+| Notifications | 18 | `packages/db/scripts/seed.ts` | 4 types |
+| Sessions | 0 (at rest) | `packages/db` runtime | Created on login, revoked on logout/refresh |
+
 ---
 
 ## 5. Design System Reference
@@ -502,7 +515,16 @@ Dark mode: Custom variant `@custom-variant dark (&:where(.dark, .dark *));` — 
 
 ### 6.3 Authentication & Authorization
 
-**None.** `CURRENT_USER` (`id: "u-me"`) is a hardcoded local identity. The "Log out (demo)" button in the navbar is cosmetic.
+**Client (`apps/web`):** B18 (Rounds 6-7) added full authentication:
+- `AuthProvider` context + `useAuth()` hook holds the access token in a `useRef` and exposes `{ user, status, error, login, register, logout }`.
+- `/api/auth/login` returns a JWT access token (15m TTL) + HttpOnly refresh cookie (7d TTL). `/api/auth/register` returns `{ user }` only — the client must call login afterwards.
+- 401 refresh-and-retry: the api client (`lib/api.ts`) silently refreshes the access token on 401 and retries the original request once.
+- `<RequireAuth>` route guard protects `/notifications` — anonymous users are redirected to `/login` with `state: { from: location.pathname }`.
+- Navbar is auth-aware: shows "Log in" + "Sign up" when anonymous, avatar + username + karma + "Log out" when authenticated.
+
+**Server (`apps/server`):** Argon2id password hashing + JWT (jose HS256) with refresh-token rotation. Routes opt in to auth via `preHandler: [app.authenticate]`. Author-only routes return 403 (not 401). Rate limiting: 5 req/min/IP on auth endpoints, 100 req/min globally.
+
+**Demo user:** `you` / `embers-demo` (seeded by `packages/db/scripts/seed.ts`). `CURRENT_USER` (`id: "u-me"`) remains the hardcoded client-side identity for the deterministic demo data — it is NOT a registered server user.
 
 ---
 
@@ -567,11 +589,13 @@ src/
 The project relies on:
 
 1. **TypeScript strict mode** — catches type errors, unused variables, fallthrough cases
-2. **Vitest unit + integration tests** — 262 tests across 17 files covering pure utilities, store logic, the foundational API client (Round 5), the AuthProvider context + 401 refresh-and-retry (Round 6), the LoginPage + RegisterPage forms + auth-aware Navbar + RequireAuth route guard (Round 7), and key components (web) + 95 server tests + 67 shared tests + 29 db tests = 453 total
+2. **Vitest unit + integration tests** — 262 tests across 17 files covering pure utilities, store logic, the foundational API client (Round 5), the AuthProvider context + 401 refresh-and-retry (Round 6), the LoginPage + RegisterPage forms + auth-aware Navbar + RequireAuth route guard (Round 7), and key components (web) + 95 server tests + 67 shared tests + 29 db tests = **453 total**
 3. **ESLint 9 flat config** (Round 4) — 0 errors, 0 warnings across all workspaces
 4. **Playwright E2E** (Round 3 smoke + Round 7 auth lifecycle) — 18 tests covering health, register, login, feed, single post, search, communities, + the full auth lifecycle (register → login → access protected → logout → refresh revoked; 409/401/422 error paths; refresh rotation)
 5. **Manual typecheck** — `npm run typecheck` before claiming a change compiles
 6. **Production build** — `npm run build` validates bundling succeeds
+
+> **Run tests correctly:** always use `npm test` (which triggers `pretest` to build `@embers/shared` + `@embers/db` first via `--workspaces`). Running `vitest run` directly from root discovers 0 workspace configs. The root `package.json` has a `pretest` script that builds the shared + db workspaces, so a fresh `git clone && npm install && npm test` works without manual `npm run build`.
 
 ### 7.5 Pre-Commit Checklist
 
@@ -604,7 +628,9 @@ npm run preview    # Serve dist/ for verification
 
 ### 8.2 Environment Variables
 
-**None.** The app reads no environment variables. No `.env` file. No build-time configuration. `import.meta.env.BASE_URL` is the only Vite env reference — used by `src/data/images.ts` for asset paths.
+**Client (`apps/web`):** Reads no environment variables at runtime. `import.meta.env.BASE_URL` is the only Vite env reference — used by `src/data/images.ts` for asset paths. `import.meta.env.VITE_API_URL` is used by `lib/api.ts` to configure the backend base URL (defaults to `http://localhost:4000`).
+
+**Server (`apps/server`):** All config via `loadEnv()` (zod-validated). Required in production: `JWT_ACCESS_SECRET` (≥32 chars), `JWT_REFRESH_SECRET` (≥32 chars), `DATABASE_URL`, `CORS_ORIGIN`. Optional: `PORT` (default 4000), `HOST` (default 0.0.0.0), `LOG_LEVEL`, `RATE_LIMIT_MAX` (default 100), `AUTH_RATE_LIMIT_MAX` (default 5), `COOKIE_DOMAIN`. Tests inject overrides via `loadEnv({ ... })` — never touches `process.env`.
 
 ### 8.3 Build Constraints
 
@@ -689,7 +715,8 @@ npm run preview  # → serves dist/ on a local port
 |----------|-------|--------|--------|
 | ~~MEDIUM~~ | ~~No linter installed~~ | ~~No enforced code style~~ | **Resolved in Round 4** — ESLint 9 flat config with `typescript-eslint` + React + react-hooks plugins |
 | LOW | Google Fonts loaded externally | Breaks when offline or blocked by CSP | Open |
-| LOW | Comment IDs (`${postId}-c${Date.now()}`) can theoretically collide if two comments are created in the same millisecond | Extremely unlikely but possible | Open |
+| LOW | `apps/web` and `apps/server` have separate data layers (deterministic browser generation vs. Drizzle/seeded SQLite) | Votes/saves in the browser don't sync to the backend | **By design** — frontend integration (B19–B22) deferred pending B17 build refactor |
+| LOW | LoginPage doesn't redirect back to `state.from` after login | User lands on `/` instead of the page they were trying to access | **Deferred** — `<RequireAuth>` preserves `state.from` but LoginPage always navigates to `/`. A future round can read `location.state?.from` and redirect back. |
 
 ### 10.1 Resolved in the latest remediation pass
 
@@ -762,7 +789,7 @@ The following previously-open issues are now resolved (see `docs/REMEDIATION_PLA
 | `src/pages/HomePage.tsx` | Feed with scope (home/popular/all/explore) |
 | `src/pages/PostPage.tsx` | Post detail + comment tree (500ms simulated load) |
 | `src/lib/api.ts` | Foundational fetch-based API client for the Fastify backend (Round 5) — basis for deferred B17–B22 frontend integration. Extended in Round 6 with `tryRefreshOn401` + `onTokenRefresh` for 401 refresh-and-retry. |
-| `src/lib/api.test.ts` | 22 tests for the API client (constructor defaults, every endpoint, auth header, cursor encoding, 4xx/5xx error mapping) + 9 new tests for the 401 refresh-and-retry path (Round 6). |
+| `src/lib/api.test.ts` | 32 tests for the API client: constructor defaults, every endpoint, auth header, cursor encoding, 4xx/5xx error mapping, 204 handling (22 original) + 401 refresh-and-retry path (9 new, Round 6) + register displayName (1 new, Round 7). |
 | `src/auth/AuthProvider.tsx` | React context + `useAuth()` hook holding the access token in a `useRef`. Exposes `{ user, status, error, login, register, logout }`. Wires `tryRefreshOn401: true` on the api client. (Round 6, B18; register method added Round 7) |
 | `src/auth/AuthProvider.test.tsx` | 20 TDD tests for AuthProvider — initial state, login flow, logout flow, refresh-path wiring. (Round 6, B18) |
 | `src/auth/RequireAuth.tsx` | Route guard. Anonymous → `<Navigate to="/login" state={{ from: location.pathname }} replace />`. Authenticated → children. Loading → null. (Round 7, B18) |
@@ -822,7 +849,7 @@ apply to `apps/server` and the `packages/{shared,db}` workspaces.
 | ADR-108 | Transactional atomic vote counters (`UPDATE … SET col = col + delta`) | `apps/server/src/services/voteService.ts` |
 | ADR-109 | SQLite FTS5 virtual tables + BM25 ranking | `packages/db/src/fts5.ts` |
 | ADR-110 | Pino structured logging + requestId correlation | `apps/server/src/plugins/{requestId,errorHandler}.ts` |
-| ADR-104 (web) | AuthProvider context + 401 refresh-and-retry + `/login` + `/register` + auth-aware Navbar + `<RequireAuth>` route guard | `apps/web/src/auth/{AuthProvider,RequireAuth}.tsx` + `apps/web/src/lib/api.ts` + `apps/web/src/pages/{LoginPage,RegisterPage}.tsx` + `apps/web/src/components/layout/Navbar.tsx` — **Rounds 6-7 (B18) DONE**: the full auth flow is wired. AuthProvider holds the access token in a `useRef`, exposes `{ user, status, error, login, register, logout }`. The api client does 401 refresh-and-retry (opt-in via `tryRefreshOn401`). `/login` and `/register` render outside AppShell. `/notifications` is protected by `<RequireAuth>`. The Navbar is auth-aware (shows login/signup links when anonymous, avatar+logout when authenticated). 9 E2E auth lifecycle tests verify the server-side contract. B17 (build refactor — remove singlefile + BrowserRouter) remains deferred pending user confirmation. See `docs/REMEDIATION_PLAN_ROUND_6.md` + `docs/REMEDIATION_PLAN_ROUND_7.md`. |
+| B18 (web) | AuthProvider context + 401 refresh-and-retry + `/login` + `/register` + auth-aware Navbar + `<RequireAuth>` route guard | `apps/web/src/auth/{AuthProvider,RequireAuth}.tsx` + `apps/web/src/lib/api.ts` + `apps/web/src/pages/{LoginPage,RegisterPage}.tsx` + `apps/web/src/components/layout/Navbar.tsx` — **Rounds 6-7 DONE**: the full auth flow is wired. AuthProvider holds the access token in a `useRef`, exposes `{ user, status, error, login, register, logout }`. The api client does 401 refresh-and-retry (opt-in via `tryRefreshOn401`). `/login` and `/register` render outside AppShell. `/notifications` is protected by `<RequireAuth>`. The Navbar is auth-aware (shows login/signup links when anonymous, avatar+logout when authenticated). 9 E2E auth lifecycle tests verify the server-side contract. B17 (build refactor — remove singlefile + BrowserRouter) remains deferred pending user confirmation. See `docs/REMEDIATION_PLAN_ROUND_6.md` + `docs/REMEDIATION_PLAN_ROUND_7.md`. |
 
 ### 13.2 Backend Topology
 
@@ -830,7 +857,7 @@ apply to `apps/server` and the `packages/{shared,db}` workspaces.
 ┌──────────────────────────────────────────────────────────────┐
 │                  CLIENT (Browser) — apps/web                  │
 │   React 19 SPA (unchanged from §2, runs via HashRouter +       │
-│   vite-plugin-singlefile, 262 tests green)                    │
+│   vite-plugin-singlefile, 262 tests passing)                  │
 └──────────────────────────────────────────────────────────────┘
                               │
                               │  (frontend integration deferred — §5)
@@ -864,7 +891,7 @@ apply to `apps/server` and the `packages/{shared,db}` workspaces.
 └──────────────────────────────────────────────────────────────┘
 ```
 
-### 13.3 Backend Test Coverage (80 tests)
+### 13.3 Backend Test Coverage (95 tests)
 
 | Suite | Tests | Coverage |
 |---|---|---|
@@ -873,16 +900,23 @@ apply to `apps/server` and the `packages/{shared,db}` workspaces.
 | `auth/password.test.ts` | 4 | Argon2id hash + verify round-trip |
 | `auth/jwt.test.ts` | 7 | Access/refresh token sign/verify, expiry, wrong-secret rejection |
 | `routes/auth.test.ts` | 14 | Register/login/refresh/logout + 401/409/422 paths |
-| `routes/api.test.ts` | 34 | Posts, communities, votes (toggle/flip), comments, search, notifications |
+| `routes/api.test.ts` | 46 | Posts (CRUD + author enforcement), communities, votes (toggle/flip/zero), comments (tree + notifications), search (FTS5), notifications |
 | `routes/hardening.test.ts` | 7 | Helmet CSP, X-Frame-Options, etc.; auth route rate limit (5/min → 429) |
+| `routes/voteConcurrency.test.ts` | 3 | 100 concurrent upvotes → +100; same-user 100 votes → 0 net (toggle); concurrent flip integrity |
 
-### 13.4 Shared Package Schemas (61 tests)
+### 13.4 Shared Package Schemas (67 tests)
 
 `packages/shared/src/` defines Zod schemas for every entity and API
 endpoint. These are the runtime contract — Fastify's zod-validator
 plugin uses them directly so the TS types and runtime validation
 cannot drift. Branded ID types (`UserId`, `PostId`, etc.) prevent
 accidental cross-assignment at compile time, erased at runtime.
+
+| Suite | Tests | Coverage |
+|---|---|---|
+| `ids.test.ts` | 8 | Branded ID constructors + type guards |
+| `schemas.test.ts` | 19 | Entity Zod schemas (runtime + type) |
+| `api.test.ts` | 40 | API input/output schemas per endpoint |
 
 ### 13.5 Database Package (29 tests)
 

@@ -52,6 +52,10 @@ please meticulously plan to create `README.md` using skill 'readme-md'
 
 please meticulously plan to review and validate @AGENTS.md , @CLAUDE.md and @README.md against the codebase to check for alignment.
 
+please meticulously plan to review @README.md and @docs/Project-Architecture-Document.md and update them to be aligned with the current codebase
+
+please meticulously plan to run lint, typecheck and build tests to check for any issues and bugs                                                                                                                                           
+                                                                                                                                                                                                                                            
 ---
 
 please meticulously plan to apply precise edits to the relevant documents to align them with the current codebase. but first re-evaluate and re-validate your findings again to ensure alignment. run lint, typecheck and build to check for any errors and bugs before finalizing the documentation update plan. 

@@ -18,7 +18,9 @@
     "lint:fix": "eslint . --fix",
     "db:migrate": "npm run migrate --workspace @embers/db --if-present",
     "db:seed": "npm run seed --workspace @embers/db --if-present",
-    "server:dev": "npm run dev --workspace @embers/server --if-present"
+    "db:setup": "npm run db:migrate && npm run db:seed",
+    "server:dev": "npm run dev --workspace @embers/server --if-present",
+    "server:start": "PORT=5000 NODE_ENV=development DATABASE_URL=../../packages/db/dev.db npm run dev --workspace @embers/server"
   },
   "engines": {
     "node": ">=20"
