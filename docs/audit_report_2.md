@@ -1,152 +1,46 @@
-> **Round 10 status (2026-08-10):** All 7 findings (F1-F7) below have been
-> addressed in Round 10:
-> - **F1 (tRPC vs REST+Zod)**, **F2 (pnpm/Turborepo vs npm)**,
->   **F3 (RS256 vs HS256)**, **F4 (UUID vs Branded/Sequential IDs)** —
->   FIXED via `docs/REMEDIATION_PLAN.md` alignment (removed all drift
->   references) + new `npm run test:plan-alignment` CI gate
->   (`scripts/verify-plan-alignment.mjs`) that asserts the plan never
->   re-drifts.
-> - **F5 (ADR revocation vs deferred)** — `REMEDIATION_PLAN.md` §1 now
->   says "Target State (Pending B17 Execution)" instead of "Revoke".
->   The ADRs (ADR-001, ADR-003, ADR-004) remain ACTIVE until B17 is
->   executed.
-> - **F6 (frontend integration deadlock)** — Remains an open design
->   decision. B17 (BrowserRouter + chunked build) is intentionally
->   deferred to preserve the "deploy-anywhere" static-hosting story.
->   No change in Round 10.
-> - **F7 (loss of offline capability)** — `REMEDIATION_PLAN.md` §4.4
->   now documents the **Hybrid Data Strategy**: React Query attempts
->   the API first, and on failure / initial load, falls back to the
->   deterministic `src/data/*` layer.
->
-> See `docs/REMEDIATION_PLAN_ROUND_10.md` for the full plan.
+### Codebase Comprehension
+I have cloned the repository and reviewed `AGENTS.md`, `CLAUDE.md`, `README.md`, and `docs/session_10.md`. The project is a mature, enterprise-grade npm-workspaces monorepo consisting of four packages:
+
+1.  **`@embers/web` (`apps/web/`)**: A React 19 SPA using Vite 7, Tailwind v4, and Zustand. It currently runs on a **deterministic PRNG data layer** (ADR-001) for the core feed experience, using `HashRouter` and `vite-plugin-singlefile` for zero-config static hosting (ADR-003/004). Auth (B18) was completed in Rounds 6–7, adding `AuthProvider`, `LoginPage`, `RegisterPage`, and an auth-aware Navbar.
+2.  **`@embers/server` (`apps/server/`)**: A Fastify REST API using Drizzle ORM, SQLite (`better-sqlite3`), and Zod for validation. It implements a composition-root pattern (`buildApp()`), transactional vote counters (ADR-108), and FTS5 virtual tables for search (ADR-109).
+3.  **`@embers/db` (`packages/db/`)**: Drizzle schema, SQLite client with WAL mode and `busy_timeout=5000`, and deterministic seed scripts matching the client’s PRNG output.
+4.  **`@embers/shared` (`packages/shared/`)**: Zod schemas and branded string IDs (`UserId`, `PostId`, etc.) to ensure type safety across the monorepo.
+
+The codebase is extensively tested (462 vitest tests + 48 Playwright E2E tests) and passes all CI gates (lint, typecheck, test, build, gitleaks, plan-alignment).
 
 ---
 
-### 1. Audit & Validation of `docs/REMEDIATION_PLAN.md`
+### `docs/REMEDIATION_PLAN.md` Validation & Alignment
 
-A systematic review of the provided remediation plan against the current codebase state reveals that while the high-level target architecture is sound, the document contains severe internal contradictions and mismatches with the actual implementation.
+I have validated the claims in `docs/REMEDIATION_PLAN.md` against the actual source code. The document is **highly accurate regarding the architecture, tech stack, and ADRs**, but contains **internal inconsistencies in its 5-Phase execution checklist**.
 
-**Summary of Findings**
-| Severity | Count | Description |
-| :--- | :---: | :--- |
-| **Critical** | 2 | Architectural contradictions that will cause implementation drift. |
-| **High** | 3 | Security and data-model mismatches with the live codebase. |
-| **Medium** | 2 | Execution dependencies and capability gaps. |
+#### 1. Architectural & Technical Alignment (Verified ✅)
+*   **Monorepo & Stack**: Verified. `package.json` contains all four workspaces. `apps/server` uses Fastify/Pino/Zod. `packages/db` uses Drizzle/better-sqlite3.
+*   **Authentication (ADR-104)**: Verified. `apps/server/src/auth/jwt.ts` uses **HS256** (symmetric) via `jose`. `config.ts` enforces **15m** access tokens and **7d** refresh tokens. `password.ts` uses **Argon2id**.
+*   **Database Hardening (ADR-103)**: Verified. `packages/db/src/client.ts` sets `PRAGMA journal_mode=WAL` and `PRAGMA busy_timeout=5000`. `schema/index.ts` defines the `votes` table with a composite primary key `(user_id, target_id, target_type)`.
+*   **FTS5 Search (ADR-109)**: Verified. `packages/db/src/fts5.ts` creates a `posts_fts` virtual table with `content='posts'` (external content pattern) and BM25 ranking.
+*   **State Management (ADR-105 Status)**: Verified. The plan correctly identifies that React Query is the *Target State* (deferred B19–B22) and that Zustand currently still owns all state (verified in `apps/web/src/store/store.ts` which holds `votes`, `localPosts`, `localComments`).
+*   **B18 (Auth Provider) Completion**: Verified. `AuthProvider.tsx`, `LoginPage.tsx`, `RegisterPage.tsx`, and `RequireAuth.tsx` all exist. `lib/api.ts` implements `tryRefreshOn401`.
 
-#### Detailed Findings
+#### 2. Discrepancies & Internal Inconsistencies (Action Required ⚠️)
+While the Round 10 update successfully aligned the architecture sections and the B0–B24 backlog at the bottom of the document, the **5-Phase ToDo List** (Sections 3.1–3.8 and 4.1–4.10) was not fully updated to reflect completed work.
 
-**[CRITICAL] F1: API Layer Contradiction (tRPC vs REST+Zod)**
-*   **Location:** `docs/REMEDIATION_PLAN.md` §2 (Target Architecture Stack) vs. §Audit of Previous Plan.
-*   **Description:** §2 lists "tRPC" as the API layer, but the Audit section explicitly rejects tRPC in favor of "REST+Zod".
-*   **Evidence:** The codebase (ADR-101, `apps/server/src/routes`) is fully implemented as REST+Zod.
-*   **Impact:** Developers may attempt to introduce tRPC into an existing REST backend, causing fragmentation.
-*   **Recommended Fix:** Rewrite §2 to explicitly state "REST + Zod (Fastify)" and purge all tRPC references.
-*   **Confidence:** Verified.
+The following items are marked `[ ]` (Incomplete) in the 5-Phase list, but correspond exactly to phases that are already marked `[x]` in the B0–B24 backlog and exist in the codebase:
 
-**[CRITICAL] F2: Monorepo Tooling Contradiction (pnpm/Turborepo vs npm)**
-*   **Location:** `docs/REMEDIATION_PLAN.md` §2 vs. §8 (ADR-107).
-*   **Description:** §2 proposes "Turborepo + pnpm workspaces", while §8 defines ADR-107 as "npm-workspaces".
-*   **Evidence:** The repository uses `npm-workspaces` (root `package.json` contains `workspaces` array; `package-lock.json` is present).
-*   **Impact:** CI/CD pipelines will fail if scripts assume `pnpm` or Turborepo cache mechanisms.
-*   **Recommended Fix:** Align §2 to "npm-workspaces". Turborepo can be added as an orchestration layer, but the package manager must remain `npm`.
-*   **Confidence:** Verified.
+| Phase Item | Claim in `REMEDIATION_PLAN.md` | Actual Status in Codebase | Corresponding Backlog Item |
+| :--- | :--- | :--- | :--- |
+| **Phase 2 (2.1–2.6)** | Scaffold DB, Schema, WAL, Migrations, Seed, Transactions. | **All Complete**. `packages/db` exists, schema is defined, WAL is enabled, migrations applied, seed works, votes are transactional. | **B3–B7 (Done)** |
+| **Phase 4 (4.7)** | Build real Login/Register UI pages. | **Complete**. `LoginPage.tsx` and `RegisterPage.tsx` exist and are wired to `useAuth()`. | **B18 (Done)** |
+| **Phase 4 (4.8)** | Replace cosmetic "Log out" with real session destruction. | **Complete**. Navbar uses `auth.logout()` which clears client state and calls `/api/auth/logout`. | **B18 (Done)** |
+| **Phase 4 (4.9)** | Update AppShell for unread counts & auth state. | **Complete**. `<RequireAuth>` protects `/notifications`; Navbar is auth-aware. | **B18 (Done)** |
+| **Phase 5 (5.2–5.3)** | Install Playwright & Write E2E tests. | **Complete**. `playwright.config.ts` and `e2e/smoke.spec.ts` + `auth.spec.ts` exist and pass. | **B24 (Done)** |
+| **Phase 5 (5.7)** | Dockerization & `docker-compose.yml`. | **Complete**. `Dockerfile` and `docker-compose.yml` exist at the repo root. | **B23 (Done)** |
 
-**[HIGH] F3: JWT Algorithm Mismatch (RS256 vs HS256)**
-*   **Location:** `docs/REMEDIATION_PLAN.md` §5.1 (Authentication Design).
-*   **Description:** Specifies "Asymmetric JWT (RS256)" for token signing.
-*   **Evidence:** `apps/server/src/auth/jwt.ts` uses `jose` with HS256 (symmetric), as documented in `AGENTS.md`.
-*   **Impact:** RS256 requires public/private key pair management, which is not implemented in the current `loadEnv()` schema.
-*   **Recommended Fix:** Update §5.1 to specify "Symmetric JWT (HS256) via `jose`" to match the live implementation.
-*   **Confidence:** Verified.
+#### 3. Outstanding Work (Verified Pending ⏳)
+The following items are correctly marked `[ ]` (Incomplete/Deferred) and align with the "Deferred" status in `AGENTS.md` and `CLAUDE.md`:
+*   **Phase 4 (4.1–4.6, 4.10)**: BrowserRouter, removal of `vite-plugin-singlefile`, React Query integration, and optimistic UI. These correspond to **B17 and B19–B22**, which are explicitly deferred in `AGENTS.md` to preserve the current "deploy anywhere" static hosting story.
+*   **Phase 5 (5.4–5.6, 5.8)**: Sentry integration, source map uploads, Litestream/backup strategy, and final OWASP/WCAG audits. These are not yet implemented.
+*   **Phase 1 (1.4)**: Prettier. The plan correctly notes this is "still open per audit_report_1 F6" (the project uses ESLint only).
 
-**[HIGH] F4: Data Model ID Strategy (UUID vs Branded/Sequential)**
-*   **Location:** `docs/REMEDIATION_PLAN.md` §4.1 (SQLite Data Model).
-*   **Description:** Specifies `id (UUID)` for all tables.
-*   **Evidence:** The seed script (`packages/db/scripts/seed.ts`) generates sequential IDs (`u1`, `p1`). `@embers/shared` uses branded string IDs (`UserId`, `PostId`).
-*   **Impact:** Enforcing UUIDs requires rewriting the seed script and breaking the deterministic mapping used in 453+ tests.
-*   **Recommended Fix:** Update §4.1 to specify "Branded String IDs (e.g., `UserId`), seeded as `u1`, `p1`, etc., in dev; UUIDs/ULIDs in prod".
-*   **Confidence:** Verified.
-
-**[HIGH] F5: ADR Revocation vs. Deferred Execution (The "Offline" Conflict)**
-*   **Location:** `docs/REMEDIATION_PLAN.md` §1 (Revoked ADRs) vs. §11 (Phase B17-B22).
-*   **Description:** §1 explicitly revokes ADR-001 (Deterministic Data), ADR-003 (Single-File), and ADR-004 (HashRouter). However, §11 defers B17 (which removes Single-File and HashRouter) and implicitly relies on ADR-001 for the offline SPA.
-*   **Evidence:** `apps/web/src/data/*` is still imported to render the feed when the backend is not wired.
-*   **Impact:** If ADR-001 is truly revoked, the client SPA breaks immediately. If B17 is deferred, ADR-003/004 cannot be revoked.
-*   **Recommended Fix:** Change §1 status to "Target State (Pending B17 Execution)". The ADRs remain active until the frontend migration is executed.
-*   **Confidence:** Verified.
-
-**[MEDIUM] F6: Frontend Integration Deadlock**
-*   **Location:** `docs/REMEDIATION_PLAN.md` §11 (Phase B17-B22).
-*   **Description:** B19-B22 (React Query, API wiring) depend on B17 (BrowserRouter + chunked build), but B17 is deferred to preserve "deploy-anywhere" static hosting.
-*   **Impact:** The enhancement cannot be executed as long as B17 is deferred.
-*   **Recommended Fix:** The new plan must explicitly resolve this deadlock by either (A) executing B17 properly and updating deployment docs, or (B) adapting B19-B22 to work within `HashRouter` constraints.
-*   **Confidence:** Reasoned.
-
-**[MEDIUM] F7: Loss of Offline Capability**
-*   **Location:** `docs/REMEDIATION_PLAN.md` §4.4 (Refactor Zustand Store).
-*   **Description:** Proposes removing all server state from Zustand and moving purely to React Query.
-*   **Impact:** Removes the client's ability to function offline with deterministic data unless a fallback strategy is implemented.
-*   **Recommended Fix:** Define a "Hybrid Data Strategy" where React Query attempts the API first, and on failure/initial load, falls back to the deterministic `src/data/*` layer.
-*   **Confidence:** Reasoned.
-
----
-
-### 2. Comprehensive Remediation Plan (The "Enhancement")
-
-To execute the enhancement—wiring the frontend to the backend and achieving the enterprise target state—we must resolve the deadlock identified in **F6**. The recommended strategy is to **execute B17 (Build Refactor)** as the foundational step, transitioning from "deploy-anywhere demo" to "enterprise SPA," while retaining a fallback mechanism for offline resilience.
-
-#### Phase C1: Resolve B17 (Build & Routing Refactor)
-*Objective: Transition from demo constraints to enterprise patterns.*
-*   [ ] **C1.1:** Remove `vite-plugin-singlefile` from `apps/web/vite.config.ts`. Configure standard Vite chunking with content hashing (`[name]-[hash].js`) for long-term caching.
-*   [ ] **C1.2:** Replace `HashRouter` with `BrowserRouter` in `apps/web/src/App.tsx`.
-*   [ ] **C1.3:** Update deployment documentation (`README.md`, `AGENTS.md`) to require a reverse proxy (Nginx/Caddy) or hosting platform (Vercel/Netlify) that handles SPA fallback routing (`/*` -> `index.html`).
-*   [ ] **C1.4:** Update `e2e/` Playwright tests to handle standard URL paths (remove `#` handling).
-*   **Gate:** `npm run build` outputs chunked assets; deep-linking to `/r/technology` works locally and in E2E.
-
-#### Phase C2: Server State Management (Executing B19)
-*Objective: Introduce TanStack Query (React Query) for server state.*
-*   [ ] **C2.1:** Install `@tanstack/react-query` in `apps/web`.
-*   [ ] **C2.2:** Create a `QueryProvider` in `apps/web/src/providers/` wrapping the `<App />` in `main.tsx`.
-*   [ ] **C2.3:** Define `QueryKey` factories in `apps/web/src/lib/queryKeys.ts` (e.g., `posts.list`, `posts.detail(id)`).
-*   [ ] **C2.4:** Implement `useApi` hook that combines `useAuth()` token injection with the `createApiClient` from `lib/api.ts`.
-*   [ ] **C2.5:** Create `useFeed` hook (`useInfiniteQuery`) and `usePost` hook (`useQuery`).
-*   **Gate:** React Query DevTools show queries firing against the Fastify backend; 0 duplicate fetches.
-
-#### Phase C3: API Wiring & Pagination (Executing B20)
-*Objective: Wire feeds and search to the real backend.*
-*   [ ] **C3.1:** Replace `src/data/posts.ts` imports in `HomePage.tsx` and `CommunityPage.tsx` with `useFeed({ communitySlug })`.
-*   [ ] **C3.2:** Implement `useInfiniteScroll` to trigger `fetchNextPage()` when the IntersectionObserver intersects.
-*   [ ] **C3.3:** Replace `src/utils/search.ts` client-side filtering with `useSearch(query)` hitting `GET /api/search`.
-*   [ ] **C3.4:** Implement empty/error states: If the API is unreachable, gracefully fall back to the deterministic `src/data/*` layer (preserving the offline demo capability).
-*   **Gate:** Scrolling the feed fetches pages from SQLite; search results match FTS5 ranking.
-
-#### Phase C4: Optimistic UI & Mutations (Executing B21)
-*Objective: Ensure mutations feel instantaneous and handle failures gracefully.*
-*   [ ] **C4.1:** Implement `useVote` mutation (`useMutation`). Use `onMutate` to snapshot the previous query data, optimistically update the UI, and `onError` to rollback to the snapshot.
-*   [ ] **C4.2:** Implement `useCreateComment` mutation with optimistic prepending to the comment tree.
-*   [ ] **C4.3:** Implement `useCreatePost` mutation with optimistic prepending to the feed.
-*   [ ] **C4.4:** Add global toast notifications (`Toaster` component) for mutation failures (e.g., "Failed to upvote: Network error").
-*   **Gate:** Throttling network to "Slow 3G" shows instant UI updates; failing the API rolls back the UI and shows a toast.
-
-#### Phase C5: Notification Polling & Real-time Feel (Executing B22)
-*Objective: Wire unread notification counts.*
-*   [ ] **C5.1:** Implement `useNotifications` hook with `refetchInterval: 30000` (30s polling) for authenticated users.
-*   [ ] **C5.2:** Replace the hardcoded `18` notification count in `Navbar.tsx` with `useUnreadNotificationCount()`.
-*   [ ] **C5.3:** Implement mutation invalidation: `queryClient.invalidateQueries({ queryKey: ['notifications'] })` after creating a comment.
-*   **Gate:** Creating a comment in a second tab increments the notification bell in the first tab within 30 seconds.
-
-#### Phase C6: Cleanup & State Migration
-*Objective: Finalize the transition from Zustand overlay to React Query.*
-*   [ ] **C6.1:** Remove `votes`, `localPosts`, `localComments` from the Zustand store (`src/store/store.ts`). Keep only UI state (`theme`, `sidebarOpen`).
-*   [ ] **C6.2:** Move the deterministic `src/data/*` layer behind a "Demo Mode" feature flag or fallback handler, ensuring it is not rendered by default in production when the API is healthy.
-*   [ ] **C6.3:** Update `localStorage` schema versioning to v2, clearing deprecated overlay slices on hydration.
-*   **Gate:** `npm run typecheck` and `npm test` pass with no references to the old overlay slices.
-
-### 3. Definition of Done & Gates
-A phase is only "Done" when:
-1.  **Type Safety:** `npm run typecheck` passes across all 4 workspaces with 0 errors.
-2.  **Testing:** Unit test coverage for new hooks/mutations is >80%; E2E tests cover the critical path.
-3.  **Resilience:** The UI gracefully degrades to the deterministic data layer if the Fastify backend is unreachable.
-4.  **Documentation:** `AGENTS.md` and `README.md` are updated to reflect the new state management patterns and deployment requirements.
-
+### Summary Recommendation
+The `REMEDIATION_PLAN.md` is architecturally sound and technically accurate regarding the implemented stack. The only remediation needed is a **document cleanup**: update the checkboxes for **Phase 2 (all items)**, **Phase 4 (items 4.7–4.9)**, and **Phase 5 (items 5.2–5.3, 5.7)** from `[ ]` to `[x]` to match the B0–B24 backlog and the actual state of the repository.
