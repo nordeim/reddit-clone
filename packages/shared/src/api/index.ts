@@ -49,6 +49,20 @@ export const loginOutputSchema = z.object({
 });
 export type LoginOutput = z.infer<typeof loginOutputSchema>;
 
+/**
+ * Response schema for `POST /api/auth/register` (Round 11, F3).
+ *
+ * The server creates the user but does NOT establish a session — no
+ * access token, no refresh cookie. The client must call `login()`
+ * afterwards. This schema is the single source of truth for the 201
+ * response shape; the web client's `RegisterResponse` interface in
+ * `apps/web/src/lib/api.ts` mirrors it.
+ */
+export const registerResponseSchema = z.object({
+  user: authUserSchema,
+});
+export type RegisterResponse = z.infer<typeof registerResponseSchema>;
+
 export const refreshTokenOutputSchema = z.object({
   accessToken: z.string().min(1),
   user: authUserSchema,

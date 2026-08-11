@@ -72,6 +72,30 @@
 > commits: `89f1012`, `526a836`, `e09e425`). Test count: 453 → 462
 > (+9 new `@embers/web` tests; web suite now 271). See
 > `docs/REMEDIATION_PLAN_ROUND_10.md` for the full plan.
+>
+> **Round 11 (2026-08-12) — audit-driven doc + schema reconciliation:**
+> Round 11 executed the validated findings of `docs/session_11.md` (a
+> Mode-C audit of `docs/REMEDIATION_PLAN.md` against the codebase) plus
+> `audit_report_1.md` F6 (Prettier) and `audit_report_2.md` §3 (5-Phase
+> checkbox drift). 9 findings total (1 High, 2 Medium, 3 Low, 3
+> Informational). **Two TDD code changes:** (F2) added migration
+> `0001_add_performance_indexes.sql` + Drizzle `index()` builders in
+> `packages/db/src/schema/index.ts` for `posts(community_id, created_at
+> DESC)`, `comments(post_id)`, `notifications(user_id, read)` + 1 RED→GREEN
+> test in `packages/db/src/client.test.ts`; (F3) added the missing
+> `registerResponseSchema` to `packages/shared/src/api/index.ts` (canonical
+> Zod schema for `POST /api/auth/register` 201 responses) + 3 RED→GREEN
+> tests in `packages/shared/src/api.test.ts`. **Seven doc fixes:** (F1)
+> removed fabricated CSRF "double-submit cookie" claim — actual posture is
+> Bearer tokens + `SameSite=Strict` cookie; (F4) corrected refresh-cookie
+> `Path=/api/auth/refresh` → `Path=/api/auth`; (F5) reconciled three
+> divergent ID-strategy descriptions; (F6) added FTS5 → tsvector rewrite
+> step to Postgres escape hatch; (F7) fixed `session_10.md` route-count
+> math (auth × 5 → auth × 4); (F8) ticked 11 5-Phase checkboxes that were
+> already Done per the B0–B24 backlog; (F9) clarified Phase 1.4 — Prettier
+> intentionally omitted. Test count: 462 → 466 (db 29→30, shared 67→70).
+> See `docs/REMEDIATION_PLAN_ROUND_11.md` for the full plan, TDD breakdown,
+> and verification ledger.
 
 ---
 
@@ -295,7 +319,7 @@ Tests use **Vitest** with **Fastify's `inject()`** — no port binding needed.
 ```bash
 npm run lint        # ESLint flat config — 0 errors, 0 warnings (Round 4)
 npm run typecheck   # tsc --noEmit — must pass clean (R8.1: pretypecheck hook builds shared+db first)
-npm test            # vitest run (all workspaces) — all 462 tests must pass (0 act() warnings, R8.2; R10 added +9 web tests)
+npm test            # vitest run (all workspaces) — all 466 tests must pass (0 act() warnings, R8.2; R10 added +9 web tests; R11 added +4 tests: +1 db index + +3 shared registerResponseSchema)
 npm run test:e2e    # playwright run — 18 tests must pass (9 smoke + 9 auth lifecycle)
 npm run test:build  # R8.4: asserts dist/index.html is a production build (no Vite dev modules)
 npm run test:no-secrets  # R9.1: asserts no .env / env.bak / *.env files are tracked by git
@@ -312,14 +336,14 @@ git ls-files | grep -E '(^|/)dist/' | wc -l   # must be 0 (no dist/ tracked)
 > - `npm run test:fresh-clone` — R8.1: simulates a fresh clone and asserts `npm run typecheck` succeeds.
 > - `LIVE_BASE_URL=https://reddit.jesspete.shop/ npm run test:e2e:live` — R8.3: opt-in live-deployment audit (12 tests). Skipped when `LIVE_BASE_URL` is unset.
 
-> **Test count breakdown (462 vitest + 18 e2e + 30 opt-in live):** `@embers/web` = 271
+> **Test count breakdown (466 vitest + 18 e2e + 30 opt-in live):** `@embers/web` = 271
 > (incl. 23 in `src/lib/api.test.ts` from Round 5, 20 in
 > `src/auth/AuthProvider.test.tsx` + 9 api refresh-and-retry + 10 in
 > `src/pages/LoginPage.test.tsx` from Round 6, 12 in
 > `src/pages/RegisterPage.test.tsx` + 9 in `src/components/layout/Navbar.test.tsx`
 > + 5 in `src/auth/RequireAuth.test.tsx` + 1 api register-displayName from
 > Round 7, +9 from Round 10 covering PostPage / NotFoundPage / mobile
-> overflow / RegisterPage validation), `@embers/server` = 95, `@embers/shared` = 67, `@embers/db` = 29.
+> overflow / RegisterPage validation), `@embers/server` = 95, `@embers/shared` = 70, `@embers/db` = 30.
 > E2E = 18 local (9 smoke from Round 3 + 9 auth lifecycle from Round 7) +
 > 12 live-audit (Round 8, opt-in via `LIVE_BASE_URL`) + 16 extended-live
 > (Round 10, `npm run test:local-prod`) + 2 repro regression-guard
@@ -570,12 +594,12 @@ reddit-clone/
 │           ├── services/    # voteService (transactional), commentTreeService
 │           └── routes/      # health, auth, posts, communities, votes, comments, search, notifications
 ├── packages/
-│   ├── shared/              ← @embers/shared (Zod + branded IDs, 67 tests)
+│   ├── shared/              ← @embers/shared (Zod + branded IDs, 70 tests)
 │   │   └── src/
 │   │       ├── ids.ts       # Branded ID types + constructors
 │   │       ├── schemas/     # Entity Zod schemas
 │   │       └── api/         # API input/output schemas per endpoint
-│   └── db/                  ← @embers/db (Drizzle + SQLite + FTS5, 29 tests)
+│   └── db/                  ← @embers/db (Drizzle + SQLite + FTS5, 30 tests)
 │       └── src/
 │           ├── client.ts    # openDb() — connection + hardening pragmas
 │           ├── fts5.ts      # FTS5 virtual table + sync triggers + searchPosts()

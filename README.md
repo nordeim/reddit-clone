@@ -22,8 +22,8 @@ reddit-clone/
 │                        /api/communities, /api/votes, /api/comments,
 │                        /api/search, /api/notifications)
 ├── packages/
-│   ├── shared/       ← @embers/shared — Zod schemas + branded IDs (67 tests)
-│   └── db/           ← @embers/db — Drizzle ORM + SQLite + FTS5 + seed (29 tests)
+│   ├── shared/       ← @embers/shared — Zod schemas + branded IDs (70 tests)
+│   └── db/           ← @embers/db — Drizzle ORM + SQLite + FTS5 + seed (30 tests)
 ├── docs/             ← REMEDIATION_EXECUTION_PLAN.md (B0–B16 done, B17–B22 deferred),
 │                       REMEDIATION_PLAN_ROUND_5.md (B17–B22 TDD breakdown),
 │                       REMEDIATION_PLAN_ROUND_6.md (B18 auth provider),
@@ -55,7 +55,7 @@ npm run dev        --workspace @embers/server   # http://localhost:4000
 - Client: `http://localhost:5173` — the embers feed (320 posts across 18 communities, generated deterministically in-browser)
 - Server: `curl http://localhost:4000/health` → `{"status":"ok",…}`
 - Demo login (server): `POST /api/auth/login` with `{"username":"you","password":"embers-demo"}` → access token + refresh cookie
-- All tests pass: `npm test` (462 vitest + 18 Playwright E2E; plus 30 opt-in live-audit E2E — see Test Status)
+- All tests pass: `npm test` (466 vitest + 18 Playwright E2E; plus 30 opt-in live-audit E2E — see Test Status)
 
 ### Quick Start (Docker)
 
@@ -258,7 +258,7 @@ enables HSTS hardening and requires all production secrets via `loadEnv()`.
 ```bash
 npm run lint        # ESLint — 0 errors, 0 warnings
 npm run typecheck   # tsc --noEmit — all 4 workspaces clean
-npm test            # 462 vitest tests (pretest auto-builds shared + db)
+npm test            # 466 vitest tests (pretest auto-builds shared + db)
 npm run build       # topological build — all workspaces succeed
 ```
 
@@ -272,10 +272,10 @@ host (ADR-003 single-file build is still in force for the client).
 | Workspace | Tests | Command |
 |-----------|-------|---------|
 | `@embers/web` | 271 | `npm test --workspace @embers/web` |
-| `@embers/shared` | 67 | `npm test --workspace @embers/shared` |
-| `@embers/db` | 29 | `npm test --workspace @embers/db` |
+| `@embers/shared` | 70 | `npm test --workspace @embers/shared` |
+| `@embers/db` | 30 | `npm test --workspace @embers/db` |
 | `@embers/server` | 95 | `npm test --workspace @embers/server` |
-| **Vitest total** | **462** | `npm test --workspaces --if-present` |
+| **Vitest total** | **466** | `npm test --workspaces --if-present` |
 | E2E — local API (Playwright) | 18 | `npm run test:e2e` |
 | E2E — live audit, Round 8 (opt-in) | 12 | `LIVE_BASE_URL=… npm run test:e2e:live` |
 | E2E — extended live, Round 10 (opt-in) | 16 | `npm run test:local-prod` |
@@ -284,7 +284,7 @@ host (ADR-003 single-file build is still in force for the client).
 | Fresh-clone typecheck | 1 script | `npm run test:fresh-clone` |
 | Lint (ESLint) | 0 errors, 0 warnings | `npm run lint` |
 
-All 462 vitest tests + 18 Playwright E2E tests pass (`npm test` — do NOT
+All 466 vitest tests + 18 Playwright E2E tests pass (`npm test` — do NOT
 run `vitest run` from root; it won't discover workspace configs), ESLint is
 clean, and typecheck + build succeed as of Round 8 (2026-08-10).
 
@@ -396,6 +396,34 @@ remediation.
   `e2e/repro_r10_postpage.spec.ts` (2 regression-guard tests), via
   `npm run test:local-prod` and `npm run test:repro`.
 - Vitest count: 453 → 462 (+9 new `@embers/web` tests; web suite 262 → 271).
+
+#### Round 11 (2026-08-12) — audit-driven doc + schema reconciliation
+
+- Triggered by validating `audit_report_1.md`, `audit_report_2.md`, and a
+  fresh Mode-C audit (`docs/session_11.md`) against the codebase. 9 findings
+  (1 High, 2 Medium, 3 Low, 3 Informational), all fixed.
+- **TDD code changes:** (F2) added migration
+  `packages/db/src/migrations/0001_add_performance_indexes.sql` with three
+  indexes claimed in `REMEDIATION_PLAN.md` §4.1 (`posts(community_id,
+  created_at DESC)`, `comments(post_id)`, `notifications(user_id, read)`);
+  mirrored in `packages/db/src/schema/index.ts` via Drizzle `index()`
+  builders; +1 RED→GREEN test in `packages/db/src/client.test.ts`. (F3)
+  added the missing `registerResponseSchema` to
+  `packages/shared/src/api/index.ts` (canonical Zod schema for
+  `POST /api/auth/register` 201 responses); +3 RED→GREEN tests in
+  `packages/shared/src/api.test.ts`.
+- **Doc fixes:** (F1) removed fabricated CSRF "double-submit cookie" claim
+  from `REMEDIATION_PLAN.md` §5.2 — actual posture is Bearer tokens +
+  `SameSite=Strict` cookie; (F4) corrected refresh-cookie `Path` from
+  `/api/auth/refresh` → `/api/auth`; (F5) reconciled three divergent
+  ID-strategy descriptions; (F6) added FTS5 → tsvector rewrite step to the
+  Postgres escape hatch; (F7) fixed `session_10.md` route-count math
+  (auth × 5 → auth × 4); (F8) ticked 11 5-Phase checkboxes that were
+  already Done per the B0–B24 backlog; (F9) clarified Phase 1.4 — Prettier
+  intentionally omitted (ESLint 9 flat config + `--fix` is the formatter).
+- Vitest count: 462 → 466 (+4 new tests; db 29→30, shared 67→70).
+- See `docs/REMEDIATION_PLAN_ROUND_11.md` for the full plan, TDD breakdown,
+  and verification ledger.
 
 ### How to verify the live deployment
 

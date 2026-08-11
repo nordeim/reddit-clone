@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   registerInputSchema,
+  registerResponseSchema,
   loginInputSchema,
   refreshTokenOutputSchema,
   createPostInputSchema,
@@ -71,6 +72,50 @@ describe("auth API schemas", () => {
       },
     });
     expect(r.success).toBe(true);
+  });
+
+  // Round 11 (F3): registerResponseSchema is the canonical Zod schema for
+  // the POST /api/auth/register 201 response body. The server returns
+  // { user: AuthUser } (no session is established at registration time —
+  // the client must call login() afterwards). The web client previously
+  // had only a hand-written `RegisterResponse` interface in
+  // apps/web/src/lib/api.ts; this shared schema is now the single source
+  // of truth.
+  it("registerResponseSchema accepts a valid { user } response (Round 11, F3)", () => {
+    const r = registerResponseSchema.safeParse({
+      user: {
+        id: "u-1",
+        username: "alice",
+        displayName: "Alice",
+        bio: "",
+        karma: 0,
+        createdAt: "2024-01-01T00:00:00.000Z",
+        colorFrom: "#f97316",
+        colorTo: "#db2777",
+      },
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it("registerResponseSchema rejects a missing user field (Round 11, F3)", () => {
+    expect(registerResponseSchema.safeParse({}).success).toBe(false);
+  });
+
+  it("registerResponseSchema rejects a user with an invalid username (Round 11, F3)", () => {
+    expect(
+      registerResponseSchema.safeParse({
+        user: {
+          id: "u-1",
+          username: "ab", // too short (< 3)
+          displayName: "Alice",
+          bio: "",
+          karma: 0,
+          createdAt: "2024-01-01T00:00:00.000Z",
+          colorFrom: "#f97316",
+          colorTo: "#db2777",
+        },
+      }).success,
+    ).toBe(false);
   });
 });
 

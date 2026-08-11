@@ -3,7 +3,7 @@
 **Classification:** Internal Engineering Reference
 **Status:** DEFINITIVE, PRODUCTION-LOCKED BLUEPRINT
 **Companion Documents:** `AGENTS.md` (deep codebase reference), `CLAUDE.md` (daily implementation guide)
-**Last Updated:** 2026-08-10 (Round 7 — B18 completion: RegisterPage, auth-aware Navbar, RequireAuth route guard, E2E auth lifecycle)
+**Last Updated:** 2026-08-12 (Round 11 — audit-driven doc + schema reconciliation: added migration `0001_add_performance_indexes.sql` with 3 indexes; added `registerResponseSchema` to `@embers/shared`; corrected CSRF posture, cookie path, ID-strategy, Postgres escape hatch in `REMEDIATION_PLAN.md`; 9 audit findings all fixed; test count 462 → 466)
 **Audience:** Senior Engineers, Tech Leads, DevOps, and Onboarding Engineers
 **Rule:** Every architectural decision in this document traces to a specific rationale.
            Nothing is here "because it's popular."
@@ -524,6 +524,8 @@ Dark mode: Custom variant `@custom-variant dark (&:where(.dark, .dark *));` — 
 
 **Server (`apps/server`):** Argon2id password hashing + JWT (jose HS256) with refresh-token rotation. Routes opt in to auth via `preHandler: [app.authenticate]`. Author-only routes return 403 (not 401). Rate limiting: 5 req/min/IP on auth endpoints, 100 req/min globally.
 
+**CSRF posture (Round 11, F1):** State-changing API calls use `Authorization: Bearer` tokens (not cookies), which are not sent cross-origin and are therefore inherently CSRF-resistant. The refresh cookie is `SameSite=Strict` and scoped to `Path=/api/auth` (the broader path covers both `/api/auth/refresh` and `/api/auth/logout`). No double-submit cookie pattern is implemented or needed given the Bearer-token architecture. The earlier `REMEDIATION_PLAN.md` §5.2 claim of a "double-submit cookie pattern" was removed in Round 11 as fabricated.
+
 **Demo user:** `you` / `embers-demo` (seeded by `packages/db/scripts/seed.ts`). `CURRENT_USER` (`id: "u-me"`) remains the hardcoded client-side identity for the deterministic demo data — it is NOT a registered server user.
 
 ---
@@ -904,7 +906,7 @@ apply to `apps/server` and the `packages/{shared,db}` workspaces.
 | `routes/hardening.test.ts` | 7 | Helmet CSP, X-Frame-Options, etc.; auth route rate limit (5/min → 429) |
 | `routes/voteConcurrency.test.ts` | 3 | 100 concurrent upvotes → +100; same-user 100 votes → 0 net (toggle); concurrent flip integrity |
 
-### 13.4 Shared Package Schemas (67 tests)
+### 13.4 Shared Package Schemas (70 tests)
 
 `packages/shared/src/` defines Zod schemas for every entity and API
 endpoint. These are the runtime contract — Fastify's zod-validator
@@ -916,14 +918,22 @@ accidental cross-assignment at compile time, erased at runtime.
 |---|---|---|
 | `ids.test.ts` | 8 | Branded ID constructors + type guards |
 | `schemas.test.ts` | 19 | Entity Zod schemas (runtime + type) |
-| `api.test.ts` | 40 | API input/output schemas per endpoint |
+| `api.test.ts` | 43 | API input/output schemas per endpoint (incl. 3 `registerResponseSchema` tests added Round 11, F3) |
 
-### 13.5 Database Package (29 tests)
+### 13.5 Database Package (30 tests)
 
 `packages/db/src/` provides:
 - `client.ts` — `openDb()` returns both raw `better-sqlite3` connection
   (for FTS5 + pragma queries) and the Drizzle ORM wrapper.
-- `schema/index.ts` — 7 tables + composite-PK votes table.
+- `schema/index.ts` — 7 tables + composite-PK votes table + 3 performance
+  indexes (Round 11, F2): `idx_posts_community_created`,
+  `idx_comments_post_id`, `idx_notifications_user_read` — declared via
+  Drizzle `index()` builders so `drizzle-kit generate` stays in sync with
+  the applied SQL.
+- `migrations/` — `0000_greedy_major_mapleleaf.sql` (initial schema) +
+  `0001_add_performance_indexes.sql` (Round 11, F2 — adds the three
+  indexes claimed in `REMEDIATION_PLAN.md` §4.1 but absent from 0000).
+  Idempotent (`CREATE INDEX IF NOT EXISTS`).
 - `fts5.ts` — `posts_fts` virtual table + sync triggers + `searchPosts()`.
 - `seed/` — Port of `apps/web/src/utils/random.ts` + `apps/web/src/data/*`
   into DB inserts. `runSeed()` is idempotent and dependency-injected with

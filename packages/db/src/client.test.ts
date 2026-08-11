@@ -192,6 +192,23 @@ describe("schema (after migration)", () => {
     ).toThrowError(/UNIQUE constraint failed: votes\.(user_id|target_id|target_type|user_id, target_id, target_type)/);
     raw.close();
   });
+
+  // Round 11 (F2): The plan §4.1 commits to performance indexes on
+  // posts(community_id, created_at), comments(post_id), and
+  // notifications(user_id, read). Migration 0001 adds them.
+  it("creates performance indexes after migration (Round 11, F2)", () => {
+    const { raw } = freshDb();
+    const indexRows = raw
+      .prepare(
+        "SELECT name FROM sqlite_master WHERE type='index' AND name LIKE 'idx_%' ORDER BY name",
+      )
+      .all() as Array<{ name: string }>;
+    const indexNames = indexRows.map((r) => r.name);
+    expect(indexNames).toContain("idx_posts_community_created");
+    expect(indexNames).toContain("idx_comments_post_id");
+    expect(indexNames).toContain("idx_notifications_user_read");
+    raw.close();
+  });
 });
 
 describe("FTS5 search", () => {

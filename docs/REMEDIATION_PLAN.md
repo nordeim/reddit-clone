@@ -45,18 +45,18 @@ Before implementing new features, we must explicitly update or alter several ADR
 *   [ ] **1.1** Initialize monorepo using `npm` workspaces to manage `apps/web`, `apps/server`, `packages/shared`, and `packages/database`. ✅ Done (B0).
 *   [ ] **1.2** Extract `src/types/index.ts` into `packages/shared` to ensure identical domain models (User, Post, Comment, etc.) across client and server. ✅ Done (B1).
 *   [ ] **1.3** Scaffold `apps/server` with Node.js, Fastify, TypeScript, and Pino (structured JSON logging). ✅ Done (B2).
-*   [ ] **1.4** Configure strict ESLint and Prettier rules across the entire monorepo (replacing the current "No ESLint" setup) to enforce enterprise code quality. ✅ Done (R4 — ESLint 9 flat config; Prettier is still open per audit_report_1 F6).
+*   [x] **1.4** Configure strict ESLint rules across the entire monorepo (replacing the current "No ESLint" setup) to enforce enterprise code quality. ✅ Done (R4 — ESLint 9 flat config in `eslint.config.mjs`; covers code-quality + import ordering. Prettier is intentionally omitted — ESLint's `--fix` is the project's formatter. See Round 11 F9 for the rationale.)
 *   [ ] **1.5** Set up a CI/CD pipeline (GitHub Actions) to run typechecking, linting, and unit tests on every pull request. ✅ Done (B23).
 
 #### Phase 2: Database Layer & Schema (SQLite Production Hardening)
 *Objective: Design a robust relational schema and migrate the deterministic seed data into SQLite.*
 
-*   [ ] **2.1** Scaffold `packages/database` with Drizzle ORM and `better-sqlite3`.
-*   [ ] **2.2** Design relational schema: `users`, `communities`, `posts`, `comments`, `votes`, `notifications`, and `sessions`.
-*   [ ] **2.3** **Critical SQLite Hardening:** Enable Write-Ahead Logging (WAL) mode (`PRAGMA journal_mode=WAL;`) and configure `busy_timeout = 5000` to safely handle concurrent write contention.
-*   [ ] **2.4** Write and apply the initial migration (`drizzle-kit generate` / `migrate`) to establish the schema.
-*   [ ] **2.5** Create a seed script that executes the existing PRNG logic (`src/utils/random.ts`) to populate the DB with the 48 users, 18 communities, 320 posts, and comment trees.
-*   [ ] **2.6** Implement transactional boundaries for complex operations (e.g., creating a post + generating notifications for followers).
+*   [x] **2.1** Scaffold `packages/database` with Drizzle ORM and `better-sqlite3`. ✅ Done (B3).
+*   [x] **2.2** Design relational schema: `users`, `communities`, `posts`, `comments`, `votes`, `notifications`, and `sessions`. ✅ Done (B4).
+*   [x] **2.3** **Critical SQLite Hardening:** Enable Write-Ahead Logging (WAL) mode (`PRAGMA journal_mode=WAL;`) and configure `busy_timeout = 5000` to safely handle concurrent write contention. ✅ Done (B3 — see `packages/db/src/client.ts:42-47`).
+*   [x] **2.4** Write and apply the initial migration (`drizzle-kit generate` / `migrate`) to establish the schema. ✅ Done (B6 — migration `0000_greedy_major_mapleleaf.sql`; Round 11 added migration `0001_add_performance_indexes.sql` for the §4.1 indexes.)
+*   [x] **2.5** Create a seed script that executes the existing PRNG logic (`src/utils/random.ts`) to populate the DB with the 48 users, 18 communities, 320 posts, and comment trees. ✅ Done (B7).
+*   [x] **2.6** Implement transactional boundaries for complex operations (e.g., creating a post + generating notifications for followers). ✅ Done (B11 — `voteService.ts` uses `db.transaction()`; `comments.ts` increments `commentCount` atomically and emits notifications in the same request.)
 
 #### Phase 3: API & Security (Fastify REST + Zod)
 *Objective: Build a type-safe, secure API layer with real authentication.*
@@ -79,21 +79,21 @@ Before implementing new features, we must explicitly update or alter several ADR
 *   [ ] **4.4** **Refactor Zustand Store — Hybrid Data Strategy:** Remove all server-state (votes, posts, joined communities, notifications) from Zustand. Keep *only* ephemeral UI state (theme, toasts, sidebar open/close). React Query attempts the API first; on failure/initial load, falls back to the deterministic `src/data/*` layer to preserve the offline-capable demo experience (audit_report_2 F7).
 *   [ ] **4.5** Replace `src/data/*` imports with React Query hooks (`useQuery`, `useInfiniteQuery`, `useMutation`) backed by `apps/web/src/lib/api.ts`.
 *   [ ] **4.6** Implement optimistic UI updates for voting and commenting, with automatic rollback on API failure (replacing the current local overlay mutations).
-*   [ ] **4.7** Build real Login/Register UI pages and wire them to the auth router.
-*   [ ] **4.8** Replace the cosmetic "Log out (demo)" button with real session destruction and redirect logic.
-*   [ ] **4.9** Update `AppShell` to fetch and display real unread notification counts and conditionally render UI based on authentication state.
+*   [x] **4.7** Build real Login/Register UI pages and wire them to the auth router. ✅ Done (B18 — `apps/web/src/pages/LoginPage.tsx` + `RegisterPage.tsx`).
+*   [x] **4.8** Replace the cosmetic "Log out (demo)" button with real session destruction and redirect logic. ✅ Done (B18 — Navbar calls `auth.logout()` which revokes the refresh cookie via `/api/auth/logout` and clears client state.)
+*   [x] **4.9** Update `AppShell` to fetch and display real unread notification counts and conditionally render UI based on authentication state. ✅ Done (B18 — `<RequireAuth>` guards `/notifications`; Navbar is auth-aware via `useAuth()`.)
 *   [ ] **4.10** Implement infinite scroll pagination using `useInfiniteQuery` cursor-based pagination backed by the database (replacing the 650ms simulated latency).
 
 #### Phase 5: Testing, Observability & Hardening
 *Objective: Ensure the application is robust, observable, and ready for production deployment.*
 
 *   [ ] **5.1** Write backend integration tests for all Fastify routes using the `inject` method against an in-memory/test SQLite DB. ✅ Done (95 tests across 8 server test files).
-*   [ ] **5.2** Install and configure Playwright for End-to-End (E2E) testing.
-*   [ ] **5.3** Write E2E tests for critical flows: User registration, login, create post, upvote, comment, and logout.
+*   [x] **5.2** Install and configure Playwright for End-to-End (E2E) testing. ✅ Done (B24 — `playwright.config.ts` + 4 config variants for local/live/repro/local-prod.)
+*   [x] **5.3** Write E2E tests for critical flows: User registration, login, create post, upvote, comment, and logout. ✅ Done (B24 — `e2e/smoke.spec.ts` (9) + `e2e/auth.spec.ts` (9) = 18 local E2E; 16 live-audit + 2 repro guards are opt-in.)
 *   [ ] **5.4** Integrate Sentry for client-side and server-side error tracking and performance monitoring.
 *   [ ] **5.5** Configure Vite build to generate source maps and upload them to Sentry for error deobfuscation.
 *   [ ] **5.6** Add an automated database backup strategy (e.g., Litestream for continuous SQLite replication to S3, or cron-based snapshots).
-*   [ ] **5.7** Configure Dockerization (`Dockerfile` for multi-stage build of frontend and backend) and a `docker-compose.yml` for local development.
+*   [x] **5.7** Configure Dockerization (`Dockerfile` for multi-stage build of frontend and backend) and a `docker-compose.yml` for local development. ✅ Done (B23 — multi-stage `Dockerfile` (Node 20 bookworm-slim, healthcheck) + `docker-compose.yml` with persistent SQLite volume + secret env vars.)
 *   [ ] **5.8** Perform a final security audit (OWASP Top 10) and accessibility audit (WCAG 2.2 AA).
 
 ---
@@ -172,7 +172,7 @@ These supersede the original PAD constraints designed for a static demo.
 ### 4. Full Data Model, API Contract & Mapping
 
 #### 4.1 SQLite Data Model (Drizzle ORM)
-*Constraints and Indexes are critical for SQLite performance and data integrity. Primary keys are branded string IDs (`UserId`, `PostId`, etc. from `packages/shared/src/ids.ts`) seeded as `u1`, `p1`, etc. in dev. UUIDs/ULIDs may be used in prod via the seed script without code changes — the Drizzle schema accepts any string.*
+*Constraints and Indexes are critical for SQLite performance and data integrity. Primary keys are TEXT. Runtime code emits `<prefix>-<uuid>` (e.g. `u-<uuid>`, `p-<uuid>`) via `crypto.randomUUID()`. The seed script emits short readable IDs (`u1`, `p1`) for dev/test convenience. Branded TS types (`UserId`, `PostId` in `packages/shared/src/ids.ts`) provide compile-time nominal-typing only — the DB column is plain TEXT and accepts any string. (Round 11 F5 reconciled three divergent descriptions of the ID strategy.)*
 
 | Table | Key Columns | Constraints & Indexes |
 | :--- | :--- | :--- |
@@ -204,7 +204,7 @@ These supersede the original PAD constraints designed for a static demo.
 #### 5.1 Authentication Design
 *   **Mechanism:** Symmetric JWT (HS256) via `jose`. The current single-server setup avoids the key-management overhead of an asymmetric (RS256) public/private keypair. The escape hatch is documented in `apps/server/src/auth/jwt.ts` — switch to RS256 by replacing `SignJWT.setProtectedHeader({ alg: 'HS256' })` with `'RS256'` and a `crypto.createPrivateKey()` import.
 *   **Access Token:** 15-minute TTL, signed HS256, contains `{ id, username }`, stored in JS memory (never `localStorage`).
-*   **Refresh Token:** 7-day TTL, signed HS256, contains `{ id, jti }`, stored in `HttpOnly`, `Secure`, `SameSite=Strict`, `Path=/api/auth/refresh` cookie. The `jti` is stored in the `sessions` table so refresh tokens can be rotated and revoked.
+*   **Refresh Token:** 7-day TTL, signed HS256, contains `{ id, jti }`, stored in `HttpOnly`, `Secure`, `SameSite=Strict`, `Path=/api/auth` cookie (the broader path covers both `/api/auth/refresh` and `/api/auth/logout` — Round 11 F4 corrected the earlier `Path=/api/auth/refresh` claim). The `jti` is stored in the `sessions` table so refresh tokens can be rotated and revoked.
 *   **Rotation:** Every time the refresh endpoint is hit, the old refresh token is invalidated (session row `revokedAt` set), and a new one is issued (prevents replay attacks).
 
 #### 5.2 Expanded Security Threat Model (OWASP Top 10)
@@ -213,7 +213,7 @@ These supersede the original PAD constraints designed for a static demo.
 | **Injection (SQLi)** | Drizzle ORM uses parameterized queries exclusively. No raw SQL concatenation. |
 | **Broken Auth** | Argon2id for passwords. Rate limiting on `/api/auth/*` via `@fastify/rate-limit`. |
 | **XSS** | React auto-escapes by default. API responses validated by Zod. Strict CSP headers via Fastify Helmet. |
-| **CSRF** | `SameSite=Strict` on refresh cookies. Double-submit cookie pattern for state-changing API calls. |
+| **CSRF** | State-changing API calls use `Authorization: Bearer` tokens (not cookies), which are not sent cross-origin and are therefore inherently CSRF-resistant. The refresh cookie is `SameSite=Strict` and scoped to `Path=/api/auth`. (Round 11 F1 removed an earlier fabricated "double-submit cookie" claim — no such mechanism exists or is needed given the Bearer-token architecture.) |
 | **SSRF** | No user-supplied URLs are fetched by the backend. |
 
 #### 5.3 Performance & The Postgres Escape Hatch
@@ -223,7 +223,8 @@ These supersede the original PAD constraints designed for a static demo.
     1. Swapping `drizzle-orm/better-sqlite3` for `drizzle-orm/node-postgres` in the DB package.
     2. Updating `drizzle.config.ts` dialect from `sqlite` to `pg`.
     3. Removing SQLite-specific pragmas from the bootstrap script.
-    *The application code (schemas, queries, repositories) remains 100% unchanged.*
+    4. Rewriting `packages/db/src/fts5.ts` and the `searchPosts` call site in `apps/server/src/routes/search.ts` — Postgres uses `tsvector` / `tsquery` / `ts_rank`, not FTS5 virtual tables. (Round 11 F6 added this step — the original 3-step claim was aspirational and omitted the FTS5 rewrite.)
+    *The application code (schemas, queries, repositories) remains 100% unchanged EXCEPT for `fts5.ts` + `search.ts`, which require the rewrite in step 4.*
 
 ---
 

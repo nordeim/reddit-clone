@@ -142,6 +142,31 @@
 >   (`e2e/live_extended.spec.ts` 16 tests + `e2e/repro_r10_postpage.spec.ts`
 >   2 tests as a regression guard). See `docs/REMEDIATION_PLAN_ROUND_10.md`
 >   for the full plan, TDD breakdown, and verification ledger.
+>
+> Round 11 (2026-08-12) was an **audit-driven doc + schema reconciliation**
+> round, triggered by validating `audit_report_1.md`, `audit_report_2.md`,
+> and a fresh Mode-C audit (`docs/session_11.md`) against the codebase.
+> 9 findings (1 High, 2 Medium, 3 Low, 3 Informational), all fixed in this
+> round: (F1) removed a fabricated CSRF "double-submit cookie" claim from
+> `REMEDIATION_PLAN.md` §5.2 — actual posture is Bearer tokens +
+> `SameSite=Strict` cookie; (F2) added migration `0001_add_performance_indexes.sql`
+> with the three indexes claimed in §4.1 (`posts(community_id, created_at DESC)`,
+> `comments(post_id)`, `notifications(user_id, read)`) — mirrored in
+> `packages/db/src/schema/index.ts` via Drizzle `index()` builders, with a
+> regression test in `packages/db/src/client.test.ts`; (F3) added the
+> missing `registerResponseSchema` to `packages/shared/src/api/index.ts`
+> (the canonical Zod schema for `POST /api/auth/register` 201 responses) +
+> 3 TDD tests; (F4) corrected refresh-cookie `Path=/api/auth/refresh` →
+> `Path=/api/auth` in §5.1; (F5) reconciled three divergent ID-strategy
+> descriptions across plan/schema-comment/runtime; (F6) added a 4th step
+> to the Postgres escape hatch (FTS5 → tsvector rewrite); (F7) fixed
+> `session_10.md` route-count math (auth × 5 → auth × 4); (F8) ticked 11
+> 5-Phase checkboxes in `REMEDIATION_PLAN.md` that were already Done per
+> the B0–B24 backlog; (F9) clarified Phase 1.4 — Prettier is intentionally
+> omitted (ESLint 9 flat config + `--fix` is the project's formatter).
+> Test count: 462 → 466 (db 29→30, shared 67→70). See
+> `docs/REMEDIATION_PLAN_ROUND_11.md` for the full plan, TDD breakdown,
+> and verification ledger.
 
 ---
 
@@ -279,7 +304,7 @@ The server follows a **composition root** pattern — `buildApp(opts)` in `src/a
 - **Helmet/rate-limit** can be skipped via `skipHelmet`/`skipRateLimit` options (rate-limit auto-disabled in `NODE_ENV=test`)
 - **Auth tests** use the seeded demo user; **vote concurrency tests** seed 100 users directly via Drizzle insert (bypassing Argon2id for speed)
 - Test files: 8 in `apps/server/src/` (5 in `routes/`, 2 in `auth/`, 1 `config.test.ts` in root), 2 in `packages/db/src/`, 3 in `packages/shared/src/`, 19 in `apps/web/src/` (including `lib/api.test.ts` from Round 5, `auth/AuthProvider.test.tsx` + `auth/RequireAuth.test.tsx` from Rounds 6-7, `pages/LoginPage.test.tsx` from Round 6, `pages/RegisterPage.test.tsx` + `components/layout/Navbar.test.tsx` from Round 7, `pages/PostPage.test.tsx` + `pages/NotFoundPage.test.tsx` from Round 10), 5 E2E specs (`e2e/smoke.spec.ts` + `e2e/auth.spec.ts` + `e2e/live.spec.ts` from Round 8 + `e2e/live_extended.spec.ts` + `e2e/repro_r10_postpage.spec.ts` from Round 10)
-- **Total vitest count: 462** = 95 (server) + 67 (shared) + 29 (db) + 271 (web). The previously documented total of 428 (Round 6) was superseded when Round 7 added 25 new web tests (11 RegisterPage + 8 Navbar + 5 RequireAuth + 1 api register-displayName) to reach 453; Round 10 added 9 new web tests (3 PostPage + 4 NotFoundPage + 1 Navbar min-w-0 + 1 RegisterPage mismatch + 1 RegisterPage regression - 1 replaced alert-on-mismatch test = net +9) to reach 462. Round 8 did not add vitest tests — it silenced 6 React `act()` warnings in `LoginPage` + `RegisterPage` tests. **E2E: 18 local** (9 smoke + 9 auth lifecycle, added in Round 7) + **12 live-audit** (Round 8, opt-in via `LIVE_BASE_URL`) + **16 extended-live-audit** (Round 10, opt-in via `LIVE_BASE_URL` against the live site OR `PROD_BASE_URL` against a local prod build) + **2 R10 regression guard** (Round 10, opt-in via `PROD_BASE_URL`).
+- **Total vitest count: 466** = 95 (server) + 70 (shared) + 30 (db) + 271 (web). The previously documented total of 428 (Round 6) was superseded when Round 7 added 25 new web tests (11 RegisterPage + 8 Navbar + 5 RequireAuth + 1 api register-displayName) to reach 453; Round 10 added 9 new web tests (3 PostPage + 4 NotFoundPage + 1 Navbar min-w-0 + 1 RegisterPage mismatch + 1 RegisterPage regression - 1 replaced alert-on-mismatch test = net +9) to reach 462; Round 11 added 4 new tests (1 db performance-index + 3 shared `registerResponseSchema`) to reach 466. Round 8 did not add vitest tests — it silenced 6 React `act()` warnings in `LoginPage` + `RegisterPage` tests. **E2E: 18 local** (9 smoke + 9 auth lifecycle, added in Round 7) + **12 live-audit** (Round 8, opt-in via `LIVE_BASE_URL`) + **16 extended-live-audit** (Round 10, opt-in via `LIVE_BASE_URL` against the live site OR `PROD_BASE_URL` against a local prod build) + **2 R10 regression guard** (Round 10, opt-in via `PROD_BASE_URL`).
 
 ### Backend Pitfalls
 
@@ -532,7 +557,7 @@ with `NODE_ENV=test` env vars. Playwright reports are uploaded as artifacts.
 ```bash
 npm run lint        # ESLint flat config — 0 errors, 0 warnings
 npm run typecheck   # tsc --noEmit — must pass clean (pretypecheck hook builds shared+db first)
-npm test            # vitest run (all workspaces) — all 462 tests must pass (R10: was 453)
+npm test            # vitest run (all workspaces) — all 466 tests must pass (R10: was 453; R11: +4 = 1 db index + 3 shared registerResponseSchema)
 npm run test:e2e    # playwright run — 18 tests must pass (9 smoke + 9 auth lifecycle)
 npm run test:build  # asserts dist/index.html is a production build (no Vite dev modules)
 npm run test:no-secrets  # asserts no .env / env.bak / *.env files are tracked by git
