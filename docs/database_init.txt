@@ -1,0 +1,34 @@
+$ npm run db:setup
+npm notice run @embers/root@0.0.0 db:setup
+npm notice run npm run db:migrate && npm run db:seed
+npm notice run @embers/root@0.0.0 db:migrate
+npm notice run npm run migrate --workspace @embers/db --if-present
+npm notice run @embers/db@0.0.0 migrate
+npm notice run tsx scripts/migrate.ts
+Migrations applied to ./dev.db. Tables present:
+  - __drizzle_migrations
+  - comments
+  - communities
+  - notifications
+  - posts
+  - posts_fts
+  - posts_fts_config
+  - posts_fts_data
+  - posts_fts_docsize
+  - posts_fts_idx
+  - sessions
+  - users
+  - votes
+npm notice run @embers/root@0.0.0 db:seed
+npm notice run npm run seed --workspace @embers/db --if-present
+npm notice run @embers/db@0.0.0 seed
+npm notice run tsx scripts/seed.ts
+Seeding database at ./dev.db…
+Seed complete:
+  users:         49
+  communities:    18
+  posts:          320
+  comments:       3037
+  notifications:  18
+Demo user: 'you' / 'embers-demo'
+
