@@ -152,3 +152,47 @@ Critical Pitfalls (must remember)
 This is a mature, extensively documented codebase with 462 passing tests, clear architectural boundaries, and a well-tracked remediation history across 10+ rounds. The frontend is polished and feature-complete for the demo experience; 
 the backend is solid but not yet wired into the feeds/search pages. The deferred B17–B22 work represents the next major engineering effort.
 
+---
+
+All 18 core E2E tests pass (9 smoke + 9 auth lifecycle). The 2 failures are expected — they're from repro_r10_postpage.spec.ts, which requires PROD_BASE_URL=http://localhost:8765/ with a locally-served production build. These are 
+opt-in regression guards, not part of the standard suite. 
+ 
+---
+ 
+Full QA Report 
+ 
+┌─────────────────────┬─────────────────┬─────────────────────────────────────────────────────────────────────────────────────────┐ 
+│ Check               │ Status          │ Details                                                                                 │ 
+├─────────────────────┼─────────────────┼─────────────────────────────────────────────────────────────────────────────────────────┤ 
+│ ESLint              │ ✅ Clean        │ 0 errors, 0 warnings                                                                    │ 
+├─────────────────────┼─────────────────┼─────────────────────────────────────────────────────────────────────────────────────────┤ 
+│ Typecheck           │ ✅ Clean        │ All 4 workspaces pass tsc --noEmit                                                      │ 
+├─────────────────────┼─────────────────┼─────────────────────────────────────────────────────────────────────────────────────────┤ 
+│ Unit tests          │ ✅ 462/462 pass │ web=271, server=95, shared=67, db=29                                                    │ 
+├─────────────────────┼─────────────────┼─────────────────────────────────────────────────────────────────────────────────────────┤ 
+│ Build               │ ✅ Success      │ Topological: shared → db → server → web                                                 │ 
+├─────────────────────┼─────────────────┼─────────────────────────────────────────────────────────────────────────────────────────┤ 
+│ E2E (local API)     │ ✅ 18/18 pass   │ 9 smoke + 9 auth lifecycle                                                              │ 
+├─────────────────────┼─────────────────┼─────────────────────────────────────────────────────────────────────────────────────────┤ 
+│ test:build          │ ✅ Pass         │ No Vite dev modules, 525 KB bundle                                                      │ 
+├─────────────────────┼─────────────────┼─────────────────────────────────────────────────────────────────────────────────────────┤ 
+│ test:no-secrets     │ ✅ Pass         │ No .env / env.bak tracked                                                               │ 
+├─────────────────────┼─────────────────┼─────────────────────────────────────────────────────────────────────────────────────────┤ 
+│ test:gitignore      │ ✅ Pass         │ No tracked file matches gitignore                                                       │ 
+├─────────────────────┼─────────────────┼─────────────────────────────────────────────────────────────────────────────────────────┤ 
+│ test:ci-config      │ ✅ Pass         │ gitleaks job present in CI                                                              │ 
+├─────────────────────┼─────────────────┼─────────────────────────────────────────────────────────────────────────────────────────┤ 
+│ test:plan-alignment │ ✅ Pass         │ No forbidden tokens in plan                                                             │ 
+├─────────────────────┼─────────────────┼─────────────────────────────────────────────────────────────────────────────────────────┤ 
+│ dist/ artifacts     │ ✅ Clean        │ Single-file 537 KB HTML, inlined JS+CSS, images copied, no .map files, 0 tracked by git │ 
+└─────────────────────┴─────────────────┴─────────────────────────────────────────────────────────────────────────────────────────┘ 
+ 
+### Notes 
+ 
+1. Port 4000 conflict: A litellm system service binds to ports 4000 and 4001. The E2E suite ran on port 4002 to avoid the conflict. Playwright's reuseExistingServer was reusing litellm (which returned 404 for all /api/* routes), 
+   causing the initial failures. 
+ 
+2. repro_r10_postpage.spec.ts (2 tests) correctly fails without PROD_BASE_URL — these are opt-in regression guards run via npm run test:repro, not part of the default npm run test:e2e gate. 
+ 
+3. live_extended.spec.ts (16 tests) correctly skipped — opt-in via LIVE_BASE_URL or PROD_BASE_URL.
+
