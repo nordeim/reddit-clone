@@ -65,6 +65,8 @@ your last tool call failed. please check your tool call and try again. then meti
 
 please meticulously plan to review and validate @AGENTS.md , @CLAUDE.md and @README.md against the codebase to check for alignment
 
+please meticulously review @AGENTS.md , @CLAUDE.md and @README.md to have a deep understanding of the project and its codebase design and architecture, then meticulously validate your deep understanding against the codebase to check for alignment
+
 please meticulously plan to apply precise edits to the relevant documents to align them with the current codebase. but first re-evaluate and re-validate your findings again to ensure alignment.
 
 yes, please proceed meticulously

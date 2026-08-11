@@ -38,7 +38,7 @@
 > auth lifecycle tests. The `AuthUser` interface was widened from
 > `{ id, username }` to the full server shape (with `displayName`,
 > `karma`, etc.) so the Navbar can display them. 24 new web tests
-> (11 RegisterPage + 8 Navbar + 5 RequireAuth) + 1 new api test
+> (12 RegisterPage + 9 Navbar + 5 RequireAuth) + 1 new api test
 > (register displayName) bring the web suite to 262. 9 new E2E tests
 > bring the E2E suite to 18. See `docs/REMEDIATION_PLAN_ROUND_7.md`
 > for the Round 7 changelog + 5-slice TDD breakdown + the rationale
@@ -377,7 +377,7 @@ untouched.
 | `createApiClient(options)` | Factory; returns an object with `health`, `login`, `register`, `logout`, `refresh`, `getPosts`, `getPost`, `createPost`, `vote`, `getComments`, `createComment`, `search`, `getCommunities`, `getCommunity`, `getNotifications` methods |
 | `ApiClient` | `ReturnType<typeof createApiClient>` — pass to hooks / store actions |
 | `ApiError` | Thrown on non-2xx; carries `{ status, code, message, requestId }` mirroring the server's `errorHandler` plugin |
-| `ApiClientOptions` | `{ baseUrl?, fetch?, getToken? }` — `fetch` + `getToken` are dependency-injected so the 22 unit tests run with zero network |
+| `ApiClientOptions` | `{ baseUrl?, fetch?, getToken? }` — `fetch` + `getToken` are dependency-injected so the 32 unit tests run with zero network |
 
 **Conventions:**
 - The client is **pessimistic** by design. Optimistic UI (B21) will be added at the hook layer (`useVote`, `useCreateComment`) — this file stays rollback-free.
@@ -385,7 +385,7 @@ untouched.
 - `baseUrl` defaults to `import.meta.env.VITE_API_URL ?? "http://localhost:4000"`. The `import.meta.env` access is cast through `unknown` so the file typechecks outside Vite (e.g. in unit tests).
 - All paths use `encodeURIComponent` on dynamic segments — vote targets, post IDs, community slugs, search queries.
 
-**Test coverage:** `apps/web/src/lib/api.test.ts` — 22 tests covering constructor defaults, every endpoint, auth header injection, cursor encoding, 4xx/5xx error mapping, and 204 No Content handling. Plus 9 new tests added in Round 6 (Slice 4) covering the 401 refresh-and-retry path (see "AuthProvider & LoginPage" below).
+**Test coverage:** `apps/web/src/lib/api.test.ts` — 23 tests covering constructor defaults, every endpoint, auth header injection, cursor encoding, 4xx/5xx error mapping, and 204 No Content handling. Plus 9 new tests added in Round 6 (Slice 4) covering the 401 refresh-and-retry path (32 total) (see "AuthProvider & LoginPage" below).
 
 ## AuthProvider & LoginPage (Round 6 — B18)
 
@@ -448,9 +448,9 @@ Round 7 closes the gap left by Round 6: the AuthProvider existed but the UI stil
 | File | Status | Purpose |
 | --- | --- | --- |
 | `apps/web/src/pages/RegisterPage.tsx` | New | Register form with login-after-register flow. Client-side validation (username ≥3, password ≥8, passwords match). On submit: `auth.register()` → `auth.login()` → navigate `/`. |
-| `apps/web/src/pages/RegisterPage.test.tsx` | New | 11 TDD tests covering form rendering, submit flow, validation, loading, navigation, accessibility. |
+| `apps/web/src/pages/RegisterPage.test.tsx` | New | 12 TDD tests covering form rendering, submit flow, validation, loading, navigation, accessibility. |
 | `apps/web/src/components/layout/Navbar.tsx` | Modified | Replaced `CURRENT_USER` import with `useAuth()`. Anonymous: shows "Log in" + "Sign up" links. Authenticated: shows avatar + username + karma + real "Log out" that calls `auth.logout()`. Notifications bell gated on authenticated status. |
-| `apps/web/src/components/layout/Navbar.test.tsx` | New | 8 TDD tests covering anonymous + authenticated states, logout flow. |
+| `apps/web/src/components/layout/Navbar.test.tsx` | New | 9 TDD tests covering anonymous + authenticated states, logout flow. |
 | `apps/web/src/auth/RequireAuth.tsx` | New | Route guard. Anonymous → `<Navigate to="/login" state={{ from: location.pathname }} replace />`. Authenticated → children. Loading → null (avoids flash of login page). |
 | `apps/web/src/auth/RequireAuth.test.tsx` | New | 5 TDD tests covering redirect, state preservation, authenticated rendering. |
 | `apps/web/src/App.tsx` | Modified | Added `/register` route (outside AppShell). Wrapped `/notifications` in `<RequireAuth>`. |

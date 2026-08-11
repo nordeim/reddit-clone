@@ -313,10 +313,10 @@ git ls-files | grep -E '(^|/)dist/' | wc -l   # must be 0 (no dist/ tracked)
 > - `LIVE_BASE_URL=https://reddit.jesspete.shop/ npm run test:e2e:live` — R8.3: opt-in live-deployment audit (12 tests). Skipped when `LIVE_BASE_URL` is unset.
 
 > **Test count breakdown (462 vitest + 18 e2e + 30 opt-in live):** `@embers/web` = 271
-> (incl. 22 in `src/lib/api.test.ts` from Round 5, 20 in
+> (incl. 23 in `src/lib/api.test.ts` from Round 5, 20 in
 > `src/auth/AuthProvider.test.tsx` + 9 api refresh-and-retry + 10 in
-> `src/pages/LoginPage.test.tsx` from Round 6, 11 in
-> `src/pages/RegisterPage.test.tsx` + 8 in `src/components/layout/Navbar.test.tsx`
+> `src/pages/LoginPage.test.tsx` from Round 6, 12 in
+> `src/pages/RegisterPage.test.tsx` + 9 in `src/components/layout/Navbar.test.tsx`
 > + 5 in `src/auth/RequireAuth.test.tsx` + 1 api register-displayName from
 > Round 7, +9 from Round 10 covering PostPage / NotFoundPage / mobile
 > overflow / RegisterPage validation), `@embers/server` = 95, `@embers/shared` = 67, `@embers/db` = 29.
@@ -456,12 +456,12 @@ already cover) but is useful for ad-hoc manual checks before a release.
 - New `apps/web/src/pages/RegisterPage.tsx` — register form with login-after-
   register flow. Client-side validation (username ≥3, password ≥8, passwords
   match). On submit: `auth.register()` → `auth.login()` → navigate `/`.
-- New `apps/web/src/pages/RegisterPage.test.tsx` — 11 TDD tests.
+- New `apps/web/src/pages/RegisterPage.test.tsx` — 12 TDD tests.
 - Modified `apps/web/src/components/layout/Navbar.tsx` — replaced hardcoded
   `CURRENT_USER` import with `useAuth()`. Anonymous: shows "Log in" + "Sign
   up" links. Authenticated: shows avatar + username + karma + real "Log out"
   that calls `auth.logout()`. Notifications bell gated on authenticated.
-- New `apps/web/src/components/layout/Navbar.test.tsx` — 8 TDD tests.
+- New `apps/web/src/components/layout/Navbar.test.tsx` — 9 TDD tests.
 - New `apps/web/src/auth/RequireAuth.tsx` — route guard. Anonymous → redirect
   to `/login` with `state: { from: location.pathname }`. Authenticated →
   children. Loading → null.

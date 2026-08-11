@@ -657,8 +657,12 @@ npm run build
     │   ├── community/          # CommunityHeader
     │   └── search/             # SearchBar (with keyboard nav + race-fix)
     │
+    ├── auth/                   # AuthProvider (React context + useAuth), RequireAuth (route guard)
+    ├── lib/                    # api.ts — fetch-based API client for the Fastify backend
+    │
     ├── pages/                  # HomePage, CommunityPage, PostPage, ProfilePage,
-    │                           #   SearchPage, NotificationsPage, NotFoundPage
+    │                           #   SearchPage, NotificationsPage, NotFoundPage,
+    │                           #   LoginPage, RegisterPage
     │
     ├── hooks/                  # useDebounce, useOnClickOutside, useInfiniteScroll, useFocusTrap
     ├── test/                   # setup.ts (jest-dom + jsdom stubs), utils.tsx (renderWithRouter)
