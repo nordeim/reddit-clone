@@ -12,8 +12,13 @@ import {
  * plugin uses these directly so the runtime contract matches the TS types.
  *
  * Naming convention:
- *   <resource><action>InputSchema   — request body / query
- *   <resource><action>OutputSchema  — response body
+ *   <resource><action>InputSchema    — request body / query
+ *   <resource><action>ResponseSchema — response body
+ *
+ * Round 12 (F5) standardized all response schemas on the *ResponseSchema
+ * convention (previously a mix of *OutputSchema and *ResponseSchema).
+ * The generic helper paginateOutputSchema() retains its name — it is a
+ * factory function, not a response schema itself.
  */
 
 /* ---------------- Auth ---------------- */
@@ -43,11 +48,11 @@ export const authUserSchema = z.object({
 });
 export type AuthUser = z.infer<typeof authUserSchema>;
 
-export const loginOutputSchema = z.object({
+export const loginResponseSchema = z.object({
   accessToken: z.string().min(1),
   user: authUserSchema,
 });
-export type LoginOutput = z.infer<typeof loginOutputSchema>;
+export type LoginResponse = z.infer<typeof loginResponseSchema>;
 
 /**
  * Response schema for `POST /api/auth/register` (Round 11, F3).
@@ -63,11 +68,11 @@ export const registerResponseSchema = z.object({
 });
 export type RegisterResponse = z.infer<typeof registerResponseSchema>;
 
-export const refreshTokenOutputSchema = z.object({
+export const refreshTokenResponseSchema = z.object({
   accessToken: z.string().min(1),
   user: authUserSchema,
 });
-export type RefreshTokenOutput = z.infer<typeof refreshTokenOutputSchema>;
+export type RefreshTokenResponse = z.infer<typeof refreshTokenResponseSchema>;
 
 /* ---------------- Posts ---------------- */
 
@@ -152,13 +157,13 @@ export const castVoteInputSchema = z.object({
 });
 export type CastVoteInput = z.infer<typeof castVoteInputSchema>;
 
-export const castVoteOutputSchema = z.object({
+export const castVoteResponseSchema = z.object({
   targetId: z.string().min(1),
   targetType: z.enum(["post", "comment"]),
   value: voteValueSchema,
   score: z.number().int(),
 });
-export type CastVoteOutput = z.infer<typeof castVoteOutputSchema>;
+export type CastVoteResponse = z.infer<typeof castVoteResponseSchema>;
 
 /* ---------------- Comments ---------------- */
 

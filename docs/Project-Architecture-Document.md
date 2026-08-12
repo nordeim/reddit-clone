@@ -3,7 +3,7 @@
 **Classification:** Internal Engineering Reference
 **Status:** DEFINITIVE, PRODUCTION-LOCKED BLUEPRINT
 **Companion Documents:** `AGENTS.md` (deep codebase reference), `CLAUDE.md` (daily implementation guide)
-**Last Updated:** 2026-08-12 (Round 11 — audit-driven doc + schema reconciliation: added migration `0001_add_performance_indexes.sql` with 3 indexes; added `registerResponseSchema` to `@embers/shared`; corrected CSRF posture, cookie path, ID-strategy, Postgres escape hatch in `REMEDIATION_PLAN.md`; 9 audit findings all fixed; test count 462 → 466)
+**Last Updated:** 2026-08-13 (Round 12 — hygiene + schema-naming reconciliation: standardized `*ResponseSchema` naming convention in `@embers/shared`; untracked 13,926 `skills/` files; removed stale `allowScripts` entry; tightened `DATABASE_URL` doc-precision; deleted stray root `session_11.md`; test count unchanged at 466)
 **Audience:** Senior Engineers, Tech Leads, DevOps, and Onboarding Engineers
 **Rule:** Every architectural decision in this document traces to a specific rationale.
            Nothing is here "because it's popular."
@@ -913,6 +913,14 @@ endpoint. These are the runtime contract — Fastify's zod-validator
 plugin uses them directly so the TS types and runtime validation
 cannot drift. Branded ID types (`UserId`, `PostId`, etc.) prevent
 accidental cross-assignment at compile time, erased at runtime.
+
+**Naming convention (Round 12, F5):** All response-body schemas use the
+`*ResponseSchema` convention (`loginResponseSchema`,
+`refreshTokenResponseSchema`, `registerResponseSchema`,
+`castVoteResponseSchema`, `errorResponseSchema`). Request-body / query
+schemas use `*InputSchema` (`registerInputSchema`, `loginInputSchema`,
+`createPostInputSchema`, etc.). The generic helper `paginateOutputSchema()`
+retains its name — it is a factory function, not a response schema.
 
 | Suite | Tests | Coverage |
 |---|---|---|

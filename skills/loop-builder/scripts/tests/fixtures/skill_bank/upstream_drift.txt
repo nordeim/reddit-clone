@@ -1,2 +1,0 @@
-example:alpha
-example:gamma

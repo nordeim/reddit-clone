@@ -191,7 +191,7 @@ curl http://localhost:5000/health
 | `JWT_ACCESS_SECRET` | Yes | Min 32 chars |
 | `JWT_REFRESH_SECRET` | Yes | Min 32 chars |
 | `CORS_ORIGIN` | Yes | Your frontend origin |
-| `DATABASE_URL` | No | Defaults to `packages/db/dev.db` |
+| `DATABASE_URL` | No | Code default: `./dev.db` (resolved to repo-root by `loadEnv()`). `.env.example` overrides to `packages/db/dev.db` so server + seed agree. |
 | `PORT` | No | Defaults to 5000 |
 
 ### Architecture
@@ -424,6 +424,36 @@ remediation.
 - Vitest count: 462 → 466 (+4 new tests; db 29→30, shared 67→70).
 - See `docs/REMEDIATION_PLAN_ROUND_11.md` for the full plan, TDD breakdown,
   and verification ledger.
+
+#### Round 12 (2026-08-13) — hygiene + schema-naming reconciliation
+
+- Triggered by validating `docs/session_12.md` (a Mode-C alignment audit
+  of AGENTS/CLAUDE/README vs the codebase), `docs/audit_report_3.md`,
+  and `docs/audit_report_4.md`. All three audits confirmed exceptional
+  doc-code alignment; only 6 minor findings.
+- **TDD code change:** (F5) standardized `@embers/shared` response-schema
+  naming — renamed `loginOutputSchema` → `loginResponseSchema`,
+  `refreshTokenOutputSchema` → `refreshTokenResponseSchema`,
+  `castVoteOutputSchema` → `castVoteResponseSchema` (and their `*Output`
+  types → `*Response`) to match the `registerResponseSchema` +
+  `errorResponseSchema` convention from Round 11.
+  `paginateOutputSchema()` retains its name (factory function, not a
+  response schema). RED→GREEN: updated `api.test.ts` imports first, then
+  renamed in `api/index.ts`. Zero downstream breakage.
+- **Doc/hygiene fixes:** (F1) tightened `DATABASE_URL` doc-precision in
+  README — code default is `./dev.db` (resolved to repo-root),
+  `.env.example` overrides to `packages/db/dev.db`; (F2) stray
+  `apps/server/dev.db` — already clean; (F3) removed stale
+  `better-sqlite3@11.10.0` from `package.json` `allowScripts`;
+  (F4) `git rm -r --cached skills/` — untracked 13,926 skill files that
+  were committed despite the `.gitignore` rule (files stay on disk for
+  local use; future clones won't include them — if you need the skills,
+  clone with `--recurse-submodules` or copy the `skills/` directory
+  separately); (F6) deleted stray root-level `session_11.md` (transcript
+  dump; authoritative version is `docs/session_11.md`).
+- Vitest count unchanged: 466/466 (pure rename + hygiene).
+- See `docs/REMEDIATION_PLAN_ROUND_12.md` for the full plan, TDD
+  breakdown, and verification ledger.
 
 ### How to verify the live deployment
 

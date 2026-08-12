@@ -96,6 +96,33 @@
 > intentionally omitted. Test count: 462 → 466 (db 29→30, shared 67→70).
 > See `docs/REMEDIATION_PLAN_ROUND_11.md` for the full plan, TDD breakdown,
 > and verification ledger.
+>
+> **Round 12 (2026-08-13) — hygiene + schema-naming reconciliation:**
+> Round 12 executed the validated findings of `docs/session_12.md` (a
+> Mode-C alignment audit of AGENTS/CLAUDE/README vs the codebase),
+> `docs/audit_report_3.md`, and `docs/audit_report_4.md`. All three audits
+> confirmed exceptional doc-code alignment; only 6 minor findings. **One
+> TDD code change:** (F5) standardized the `@embers/shared` response-schema
+> naming convention — renamed `loginOutputSchema` → `loginResponseSchema`,
+> `refreshTokenOutputSchema` → `refreshTokenResponseSchema`,
+> `castVoteOutputSchema` → `castVoteResponseSchema` (and their `*Output`
+> types → `*Response`) to match the `registerResponseSchema` +
+> `errorResponseSchema` convention. `paginateOutputSchema()` retains its
+> name (it's a factory function, not a response schema). RED→GREEN: updated
+> `api.test.ts` imports first, then renamed in `api/index.ts`. Zero
+> downstream breakage — the renamed types were only used inside
+> `@embers/shared`. **Five doc/hygiene fixes:** (F1) tightened
+> `DATABASE_URL` doc-precision in README — code default is `./dev.db`
+> (resolved to repo-root), `.env.example` overrides to
+> `packages/db/dev.db`; (F2) stray `apps/server/dev.db` — already clean;
+> (F3) removed stale `better-sqlite3@11.10.0` from `allowScripts`;
+> (F4) `git rm -r --cached skills/` — untracked 13,926 skill files that
+> were committed despite the `.gitignore` rule (files stay on disk, future
+> clones won't include them); (F6) deleted stray root-level
+> `session_11.md` (transcript dump; authoritative version is
+> `docs/session_11.md`). Test count unchanged: 466/466 (pure rename +
+> hygiene). See `docs/REMEDIATION_PLAN_ROUND_12.md` for the full plan,
+> TDD breakdown, and verification ledger.
 
 ---
 

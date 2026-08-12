@@ -1,2 +1,0 @@
-example:alpha abc123
-example:beta zzz999

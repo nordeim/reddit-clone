@@ -3,7 +3,7 @@ import {
   registerInputSchema,
   registerResponseSchema,
   loginInputSchema,
-  refreshTokenOutputSchema,
+  refreshTokenResponseSchema,
   createPostInputSchema,
   updatePostInputSchema,
   listPostsQuerySchema,
@@ -57,8 +57,8 @@ describe("auth API schemas", () => {
     ).toBe(true);
   });
 
-  it("refreshTokenOutputSchema accepts valid response", () => {
-    const r = refreshTokenOutputSchema.safeParse({
+  it("refreshTokenResponseSchema accepts valid response", () => {
+    const r = refreshTokenResponseSchema.safeParse({
       accessToken: "ey...",
       user: {
         id: "u-1",
