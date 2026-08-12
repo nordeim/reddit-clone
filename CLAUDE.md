@@ -123,6 +123,23 @@
 > `docs/session_11.md`). Test count unchanged: 466/466 (pure rename +
 > hygiene). See `docs/REMEDIATION_PLAN_ROUND_12.md` for the full plan,
 > TDD breakdown, and verification ledger.
+>
+> **Round 13 (2026-08-13) — self-scoped infrastructure + type-safety:**
+> Round 13 was self-scoped (no new audit reports). Surveyed remaining
+> non-breaking gaps in `REMEDIATION_PLAN.md`. Three deliverables:
+> **(F1) Database backup** (Phase 5.6) — added `backupDb()` to
+> `packages/db/src/client.ts` using `better-sqlite3`'s online backup API
+> (safe to run while the server writes), + `packages/db/scripts/backup.ts`
+> CLI + `npm run db:backup` script. +1 TDD test (db 30→31). **(F2) Type
+> drift detection** — added `@embers/shared` as devDep of `@embers/web`
+> + compile-time `AssertExact` assertions in `apps/web/src/lib/api.ts`
+> enforcing `AuthUser`/`LoginResponse`/`RegisterResponse` match the
+> shared schemas. If types drift, `npm run typecheck` fails. Zero
+> runtime/bundle impact (type-only imports erased). **(F3) Doc cleanup**
+> — ticked 14 `[ ]` checkboxes with `✅ Done` notes (Phase 1.1-1.5,
+> 3.1-3.8, 5.1, 5.6). Test count: 466 → 467. See
+> `docs/REMEDIATION_PLAN_ROUND_13.md` for the full plan, TDD breakdown,
+> and verification ledger.
 
 ---
 
@@ -346,7 +363,7 @@ Tests use **Vitest** with **Fastify's `inject()`** — no port binding needed.
 ```bash
 npm run lint        # ESLint flat config — 0 errors, 0 warnings (Round 4)
 npm run typecheck   # tsc --noEmit — must pass clean (R8.1: pretypecheck hook builds shared+db first)
-npm test            # vitest run (all workspaces) — all 466 tests must pass (0 act() warnings, R8.2; R10 added +9 web tests; R11 added +4 tests: +1 db index + +3 shared registerResponseSchema)
+npm test            # vitest run (all workspaces) — all 467 tests must pass (0 act() warnings, R8.2; R10 added +9 web tests; R11 added +4 tests; R13 added +1 db backup)
 npm run test:e2e    # playwright run — 18 tests must pass (9 smoke + 9 auth lifecycle)
 npm run test:build  # R8.4: asserts dist/index.html is a production build (no Vite dev modules)
 npm run test:no-secrets  # R9.1: asserts no .env / env.bak / *.env files are tracked by git
@@ -363,14 +380,14 @@ git ls-files | grep -E '(^|/)dist/' | wc -l   # must be 0 (no dist/ tracked)
 > - `npm run test:fresh-clone` — R8.1: simulates a fresh clone and asserts `npm run typecheck` succeeds.
 > - `LIVE_BASE_URL=https://reddit.jesspete.shop/ npm run test:e2e:live` — R8.3: opt-in live-deployment audit (12 tests). Skipped when `LIVE_BASE_URL` is unset.
 
-> **Test count breakdown (466 vitest + 18 e2e + 30 opt-in live):** `@embers/web` = 271
+> **Test count breakdown (467 vitest + 18 e2e + 30 opt-in live):** `@embers/web` = 271
 > (incl. 23 in `src/lib/api.test.ts` from Round 5, 20 in
 > `src/auth/AuthProvider.test.tsx` + 9 api refresh-and-retry + 10 in
 > `src/pages/LoginPage.test.tsx` from Round 6, 12 in
 > `src/pages/RegisterPage.test.tsx` + 9 in `src/components/layout/Navbar.test.tsx`
 > + 5 in `src/auth/RequireAuth.test.tsx` + 1 api register-displayName from
 > Round 7, +9 from Round 10 covering PostPage / NotFoundPage / mobile
-> overflow / RegisterPage validation), `@embers/server` = 95, `@embers/shared` = 70, `@embers/db` = 30.
+> overflow / RegisterPage validation), `@embers/server` = 95, `@embers/shared` = 70, `@embers/db` = 31.
 > E2E = 18 local (9 smoke from Round 3 + 9 auth lifecycle from Round 7) +
 > 12 live-audit (Round 8, opt-in via `LIVE_BASE_URL`) + 16 extended-live
 > (Round 10, `npm run test:local-prod`) + 2 repro regression-guard
@@ -626,7 +643,7 @@ reddit-clone/
 │   │       ├── ids.ts       # Branded ID types + constructors
 │   │       ├── schemas/     # Entity Zod schemas
 │   │       └── api/         # API input/output schemas per endpoint
-│   └── db/                  ← @embers/db (Drizzle + SQLite + FTS5, 30 tests)
+│   └── db/                  ← @embers/db (Drizzle + SQLite + FTS5, 31 tests)
 │       └── src/
 │           ├── client.ts    # openDb() — connection + hardening pragmas
 │           ├── fts5.ts      # FTS5 virtual table + sync triggers + searchPosts()

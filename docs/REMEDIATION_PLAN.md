@@ -42,11 +42,11 @@ Before implementing new features, we must explicitly update or alter several ADR
 #### Phase 1: Monorepo & Infrastructure Foundation
 *Objective: Restructure the project for full-stack development and establish strict code quality gates.*
 
-*   [ ] **1.1** Initialize monorepo using `npm` workspaces to manage `apps/web`, `apps/server`, `packages/shared`, and `packages/database`. ✅ Done (B0).
-*   [ ] **1.2** Extract `src/types/index.ts` into `packages/shared` to ensure identical domain models (User, Post, Comment, etc.) across client and server. ✅ Done (B1).
-*   [ ] **1.3** Scaffold `apps/server` with Node.js, Fastify, TypeScript, and Pino (structured JSON logging). ✅ Done (B2).
+*   [x] **1.1** Initialize monorepo using `npm` workspaces to manage `apps/web`, `apps/server`, `packages/shared`, and `packages/database`. ✅ Done (B0).
+*   [x] **1.2** Extract `src/types/index.ts` into `packages/shared` to ensure identical domain models (User, Post, Comment, etc.) across client and server. ✅ Done (B1).
+*   [x] **1.3** Scaffold `apps/server` with Node.js, Fastify, TypeScript, and Pino (structured JSON logging). ✅ Done (B2).
 *   [x] **1.4** Configure strict ESLint rules across the entire monorepo (replacing the current "No ESLint" setup) to enforce enterprise code quality. ✅ Done (R4 — ESLint 9 flat config in `eslint.config.mjs`; covers code-quality + import ordering. Prettier is intentionally omitted — ESLint's `--fix` is the project's formatter. See Round 11 F9 for the rationale.)
-*   [ ] **1.5** Set up a CI/CD pipeline (GitHub Actions) to run typechecking, linting, and unit tests on every pull request. ✅ Done (B23).
+*   [x] **1.5** Set up a CI/CD pipeline (GitHub Actions) to run typechecking, linting, and unit tests on every pull request. ✅ Done (B23).
 
 #### Phase 2: Database Layer & Schema (SQLite Production Hardening)
 *Objective: Design a robust relational schema and migrate the deterministic seed data into SQLite.*
@@ -61,14 +61,14 @@ Before implementing new features, we must explicitly update or alter several ADR
 #### Phase 3: API & Security (Fastify REST + Zod)
 *Objective: Build a type-safe, secure API layer with real authentication.*
 
-*   [ ] **3.1** Define Zod schemas for all inputs/outputs in `packages/shared` and consume them in Fastify routes via `fastify-type-provider-zod`. ✅ Done (B1 + B2 + B10).
-*   [ ] **3.2** Implement Authentication Routes: `POST /api/auth/register`, `/login`, `/logout`, `/refresh`. ✅ Done (B9).
-*   [ ] **3.3** Implement secure password hashing using `argon2` (Argon2id algorithm). ✅ Done (B8).
-*   [ ] **3.4** Implement JWT strategy: short-lived access tokens (15m, HS256 via `jose`) stored in memory, long-lived refresh tokens (7d) stored in `HttpOnly`, `Secure`, `SameSite=Strict` cookies. ✅ Done (B9, ADR-104).
-*   [ ] **3.5** Implement authorization `authenticate` decorator that validates the access token and attaches `req.user` to the request. ✅ Done (B9).
-*   [ ] **3.6** Implement Community, Post, Comment, Vote, and Notification routes with full CRUD and strict ownership validation (users can only edit/delete their own content). ✅ Done (B10–B14).
-*   [ ] **3.7** Add security middleware: `@fastify/cors` (strict origin whitelist), `@fastify/helmet` (CSP, HSTS), and `@fastify/rate-limit` (especially on auth endpoints to prevent brute force). ✅ Done (B15).
-*   [ ] **3.8** Add `/health` endpoint for container orchestration probes. ✅ Done (B2).
+*   [x] **3.1** Define Zod schemas for all inputs/outputs in `packages/shared` and consume them in Fastify routes via `fastify-type-provider-zod`. ✅ Done (B1 + B2 + B10).
+*   [x] **3.2** Implement Authentication Routes: `POST /api/auth/register`, `/login`, `/logout`, `/refresh`. ✅ Done (B9).
+*   [x] **3.3** Implement secure password hashing using `argon2` (Argon2id algorithm). ✅ Done (B8).
+*   [x] **3.4** Implement JWT strategy: short-lived access tokens (15m, HS256 via `jose`) stored in memory, long-lived refresh tokens (7d) stored in `HttpOnly`, `Secure`, `SameSite=Strict` cookies. ✅ Done (B9, ADR-104).
+*   [x] **3.5** Implement authorization `authenticate` decorator that validates the access token and attaches `req.user` to the request. ✅ Done (B9).
+*   [x] **3.6** Implement Community, Post, Comment, Vote, and Notification routes with full CRUD and strict ownership validation (users can only edit/delete their own content). ✅ Done (B10–B14).
+*   [x] **3.7** Add security middleware: `@fastify/cors` (strict origin whitelist), `@fastify/helmet` (CSP, HSTS), and `@fastify/rate-limit` (especially on auth endpoints to prevent brute force). ✅ Done (B15).
+*   [x] **3.8** Add `/health` endpoint for container orchestration probes. ✅ Done (B2).
 
 #### Phase 4: Frontend Refactoring (Client-Server Integration)
 *Objective: Decouple the frontend from local data generation and integrate with the new API.*
@@ -87,12 +87,12 @@ Before implementing new features, we must explicitly update or alter several ADR
 #### Phase 5: Testing, Observability & Hardening
 *Objective: Ensure the application is robust, observable, and ready for production deployment.*
 
-*   [ ] **5.1** Write backend integration tests for all Fastify routes using the `inject` method against an in-memory/test SQLite DB. ✅ Done (95 tests across 8 server test files).
+*   [x] **5.1** Write backend integration tests for all Fastify routes using the `inject` method against an in-memory/test SQLite DB. ✅ Done (95 tests across 8 server test files).
 *   [x] **5.2** Install and configure Playwright for End-to-End (E2E) testing. ✅ Done (B24 — `playwright.config.ts` + 4 config variants for local/live/repro/local-prod.)
 *   [x] **5.3** Write E2E tests for critical flows: User registration, login, create post, upvote, comment, and logout. ✅ Done (B24 — `e2e/smoke.spec.ts` (9) + `e2e/auth.spec.ts` (9) = 18 local E2E; 16 live-audit + 2 repro guards are opt-in.)
 *   [ ] **5.4** Integrate Sentry for client-side and server-side error tracking and performance monitoring.
 *   [ ] **5.5** Configure Vite build to generate source maps and upload them to Sentry for error deobfuscation.
-*   [ ] **5.6** Add an automated database backup strategy (e.g., Litestream for continuous SQLite replication to S3, or cron-based snapshots).
+*   [x] **5.6** Add an automated database backup strategy (e.g., Litestream for continuous SQLite replication to S3, or cron-based snapshots). ✅ Done (Round 13, F1 — `backupDb()` in `packages/db/src/client.ts` + `packages/db/scripts/backup.ts` CLI + `npm run db:backup` script. Uses SQLite's online backup API — safe to run while the server is writing. Litestream for continuous replication to S3 remains a future enhancement.)
 *   [x] **5.7** Configure Dockerization (`Dockerfile` for multi-stage build of frontend and backend) and a `docker-compose.yml` for local development. ✅ Done (B23 — multi-stage `Dockerfile` (Node 20 bookworm-slim, healthcheck) + `docker-compose.yml` with persistent SQLite volume + secret env vars.)
 *   [ ] **5.8** Perform a final security audit (OWASP Top 10) and accessibility audit (WCAG 2.2 AA).
 

@@ -91,3 +91,61 @@ export function listTables(raw: Database): string[] {
     .all() as Array<{ name: string }>;
   return rows.map((r) => r.name);
 }
+
+/**
+ * Result of a `backupDb()` call — wraps better-sqlite3's BackupMetadata
+ * with the destination path for convenience.
+ */
+export interface BackupResult {
+  /** Total pages in the backup (roughly proportional to DB size). */
+  totalPages: number;
+  /** Pages remaining (always 0 on success — only non-zero mid-progress). */
+  remainingPages: number;
+  /** Path the backup was written to. */
+  destination: string;
+}
+
+/**
+ * Back up a SQLite database to a destination file using SQLite's online
+ * backup API (Round 13, F1 — Phase 5.6).
+ *
+ * This is safe to run while the server is writing to the source DB —
+ * SQLite's backup API uses page-level copy with coordinated read locks,
+ * never blocking writers for more than the duration of a single page copy.
+ *
+ * The destination file is created (or overwritten). The backup includes
+ * all tables, indexes, triggers, and FTS5 virtual tables present in the
+ * source.
+ *
+ * Usage:
+ *   ```ts
+ *   const result = await backupDb("./dev.db", "./backups/dev-20260813.db");
+ *   console.log(`Backed up ${result.totalPages} pages to ${result.destination}`);
+ *   ```
+ *
+ * For cron-based scheduling, see `packages/db/scripts/backup.ts`.
+ *
+ * @param sourcePath      Path to the source SQLite file.
+ * @param destinationPath Path for the backup file (created or overwritten).
+ * @returns Backup metadata.
+ */
+export async function backupDb(
+  sourcePath: string,
+  destinationPath: string,
+): Promise<BackupResult> {
+  const { raw } = openDb({
+    path: sourcePath,
+    skipMigrate: true,
+    skipFts5: true,
+  });
+  try {
+    const meta = await raw.backup(destinationPath);
+    return {
+      totalPages: meta.totalPages,
+      remainingPages: meta.remainingPages,
+      destination: destinationPath,
+    };
+  } finally {
+    raw.close();
+  }
+}

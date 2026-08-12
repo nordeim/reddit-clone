@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { openDb, listTables } from "./client.js";
+import { openDb, listTables, backupDb } from "./client.js";
 import { applyFts5, searchPosts } from "./fts5.js";
 import { posts, users, communities, votes } from "./schema/index.js";
 import { eq } from "drizzle-orm";
@@ -208,6 +208,59 @@ describe("schema (after migration)", () => {
     expect(indexNames).toContain("idx_comments_post_id");
     expect(indexNames).toContain("idx_notifications_user_read");
     raw.close();
+  });
+});
+
+// Round 13 (F1): Database backup using better-sqlite3's online backup API.
+// Tests that backupDb() creates a valid backup file with the same schema
+// and data as the source.
+describe("backupDb (Round 13, F1)", () => {
+  it("creates a valid backup with the same tables and data", async () => {
+    const sourcePath = `/tmp/embers-backup-test-source-${Date.now()}.db`;
+    const destPath = `/tmp/embers-backup-test-dest-${Date.now()}.db`;
+
+    // Create a source DB with migrations + a test row
+    const { raw: srcRaw, db: srcDb } = openDb({ path: sourcePath });
+    srcDb.insert(users).values({
+      id: "u-backup-test",
+      username: "backuptest",
+      passwordHash: "hash",
+      displayName: "Backup Test",
+      colorFrom: "#fff",
+      colorTo: "#000",
+    }).run();
+    srcRaw.close();
+
+    // Back it up
+    const result = await backupDb(sourcePath, destPath);
+    expect(result.totalPages).toBeGreaterThan(0);
+    expect(result.remainingPages).toBe(0);
+    expect(result.destination).toBe(destPath);
+
+    // Open the backup and verify schema + data
+    const { raw: destRaw, db: destDb } = openDb({
+      path: destPath,
+      skipMigrate: true,
+      skipFts5: true,
+    });
+    const tables = listTables(destRaw);
+    expect(tables).toContain("users");
+    expect(tables).toContain("communities");
+    expect(tables).toContain("posts");
+    expect(tables).toContain("comments");
+    expect(tables).toContain("votes");
+    expect(tables).toContain("notifications");
+    expect(tables).toContain("sessions");
+
+    const backupUser = destDb.select().from(users).where(eq(users.id, "u-backup-test")).all();
+    expect(backupUser).toHaveLength(1);
+    expect(backupUser[0].username).toBe("backuptest");
+    destRaw.close();
+
+    // Cleanup
+    for (const f of [sourcePath, destPath, `${sourcePath}-wal`, `${sourcePath}-shm`]) {
+      try { rmSync(f, { force: true }); } catch { /* ignore */ }
+    }
   });
 });
 

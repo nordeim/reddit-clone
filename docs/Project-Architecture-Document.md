@@ -3,7 +3,7 @@
 **Classification:** Internal Engineering Reference
 **Status:** DEFINITIVE, PRODUCTION-LOCKED BLUEPRINT
 **Companion Documents:** `AGENTS.md` (deep codebase reference), `CLAUDE.md` (daily implementation guide)
-**Last Updated:** 2026-08-13 (Round 12 — hygiene + schema-naming reconciliation: standardized `*ResponseSchema` naming convention in `@embers/shared`; untracked 13,926 `skills/` files; removed stale `allowScripts` entry; tightened `DATABASE_URL` doc-precision; deleted stray root `session_11.md`; test count unchanged at 466)
+**Last Updated:** 2026-08-13 (Round 13 — self-scoped infrastructure + type-safety: added `backupDb()` online backup to `@embers/db` + `npm run db:backup` script; added compile-time type drift detection between `@embers/web` and `@embers/shared`; ticked 14 remaining `[ ]` checkboxes; test count 466 → 467)
 **Audience:** Senior Engineers, Tech Leads, DevOps, and Onboarding Engineers
 **Rule:** Every architectural decision in this document traces to a specific rationale.
            Nothing is here "because it's popular."
@@ -928,11 +928,12 @@ retains its name — it is a factory function, not a response schema.
 | `schemas.test.ts` | 19 | Entity Zod schemas (runtime + type) |
 | `api.test.ts` | 43 | API input/output schemas per endpoint (incl. 3 `registerResponseSchema` tests added Round 11, F3) |
 
-### 13.5 Database Package (30 tests)
+### 13.5 Database Package (31 tests)
 
 `packages/db/src/` provides:
 - `client.ts` — `openDb()` returns both raw `better-sqlite3` connection
-  (for FTS5 + pragma queries) and the Drizzle ORM wrapper.
+  (for FTS5 + pragma queries) and the Drizzle ORM wrapper. Also exports
+  `backupDb()` (Round 13, F1) for online backups using SQLite's backup API.
 - `schema/index.ts` — 7 tables + composite-PK votes table + 3 performance
   indexes (Round 11, F2): `idx_posts_community_created`,
   `idx_comments_post_id`, `idx_notifications_user_read` — declared via
@@ -946,6 +947,10 @@ retains its name — it is a factory function, not a response schema.
 - `seed/` — Port of `apps/web/src/utils/random.ts` + `apps/web/src/data/*`
   into DB inserts. `runSeed()` is idempotent and dependency-injected with
   `hashPassword` so the package stays free of the argon2 native module.
+- `scripts/backup.ts` (Round 13, F1) — CLI script that backs up the
+  configured database to a timestamped file in `BACKUP_DIR` (default
+  `./backups/`). Uses `backupDb()` internally. Safe to run while the
+  server is writing.
 
 ### 13.6 Backend Operation
 

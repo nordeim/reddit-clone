@@ -92,6 +92,38 @@ export interface ApiClientOptions {
 // here so this file has zero workspace deps and stays unit-testable in
 // isolation). Callers can re-cast to the branded types from @embers/shared.
 
+// Round 13 (F2): Compile-time drift detection. These type-only imports are
+// erased at compile time — zero runtime cost, zero bundle impact. The
+// AssertExact assertions below enforce that the web client's hand-written
+// interfaces stay structurally identical to the shared Zod schemas. If a
+// field is added/removed on either side, `npm run typecheck` fails,
+// catching the drift at CI time rather than at runtime.
+//
+// `@embers/shared` is a devDependency (not a production dependency) — the
+// production bundle is unaffected. The hand-written interfaces below
+// remain the runtime contract; the shared schemas remain the server-side
+// source of truth; these assertions bridge them at compile time only.
+import type {
+  AuthUser as SharedAuthUser,
+  LoginResponse as SharedLoginResponse,
+  RegisterResponse as SharedRegisterResponse,
+} from "@embers/shared";
+
+type AssertExact<T, U> =
+  (<G>() => G extends T ? 1 : 2) extends
+  (<G>() => G extends U ? 1 : 2) ? true : false;
+
+// The `extends true` constraint makes the typecheck FAIL when AssertExact
+// returns `false` (i.e. when the types have drifted). Without this
+// constraint, TypeScript would silently evaluate to `false` without
+// erroring. Exported so `noUnusedLocals` doesn't flag them. Type-only
+// exports are erased at compile time — zero runtime cost, zero bundle
+// impact.
+type AssertTrue<T extends true> = T;
+export type _DriftCheckAuthUser = AssertTrue<AssertExact<AuthUser, SharedAuthUser>>;
+export type _DriftCheckLoginResponse = AssertTrue<AssertExact<LoginResponse, SharedLoginResponse>>;
+export type _DriftCheckRegisterResponse = AssertTrue<AssertExact<RegisterResponse, SharedRegisterResponse>>;
+
 export interface HealthResponse {
   status: string;
 }

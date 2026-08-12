@@ -55,7 +55,7 @@ npm run dev        --workspace @embers/server   # http://localhost:4000
 - Client: `http://localhost:5173` — the embers feed (320 posts across 18 communities, generated deterministically in-browser)
 - Server: `curl http://localhost:4000/health` → `{"status":"ok",…}`
 - Demo login (server): `POST /api/auth/login` with `{"username":"you","password":"embers-demo"}` → access token + refresh cookie
-- All tests pass: `npm test` (466 vitest + 18 Playwright E2E; plus 30 opt-in live-audit E2E — see Test Status)
+- All tests pass: `npm test` (467 vitest + 18 Playwright E2E; plus 30 opt-in live-audit E2E — see Test Status)
 
 ### Quick Start (Docker)
 
@@ -240,6 +240,7 @@ curl http://localhost:5000/api/posts
 | `npm run db:setup` | Migrate + seed the SQLite database |
 | `npm run db:migrate` | Apply Drizzle migrations only |
 | `npm run db:seed` | Seed deterministic demo data only |
+| `npm run db:backup` | Back up the SQLite DB to `./backups/dev-YYYYMMDD-HHmmss.db` (Round 13, safe to run while server writes) |
 | `npm run server:start` | Start Fastify API on port 5000 in **development** mode (`tsx watch`, `NODE_ENV=development`) |
 | `npm run server:prod` | Start Fastify API in **production** mode (`node dist/index.js`, bare) |
 | `npm run server:start-prod` | Start Fastify API on port 5000 in **production** mode (explicit env: `NODE_ENV=production`) |
@@ -258,7 +259,7 @@ enables HSTS hardening and requires all production secrets via `loadEnv()`.
 ```bash
 npm run lint        # ESLint — 0 errors, 0 warnings
 npm run typecheck   # tsc --noEmit — all 4 workspaces clean
-npm test            # 466 vitest tests (pretest auto-builds shared + db)
+npm test            # 467 vitest tests (pretest auto-builds shared + db)
 npm run build       # topological build — all workspaces succeed
 ```
 
@@ -273,9 +274,9 @@ host (ADR-003 single-file build is still in force for the client).
 |-----------|-------|---------|
 | `@embers/web` | 271 | `npm test --workspace @embers/web` |
 | `@embers/shared` | 70 | `npm test --workspace @embers/shared` |
-| `@embers/db` | 30 | `npm test --workspace @embers/db` |
+| `@embers/db` | 31 | `npm test --workspace @embers/db` |
 | `@embers/server` | 95 | `npm test --workspace @embers/server` |
-| **Vitest total** | **466** | `npm test --workspaces --if-present` |
+| **Vitest total** | **467** | `npm test --workspaces --if-present` |
 | E2E — local API (Playwright) | 18 | `npm run test:e2e` |
 | E2E — live audit, Round 8 (opt-in) | 12 | `LIVE_BASE_URL=… npm run test:e2e:live` |
 | E2E — extended live, Round 10 (opt-in) | 16 | `npm run test:local-prod` |
@@ -284,7 +285,7 @@ host (ADR-003 single-file build is still in force for the client).
 | Fresh-clone typecheck | 1 script | `npm run test:fresh-clone` |
 | Lint (ESLint) | 0 errors, 0 warnings | `npm run lint` |
 
-All 466 vitest tests + 18 Playwright E2E tests pass (`npm test` — do NOT
+All 467 vitest tests + 18 Playwright E2E tests pass (`npm test` — do NOT
 run `vitest run` from root; it won't discover workspace configs), ESLint is
 clean, and typecheck + build succeed as of Round 8 (2026-08-10).
 
@@ -453,6 +454,31 @@ remediation.
   dump; authoritative version is `docs/session_11.md`).
 - Vitest count unchanged: 466/466 (pure rename + hygiene).
 - See `docs/REMEDIATION_PLAN_ROUND_12.md` for the full plan, TDD
+  breakdown, and verification ledger.
+
+#### Round 13 (2026-08-13) — self-scoped infrastructure + type-safety
+
+- Self-scoped (no new audit reports). Surveyed remaining non-breaking
+  gaps in `REMEDIATION_PLAN.md`.
+- **(F1) Database backup** (Phase 5.6) — added `backupDb()` to
+  `packages/db/src/client.ts` using `better-sqlite3`'s online backup API
+  (safe to run while the server writes). Added `packages/db/scripts/backup.ts`
+  CLI (timestamped backup files, `BACKUP_DIR` env var). Added `npm run
+  db:backup` root script. +1 TDD test (backs up a seeded DB, verifies
+  same tables + data in the backup).
+- **(F2) Type drift detection** — added `@embers/shared` as a
+  devDependency of `@embers/web` + compile-time `AssertExact` type
+  assertions in `apps/web/src/lib/api.ts` that enforce the web client's
+  hand-written `AuthUser`, `LoginResponse`, `RegisterResponse`
+  interfaces stay structurally identical to the shared Zod schemas. If
+  a field is added/removed on either side, `npm run typecheck` fails.
+  Type-only imports are erased at compile time — zero runtime/bundle
+  impact. Verified: breaking a type → typecheck fails; restoring → passes.
+- **(F3) Doc cleanup** — ticked 14 remaining `[ ]` checkboxes in
+  `REMEDIATION_PLAN.md` that had `✅ Done` notes (Phase 1.1-1.5, 3.1-3.8,
+  5.1, 5.6).
+- Vitest count: 466 → 467 (+1 db backup test; db 30→31).
+- See `docs/REMEDIATION_PLAN_ROUND_13.md` for the full plan, TDD
   breakdown, and verification ledger.
 
 ### How to verify the live deployment

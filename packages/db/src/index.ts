@@ -3,6 +3,7 @@
  *
  * Exports:
  *   - openDb(): open a hardened connection (WAL, busy_timeout, FK on)
+ *   - backupDb(): online backup to a file (Round 13, F1)
  *   - listTables(): introspection helper
  *   - Drizzle schema tables: users, communities, posts, comments,
  *     votes, notifications, sessions
