@@ -267,7 +267,7 @@
 
 ## Build & toolchain quirks
 
-- **`vite-plugin-singlefile`** inlines all JS and CSS into a single `dist/index.html` (~525 kB). Do **not** add `React.lazy`, dynamic `import()`, or manual chunks — code splitting defeats the plugin.
+- **`vite-plugin-singlefile`** inlines all JS and CSS into a single `dist/index.html` (537 kB). Do **not** add `React.lazy`, dynamic `import()`, or manual chunks — code splitting defeats the plugin.
 - The build is **not** fully self-contained. `public/images/*.jpg` are copied to `dist/images/` and referenced by absolute URL `/images/...` (`src/data/images.ts`), and `src/index.css` `@import`s Inter from Google Fonts. Serve `dist/` from a web root; opening it over `file://` breaks images and fonts.
 - **`HashRouter`**, not `BrowserRouter` (`src/App.tsx`) — deliberate, so the single-file build works on any static host with no rewrite rules. Don't switch it.
 - **Tailwind CSS v4** via the `@tailwindcss/vite` plugin. There is no `tailwind.config.js` and no PostCSS config; the theme lives in `src/index.css` under `@theme`.

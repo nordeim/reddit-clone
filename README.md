@@ -23,7 +23,7 @@ reddit-clone/
 │                        /api/search, /api/notifications)
 ├── packages/
 │   ├── shared/       ← @embers/shared — Zod schemas + branded IDs (70 tests)
-│   └── db/           ← @embers/db — Drizzle ORM + SQLite + FTS5 + seed (30 tests)
+│   └── db/           ← @embers/db — Drizzle ORM + SQLite + FTS5 + seed (31 tests)
 ├── docs/             ← REMEDIATION_EXECUTION_PLAN.md (B0–B16 done, B17–B22 deferred),
 │                       REMEDIATION_PLAN_ROUND_5.md (B17–B22 TDD breakdown),
 │                       REMEDIATION_PLAN_ROUND_6.md (B18 auth provider),
@@ -31,7 +31,7 @@ reddit-clone/
 │                       Project-Architecture-Document.md, etc.
 ├── e2e/              ← Playwright E2E: smoke.spec.ts (9) + auth.spec.ts (9)
 ├── Dockerfile        ← Multi-stage Node 20 production build for @embers/server
-├── docker-compose.yml ← Local container orchestration (port 4000)
+├── docker-compose.yml ← Local container orchestration (API on port 4000; the `npm run server:start-prod` flow uses 5000)
 ├── .github/           ← CI workflow (lint → typecheck → test → build → e2e)
 └── package.json      ← root workspaces config + fan-out scripts
 ```
@@ -155,7 +155,7 @@ all production secrets to be present.
 # 1. Build all workspaces (topological: shared → db → server → web)
 npm run build
 # → apps/server/dist/index.js  (Fastify production bundle)
-# → apps/web/dist/index.html    (single-file SPA, ~525 KB)
+# → apps/web/dist/index.html    (single-file SPA, 537 KB)
 
 # 2. Initialize the database (if not already done)
 npm run db:setup
@@ -569,6 +569,8 @@ TDD breakdown + the rationale for deferring B17 (build refactor) again.
 | `docs/REMEDIATION_PLAN_2.md` | Original 10-ADR remediation proposal (status annotations added) |
 | `docs/IMPLEMENTATION_PLAN.md` | Original greenfield plan that produced `apps/web` |
 | `docs/MANUAL_QA.md` | Manual QA matrix for the client SPA |
+
+> **Additional docs:** `REMEDIATION_PLAN_ROUND_9.md`–`REMEDIATION_PLAN_ROUND_13.md`, `SECRET_ROTATION_GUIDE.md`, `audit_report_1.md`–`audit_report_4.md`, and `session_1.md`–`session_13.md` also live in `docs/` (Round changelogs, the security-incident guide, audit reports, and session worklogs).
 
 ## License
 

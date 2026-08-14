@@ -143,7 +143,7 @@
 
 ---
 
-The original client-only React SPA lives at `apps/web/` (`@embers/web`): **no backend, no API, no `fetch`** — all content is generated deterministically in the browser via seeded PRNGs. Three backend workspaces (`@embers/server`, `@embers/db`, `@embers/shared`) provide a Fastify REST API, Drizzle ORM data layer, and shared Zod contracts.
+The original client-only React SPA lives at `apps/web/` (`@embers/web`): all content is generated deterministically in the browser via seeded PRNGs (**no backend needed for the core feed experience**). A fetch-based API client (`src/lib/api.ts`) is now wired into `AuthProvider` (B18) for auth, though the feed/search pages still render deterministic local data. Three backend workspaces (`@embers/server`, `@embers/db`, `@embers/shared`) provide a Fastify REST API, Drizzle ORM data layer, and shared Zod contracts.
 
 **Related docs:** `AGENTS.md` — comprehensive codebase reference (architecture, data layer contracts, full route table, backend patterns). Read it for deep context; this file focuses on daily implementation conventions.
 
@@ -201,6 +201,8 @@ Tests are colocated with source as `*.test.ts(x)`. The vitest config lives in ea
 | `npm run build --workspace @embers/server` | Build one workspace |
 | `npm test --workspace @embers/db` | Test one workspace |
 | `npm run typecheck --workspace @embers/shared` | Typecheck one workspace |
+
+> **Additional root scripts** (also listed in `README.md`): `db:setup`, `server:start`, `server:dev`, `lint:fix`, `test:local-prod`, `test:repro`, `test:fresh-clone`, `test:e2e:install`, `test:e2e:live`.
 
 `build` is bare `vite build`, not `tsc -b && vite build`. Always run `npm run typecheck` before claiming a change compiles. Run `npm test` before claiming a change is correct — every code change should ship with tests (TDD: red → green → refactor).
 
