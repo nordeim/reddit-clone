@@ -220,6 +220,20 @@
 > 1.1-1.5, 3.1-3.8, 5.1, 5.6). Test count: 466 → 467 (db 30→31). See
 > `docs/REMEDIATION_PLAN_ROUND_13.md` for the full plan, TDD breakdown,
 > and verification ledger.
+>
+> Round 14 (2026-08-18) was a **knowledge distillation** round. No code
+> changes — instead, the entire codebase was audited and all patterns,
+> anti-patterns, lessons, and pitfalls from 13 rounds of remediation
+> were distilled into a comprehensive `reddit-clone_SKILL.md` (21
+> sections, ~800 lines) at the repo root. The skill captures: project
+> identity, tech stack, bootstrapping, design system, component
+> architecture, hooks, data layer, accessibility, 14 anti-patterns,
+> 8 debugging scenarios, 11-step pre-ship checklist, 10 lessons, 14
+> pitfalls, 14 best practices, 8 coding patterns, 7 coding anti-patterns,
+> monorepo/build config, DB schema, security architecture, TS interfaces,
+> and a full round-history audit trail. Any future agent building a
+> similar full-stack TypeScript monorepo (React SPA + Fastify API +
+> Drizzle/SQLite + Zod + JWT auth) should read this skill first.
 
 ---
 

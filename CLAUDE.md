@@ -140,6 +140,15 @@
 > 3.1-3.8, 5.1, 5.6). Test count: 466 → 467. See
 > `docs/REMEDIATION_PLAN_ROUND_13.md` for the full plan, TDD breakdown,
 > and verification ledger.
+>
+> **Round 14 (2026-08-18) — knowledge distillation:** No code changes.
+> Audited the entire codebase and distilled all patterns, anti-patterns,
+> lessons, and pitfalls from 13 rounds of remediation into
+> `reddit-clone_SKILL.md` (21 sections, ~800 lines) at the repo root.
+> Any future agent building a similar full-stack TypeScript monorepo
+> should read this skill first. Skills used: `distill-codebase-skill`
+> (reference template) + `to-distill-project-into-skill` (meta-skill
+> guiding the 6-phase distillation process).
 
 ---
 
