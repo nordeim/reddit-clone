@@ -170,7 +170,7 @@ npm run test:ci-config       # Asserts gitleaks job in CI
 
 ### 4.1 Tailwind v4 CSS-First Configuration
 
-The project uses **Tailwind CSS v4** with the CSS-first `@theme` approach — no `tailwind.config.js` or `postcss.config.js` files exist. All design tokens are defined in `apps/web/src/index.css` using the `@theme` directive.
+The project uses **Tailwind CSS v4** with the CSS-first `@theme` approach — no `tailwind.config.js` or `postcss.config.js` files exist. The `@theme` block in `apps/web/src/index.css` defines only the `--font-sans` token; the UI otherwise uses Tailwind's default `orange-*` / `zinc-*` palette (e.g. the global focus outline references `var(--color-orange-500)`).
 
 ```css
 /* apps/web/src/index.css */
@@ -179,9 +179,7 @@ The project uses **Tailwind CSS v4** with the CSS-first `@theme` approach — no
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  --color-ember-500: #f97316;
-  --color-ember-600: #db2777;
-  /* ... additional tokens ... */
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
 }
 
 @utility line-clamp-1 {
@@ -212,7 +210,7 @@ To prevent a flash of light theme before React hydrates, an inline `<script>` in
 
 ### 4.3 Category Color Gradients
 
-Each community category (nature, tech, gaming, food, space, art, animals, sports) has a deterministic gradient derived from the community name via FNV-1a hash → mulberry32 PRNG. The `gradientFor()` function in `packages/db/src/seed/random.ts` (ported from `apps/web/src/utils/random.ts`) produces identical gradients on both client and server.
+Each of the 7 community categories (tech, gaming, food, space, art, animals, sports) has a deterministic gradient derived from the community name via FNV-1a hash → mulberry32 PRNG. (The `ImageCategory` type defines an 8th value, `nature`, but it appears only in the post-image `TITLE_BANK`/`CATEGORY_IMAGES` fallbacks and is never assigned to a community.) The `gradientFor()` function in `packages/db/src/seed/random.ts` (ported from `apps/web/src/utils/random.ts`) produces identical gradients on both client and server.
 
 ---
 
@@ -349,7 +347,7 @@ The store uses `persist` middleware with:
 
 ### 6.3 `useFocusTrap()` — Modal Accessibility Hook
 
-Used by `Modal.tsx` and `Dropdown.tsx` to trap keyboard focus within the component while it's open. Restores focus to the trigger element on close.
+Used by `Modal.tsx` to trap keyboard focus within the dialog while it's open, and restores focus to the trigger element on close. `Dropdown.tsx` does NOT use this hook — it implements its own Escape-to-close and ArrowUp/ArrowDown menu navigation via `useOnClickOutside` plus a keydown handler.
 
 ---
 
@@ -359,7 +357,7 @@ Used by `Modal.tsx` and `Dropdown.tsx` to trap keyboard focus within the compone
 
 All client-side content is generated at import time in `apps/web/src/data/*`:
 - `users.ts` — `generateUsers(48)` → 48 users with deterministic names, bios, karma, gradient colors
-- `communities.ts` — `generateCommunities()` → 18 communities across 8 categories
+- `communities.ts` — `generateCommunities()` → 18 communities across 7 categories
 - `posts.ts` — `generatePosts(320)` → 320 posts with titles, bodies, comment trees
 - `notifications.ts` — 18 notifications
 - `comments.ts` — per-post comment trees (total ~3037 comments)
@@ -388,7 +386,7 @@ The backend mirrors the client's data using:
 ## 8. Accessibility (WCAG 2.2 AA) Implementation
 
 - **Skip-to-content link:** `<a href="#main" className="skip-link">Skip to content</a>` in `AppShell`
-- **Focus trap:** `useFocusTrap()` hook in `Modal.tsx` and `Dropdown.tsx`
+- **Focus trap:** `useFocusTrap()` hook in `Modal.tsx` (the dialog). `Dropdown.tsx` implements its own Escape/arrow-key focus handling rather than using this hook.
 - **Reduced motion:** `<MotionConfig reducedMotion="user">` wraps the entire app — respects browser's `prefers-reduced-motion`
 - **Semantic HTML:** `<main id="main">`, `<nav>`, `<button>` (not `<div onClick>`)
 - **Color contrast:** All category gradients meet WCAG AA 4.5:1 against white/black text
@@ -979,9 +977,9 @@ CMD ["node", "apps/server/dist/index.js"]
 
 | Table | Key Columns | Indexes |
 |---|---|---|
-| `users` | `id` (PK), `username` (UNIQUE), `password_hash`, `display_name`, `karma`, `created_at`, `color_from`, `color_to` | UNIQUE(username) implicit |
-| `communities` | `id` (PK), `slug` (UNIQUE), `name`, `title`, `owner_id` (FK), `member_count`, `category`, `color_from`, `color_to`, `icon`, `rules` (JSON) | UNIQUE(slug) implicit |
-| `posts` | `id` (PK), `community_id` (FK), `author_id` (FK), `title`, `type`, `body`, `link_url`, `upvotes`, `downvotes`, `comment_count`, `created_at` | `idx_posts_community_created` (community_id, created_at DESC) |
+| `users` | `id` (PK), `username` (UNIQUE), `password_hash`, `display_name`, `bio`, `karma`, `created_at`, `color_from`, `color_to` | UNIQUE(username) implicit |
+| `communities` | `id` (PK), `slug` (UNIQUE), `name`, `title`, `description`, `owner_id` (FK), `member_count`, `online_count`, `category`, `color_from`, `color_to`, `icon`, `rules` (JSON) | UNIQUE(slug) implicit |
+| `posts` | `id` (PK), `community_id` (FK), `author_id` (FK), `title`, `type`, `body`, `link_url`, `link_domain`, `image_category`, `flair`, `upvotes`, `downvotes`, `comment_count`, `created_at` | `idx_posts_community_created` (community_id, created_at DESC) |
 | `comments` | `id` (PK), `post_id` (FK), `author_id` (FK), `parent_id` (self-ref), `body`, `upvotes`, `downvotes`, `depth`, `created_at` | `idx_comments_post_id` (post_id) |
 | `votes` | `user_id` (FK), `target_id`, `target_type`, `value` | Composite PK (user_id, target_id, target_type) |
 | `notifications` | `id` (PK), `user_id` (FK), `type`, `message`, `detail`, `post_id`, `actor_id` (FK), `read`, `created_at` | `idx_notifications_user_read` (user_id, read) |
@@ -1135,9 +1133,9 @@ export interface Env {
 | 1–3 | 2026-08-09/10 | Monorepo transition, server scaffolding, DB schema, FTS5, auth, CRUD routes | ~300 | B0–B16 done |
 | 4 | 2026-08-10 | ESLint 9 flat config added | ~350 | Phase 1.4 |
 | 5 | 2026-08-10 | Doc-alignment + `lib/api.ts` foundational client | ~350 | B17–B22 TDD breakdown |
-| 6–7 | 2026-08-10 | B18 Auth Provider (AuthProvider, LoginPage, RegisterPage, RequireAuth, 401 refresh) | ~462 | B18 done |
-| 8 | 2026-08-10 | Live-deployment audit + hardening (test:build, test:fresh-clone, live E2E) | 462 | 3 critical deployment gaps |
-| 9 | 2026-08-10 | Secret rotation (.env committed to git history) | 453 | R9.1 incident + 6 CI gates |
+| 6–7 | 2026-08-10 | B18 Auth Provider (AuthProvider, LoginPage, RegisterPage, RequireAuth, 401 refresh) | 453 | B18 done (R6=428 → R7=453 after +25 web tests) |
+| 8 | 2026-08-10 | Live-deployment audit + hardening (test:build, test:fresh-clone, live E2E) | 453 | 3 critical deployment gaps (no test-count change) |
+| 9 | 2026-08-10 | Secret rotation (.env committed to git history) | 453 | R9.1 incident + 6 CI gates (zero tests added) |
 | 10 | 2026-08-10 | Comprehensive audit-driven remediation (4 bugs, 7 drift points) | 462 | BUG-R10-2 through R10-5 |
 | 11 | 2026-08-12 | Audit-driven doc + schema reconciliation (9 findings) | 466 | F1–F9 (CSRF, indexes, registerResponseSchema, cookie path, ID strategy, Postgres FTS5, route count, checkboxes, Prettier) |
 | 12 | 2026-08-13 | Hygiene + schema-naming reconciliation (6 findings) | 466 | F1–F6 (DATABASE_URL doc, stale allowScripts, untrack skills/, schema rename, stray file deletion) |
