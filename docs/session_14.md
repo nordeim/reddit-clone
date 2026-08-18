@@ -124,3 +124,39 @@ Optional follow-ups (not required for alignment):
 - These edits are uncommitted — say the word if you'd like me to commit them (and/or stage docs/ALIGNILED_REVIEW.md). 
 - The opt-in E2E suites (test:local-prod, test:repro = 16 + 2 tests) were verified structurally but not executed live; I can run them against a local prod build if you want full closure on those counts. 
 
+---
+
+ ⚠️ Discrepancies & Caveats (5 items — all post-doc or scoping, none are document errors)
+
+ A. Round 12 F4 outcome was reverted after the doc was written. The doc's Round 12 summary states "F4 done — 0 tracked files under skills/." That was true at 3f0465a but commit 319e266 ("Restore skills folder
+ accidentally deleted in 3f0465a", 2026-08-18) re-added 13,926 skills/ files to tracking. At current HEAD, git ls-files skills/ | wc -l = 13,926. Per your instruction I did not review skills/ contents — I'm
+ only flagging that the git-tracking claim is no longer true at HEAD. This is a later commit, not a doc inaccuracy.
+
+ B. Commit 23c6cf6 has a misleading message. Titled "Implement database backup and type drift detection" but its diffstat shows it only added docs/session_13.md (+158 lines). The actual R13 code landed in
+ b8e97b0. So 23c6cf6 is really "add the worklog," not an implementation commit — minor commit-hygiene issue.
+
+ C. session_13.md documents two rounds (12 + 13). It opens with the Round 12 narrative (3f0465a) before the Round 13 narrative (b8e97b0). Acceptable as a single combined worklog, but the filename suggests
+ only Round 13 — a minor retrievability note for future sessions.
+
+ D. Build size "525.3 KB" not independently re-verified. The doc cites test:build output. I did not run a production build (per project guidance to avoid build/dev unless asked, and not needed for alignment).
+ The type-only imports erased claim is structurally sound (the AssertExact types are export type), and all artifacts are present — but the exact bundle byte count is taken from the doc, not re-measured by me.
+
+ E. Full test suite not executed. I validated test structure and counts (file inventory + db 31-it count + AGENTS.md breakdown) rather than running npm test across all four workspaces. The "467/467 pass" and
+ "all 8 CI gates green" claims are corroborated by artifact presence, not by re-execution. If you want certainty, I can run the suite — but note it requires building shared+db first and may need network for
+ some integration paths.
+
+ │ Minor working-tree note: git status shows M packages/db/dev.db (uncommitted, modified by a local test/seed run). Not referenced by the document; harmless but worth a git checkout/git restore if you want a
+ │ clean tree.
+
+ ────────────────────────────────────────────────────────────────────────────────
+
+ Conclusion
+
+ docs/session_13.md is accurate and faithful to the codebase. Every technical claim I could check against source holds. The document is safe to trust as the authoritative record of Round 12 + Round 13. The
+ only things to be aware of are the post-doc skills/ re-track (A) and the misleading 23c6cf6 commit message (B) — both outside the document's scope and both already reflected (or exempted) by your skills/
+ exclusion instruction.
+
+ Recommended follow-ups (optional):
+ 1. If you want the "467/467 pass" + "525.3 KB build" claims independently re-verified, I can run npm test and npm run test:build (would take a few minutes and may need network).
+ 2. Consider amending 23c6cf6's message to "docs: add session_13 worklog" for accuracy.
+ 3. If the skills/ re-track in 319e266 was unintentional, that's a separate cleanup decision (you explicitly excluded skills/ from this review, so I won't touch it).
