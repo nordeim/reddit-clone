@@ -87,7 +87,12 @@ Do not create any new git branch. All git commits must be to the main branch.
 
 ---
 
+Please use `git pull` or `git clone https://github.com/nordeim/reddit-clone.git` (if your local workspace had been reset) to refresh your local copy to sync with the latest GitHub changes. Then meticulously review and validate the latest `AGENTS.md` , `CLAUDE.md` , `README.md` and `docs/session_13.md` to have a good understanding of the current codebase, then meticulously validate your understanding against the codebase to check for alignment and to confirm current status. Exclude and ignore the `skills/` re-added to the GitHub repo - do not touch or do anything to the skills folder, except to look for suitable and useful skills to help you with your review and audit or to help you with the coding best practices.
+
+Next, use the included `skills/distill-codebase-skill/SKILL.md` and `skills/to-distill-project-into-skill/SKILL.md` to help you to meticulously plan and distill all the knowledge and expertise gained in building the project codebase into a reusable skill named `reddit-clone_SKILL.md` that will guide any coding agent to successfully build a codebase for future projects utilising similar tech stacks. The new skill `reddit-clone_SKILL.md` that you will distill based on a meticulous review and audit of the current codebase will capture all coding best practices and design patterns for similar projects in future, capturing the programming patterns and anti-patterns, lessons and pitfalls learnt and how to avoid them. Save the new skill in the local project root folder, then commit and pushed to the GitHub repo using the attached SSH key file.
 please meticulously review @AGENTS.md and @CLAUDE.md to have a deep understanding of the project and its codebase design and architecture. next, meticulously validate your deep understanding against the codebase to check for alignment.
+
+---
 
 please meticulously review @docs/documentation_audit_report.md and validate the findings against the codebase to check for alignment 
 
