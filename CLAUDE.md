@@ -149,6 +149,38 @@
 > should read this skill first. Skills used: `distill-codebase-skill`
 > (reference template) + `to-distill-project-into-skill` (meta-skill
 > guiding the 6-phase distillation process).
+>
+> **Round 15 (2026-08-19) — live-audit-driven codebase + doc remediation:**
+> Six findings, five TDD code fixes + one doc reconciliation. No new
+> features breaking the existing "deploy anywhere" story.
+> - **F1:** `LoginPage` now redirects to `state.from` after login
+>   (deferred since Round 7) — reads `location.state?.from`, validates
+>   it's a relative path (open-redirect guard), and navigates there.
+>   +3 RED→GREEN tests.
+> - **F2:** `lib/api.ts` wraps the top-level fetch + retry-fetch in
+>   try/catch; on catch throws `ApiError(0, "NETWORK_ERROR",
+>   "Could not reach the embers server. Please try again later.",
+>   undefined, cause)`. `ApiError` constructor extended with optional
+>   5th `cause` arg (ES2022 `Error.cause`). Replaces the meaningless
+>   raw `TypeError("Failed to fetch")` surfaced by the live audit.
+>   +3 RED→GREEN tests.
+> - **F3:** New `scripts/verify-prod-readiness.mjs` — opt-in strict
+>   gate that probes `/health`, `/api/posts`, `/api/communities`,
+>   `/api/auth/login` + checks 5 required security headers; exits 1
+>   when ANY probe fails. New npm scripts: `test:prod-readiness` +
+>   `test:prod-readiness:test` (14 `node --test` unit tests for pure
+>   helpers).
+> - **F4:** Synced `docs/Project-Architecture-Document.md` with root
+>   + deleted the root duplicate (canonical: `docs/`). Extended
+>   `scripts/verify-plan-alignment.mjs` with a guard that fails when
+>   the root duplicate is re-introduced.
+> - **F5:** Backfilled worklog entries for Rounds 11–14.
+> - **F6:** Annotated Sentry phases 5.4/5.5 in REMEDIATION_PLAN.md as
+>   "Deferred indefinitely (operator decision)".
+> - Test count: 467 → 473 vitest (+3 LoginPage + +3 api). Plus 14
+>   `node --test` for the new prod-readiness helpers. E2E unchanged.
+> - See `docs/REMEDIATION_PLAN_ROUND_15.md` for the full plan, TDD
+>   breakdown, and verification ledger.
 
 ---
 
@@ -374,12 +406,13 @@ Tests use **Vitest** with **Fastify's `inject()`** — no port binding needed.
 ```bash
 npm run lint        # ESLint flat config — 0 errors, 0 warnings (Round 4)
 npm run typecheck   # tsc --noEmit — must pass clean (R8.1: pretypecheck hook builds shared+db first)
-npm test            # vitest run (all workspaces) — all 467 tests must pass (0 act() warnings, R8.2; R10 added +9 web tests; R11 added +4 tests; R13 added +1 db backup)
+npm test            # vitest run (all workspaces) — all 473 tests must pass (0 act() warnings, R8.2; R10 added +9 web tests; R11 added +4 tests; R13 added +1 db backup; R15 added +6 web tests)
 npm run test:e2e    # playwright run — 18 tests must pass (9 smoke + 9 auth lifecycle)
 npm run test:build  # R8.4: asserts dist/index.html is a production build (no Vite dev modules)
 npm run test:no-secrets  # R9.1: asserts no .env / env.bak / *.env files are tracked by git
 npm run test:gitignore   # R9.3: asserts no tracked file matches a .gitignore pattern
 npm run test:ci-config   # R9.2: asserts .github/workflows/ci.yml has a gitleaks job
+npm run test:plan-alignment  # R10: asserts REMEDIATION_PLAN.md has no forbidden tokens; R15 F4: also asserts the root PAD duplicate is absent
 npm run build       # topological build — must succeed
 git ls-files | grep -E '(^|/)dist/' | wc -l   # must be 0 (no dist/ tracked)
 ```
@@ -390,8 +423,10 @@ git ls-files | grep -E '(^|/)dist/' | wc -l   # must be 0 (no dist/ tracked)
 > **Opt-in checks (not in pre-commit):**
 > - `npm run test:fresh-clone` — R8.1: simulates a fresh clone and asserts `npm run typecheck` succeeds.
 > - `LIVE_BASE_URL=https://reddit.jesspete.shop/ npm run test:e2e:live` — R8.3: opt-in live-deployment audit (12 tests). Skipped when `LIVE_BASE_URL` is unset.
+> - `npm run test:prod-readiness` — R15 F3: opt-in strict gate. Probes `/health`, `/api/posts`, `/api/communities`, `/api/auth/login` + checks 5 required security headers against `PROD_BASE_URL` (default: `https://reddit.jesspete.shop/`). Exits 1 when ANY probe fails. Set `PROD_READINESS=skip` to skip in local dev / CI without a live deployment.
+> - `npm run test:prod-readiness:test` — R15 F3: 14 unit tests via `node --test` for the prod-readiness pure helpers.
 
-> **Test count breakdown (467 vitest + 18 e2e + 30 opt-in live):** `@embers/web` = 271
+> **Test count breakdown (473 vitest + 18 e2e + 30 opt-in live + 14 node:test):** `@embers/web` = 277
 > (incl. 23 in `src/lib/api.test.ts` from Round 5, 20 in
 > `src/auth/AuthProvider.test.tsx` + 9 api refresh-and-retry + 10 in
 > `src/pages/LoginPage.test.tsx` from Round 6, 12 in
@@ -402,12 +437,17 @@ git ls-files | grep -E '(^|/)dist/' | wc -l   # must be 0 (no dist/ tracked)
 > E2E = 18 local (9 smoke from Round 3 + 9 auth lifecycle from Round 7) +
 > 12 live-audit (Round 8, opt-in via `LIVE_BASE_URL`) + 16 extended-live
 > (Round 10, `npm run test:local-prod`) + 2 repro regression-guard
-> (Round 10, `npm run test:repro`) = 48 E2E total.
+> (Round 10, `npm run test:repro`) = 48 E2E total. Plus 14 `node --test`
+> unit tests for `scripts/verify-prod-readiness.mjs` (Round 15 F3,
+> `npm run test:prod-readiness:test`).
 > The previously documented total of 428 (Round 6) was superseded when
 > Round 7 added the RegisterPage + Navbar + RequireAuth test suites +
 > the E2E auth lifecycle suite. Round 8 did not add vitest tests — it
 > silenced 6 React `act()` warnings in `LoginPage` + `RegisterPage` tests.
-> Round 10 added +9 vitest tests (web suite 262 → 271; total 453 → 462)
+> Round 10 added +9 vitest tests (web suite 262 → 271; total 453 → 462).
+> Round 11 added +4 (db 29→30, shared 67→70; total 462→466). Round 13
+> added +1 (db 30→31; total 466→467). Round 15 added +6 (web 271→277,
+> +3 LoginPage `state.from` + +3 api `NETWORK_ERROR`; total 467→473).
 
 **Build-before-test prerequisite (Round 5, extended in Round 8):** `@embers/server`'s test suites import
 `@embers/db` and `@embers/shared` as runtime packages, so their `dist/` builds
@@ -628,7 +668,7 @@ Custom variant, not v3 `darkMode: 'class'`:
 ```
 reddit-clone/
 ├── apps/
-│   ├── web/                 ← @embers/web (React SPA, Vite, 271 tests)
+│   ├── web/                 ← @embers/web (React SPA, Vite, 277 tests)
 │   │   └── src/             # See AGENTS.md for full web tree.
 │   │                        # Note: `lib/api.ts` (Round 5) is the foundational
 │   │                        # fetch-based client, wired into the React tree via

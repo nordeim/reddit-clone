@@ -4,20 +4,20 @@ description: >
   Comprehensive engineering skill for building a production-grade Reddit-style
   community feed using npm-workspaces monorepo, React 19 + Vite SPA, Fastify
   REST API, Drizzle ORM + SQLite, JWT auth, and Zod schemas. Captures all
-  patterns, anti-patterns, lessons, and pitfalls from 13 rounds of
+  patterns, anti-patterns, lessons, and pitfalls from 15 rounds of
   audit-driven remediation. Use when building a full-stack TypeScript
   monorepo with deterministic client data + real backend, or when onboarding
   to the embers codebase.
-version: 1.0.0
-last_updated: 2026-08-18
-project_state: 467 vitest tests (web 271 + server 95 + shared 70 + db 31), 18 local E2E, 8 CI gates
+version: 1.1.0
+last_updated: 2026-08-19
+project_state: 473 vitest tests (web 277 + server 95 + shared 70 + db 31), 18 local E2E, 8 CI gates, 14 prod-readiness unit tests
 ---
 
 # reddit-clone SKILL — Engineering Reference for Full-Stack TypeScript Monorepos
 
 > **How to use this document:** This is the single-source-of-truth reference
 > for the embers (Reddit-clone) codebase. It captures every design decision,
-> anti-pattern, debugging procedure, and lesson learned across 13 remediation
+> anti-pattern, debugging procedure, and lesson learned across 15 remediation
 > rounds. Any coding agent working on a similar tech stack (React SPA +
 > Fastify API + Drizzle/SQLite + Zod + JWT auth) should read this before
 > writing code.
@@ -61,7 +61,7 @@ project_state: 467 vitest tests (web 271 + server 95 + shared 70 + db 31), 18 lo
 - Generated data is immutable — user mutations live in separate Zustand overlay slices, never in the `POSTS`/`USERS`/`COMMUNITIES` arrays.
 - All API input/output is Zod-validated — no exceptions, no `any`, no hand-written types at the boundary.
 - TDD for all logic changes — failing test first, then implementation, then verify green.
-- Documentation stays in sync with code — AGENTS.md, CLAUDE.md, README.md, Project-Architecture-Document.md are updated every round.
+- Documentation stays in sync with code — AGENTS.md, CLAUDE.md, README.md, docs/Project-Architecture-Document.md are updated every round. (Round 15 F4 deleted the root `Project-Architecture-Document.md` duplicate — `docs/` is canonical per the README Documentation Map, enforced by `npm run test:plan-alignment`.)
 
 **The anti-generic mandate:** This is not a tutorial project. Every architectural decision traces to a specific ADR (001–110). Do not add "popular" patterns (tRPC, pnpm, Turborepo, RS256, UUID PKs) — the project uses REST+Zod, npm-workspaces, HS256, and branded string IDs by explicit decision.
 
@@ -540,7 +540,7 @@ npm run test:e2e                # 18 local Playwright tests pass (9 smoke + 9 au
 - [ ] AGENTS.md test counts match actual test output
 - [ ] CLAUDE.md commands match `package.json` scripts
 - [ ] README.md file tree matches actual directory structure
-- [ ] Project-Architecture-Document.md "Last Updated" line reflects the latest round
+- [ ] docs/Project-Architecture-Document.md "Last Updated" line reflects the latest round (root duplicate deleted in Round 15 F4)
 - [ ] `docs/REMEDIATION_PLAN.md` checkboxes reflect actual completion status
 
 ---
@@ -593,9 +593,24 @@ npm run test:e2e                # 18 local Playwright tests pass (9 smoke + 9 au
 - **How to avoid:** Always use `--> statement-breakpoint` between statements in Drizzle migration SQL files. See the existing `0000_greedy_major_mapleleaf.sql` for the correct pattern.
 
 ### Lesson 10: Documentation is a living artifact
-- **What happened:** Across 13 rounds, the docs (AGENTS.md, CLAUDE.md, README.md, Project-Architecture-Document.md) were updated every single time code changed — test counts, file trees, commands, architecture notes.
+- **What happened:** Across 15 rounds, the docs (AGENTS.md, CLAUDE.md, README.md, docs/Project-Architecture-Document.md) were updated every single time code changed — test counts, file trees, commands, architecture notes.
 - **Why it mattered:** The `docs/ALIGNMENT_REVIEW.md` audit found only 6 minor doc-precision issues out of 24 verification areas. The docs are exceptionally well-aligned because they're treated as code.
 - **How to avoid:** After every code change, update the docs in the same commit. Test counts, file paths, commands, and architecture descriptions must match the code. Run `npm run test:plan-alignment` as a CI gate.
+
+### Lesson 11: Open-redirect guards on `state.from`
+- **What happened:** Round 15 F1 wired up `LoginPage` to redirect back to `location.state?.from` after login (deferred since Round 7). The `<RequireAuth>` preserves the original destination, but if a hostile link lands the user on `/login` with crafted `state.from = "https://evil.example.com"`, react-router would issue a full-page navigation. The fix: `validateFromPath()` rejects anything that doesn't start with `/`, plus rejects `//` (protocol-relative) and `/\` (some browsers normalize backslashes).
+- **Why it mattered:** Without the guard, an attacker could redirect users to phishing sites after they log in to a legitimate embers instance.
+- **How to avoid:** Always validate redirect destinations against an allowlist pattern (e.g., `^/[^/\\]`). Never `navigate(userSuppliedString)` directly. Test the guard explicitly.
+
+### Lesson 12: Normalize network errors before they reach the UI
+- **What happened:** Round 15 F2 caught a UX gap surfaced by the live E2E audit: when the backend is unreachable, `fetch` throws `TypeError("Failed to fetch")`. This raw browser error propagated up through `request → api.* → auth.* → LoginPage` and the user saw "Failed to fetch" in the `role=alert` div — meaningless to a non-engineer. The fix: wrap `fetchFn` in try/catch, throw `ApiError(0, "NETWORK_ERROR", "Could not reach the embers server. Please try again later.", undefined, cause)`. Preserve the original error via `Error.cause` (ES2022) for diagnostics.
+- **Why it mattered:** The error message is the only feedback the user gets when the backend is down. A friendly message tells them what happened and what to do next.
+- **How to avoid:** Any client-side `fetch` call should be wrapped in a normalizer that produces a domain-specific error type. Never let raw `TypeError` from `fetch` reach the UI layer.
+
+### Lesson 13: Strict gates vs informational audits
+- **What happened:** Round 8 added `e2e/live.spec.ts` and `e2e/live_extended.spec.ts` to document the LIVE-CRIT-2/3/4 deployment gaps. The tests intentionally did NOT fail — they `console.log`'d the gaps so CI stayed green. As of Round 15 (2026-08-19) the gaps were STILL present, and there was still no gate that failed. Round 15 F3 added `scripts/verify-prod-readiness.mjs` as a separate strict gate (exits 1 on failure) that operators opt into via `npm run test:prod-readiness`.
+- **Why it mattered:** Informational audits document gaps; strict gates enforce them. Mixing the two creates ambiguity — operators don't know whether a green CI means "all good" or "all known gaps are documented but still present".
+- **How to avoid:** Keep informational audits (console.log) and strict gates (exit 1) as separate scripts with separate npm commands. Operators opt into strict gates when they're ready to block releases on the gaps.
 
 ---
 
@@ -1140,6 +1155,8 @@ export interface Env {
 | 11 | 2026-08-12 | Audit-driven doc + schema reconciliation (9 findings) | 466 | F1–F9 (CSRF, indexes, registerResponseSchema, cookie path, ID strategy, Postgres FTS5, route count, checkboxes, Prettier) |
 | 12 | 2026-08-13 | Hygiene + schema-naming reconciliation (6 findings) | 466 | F1–F6 (DATABASE_URL doc, stale allowScripts, untrack skills/, schema rename, stray file deletion) |
 | 13 | 2026-08-13 | Self-scoped infrastructure + type-safety (3 deliverables) | 467 | F1 (backupDb), F2 (type drift detection), F3 (14 checkboxes ticked) |
+| 14 | 2026-08-18 | Knowledge distillation — distilled 13 rounds into reddit-clone_SKILL.md | 467 | No code changes; 21-section SKILL.md created |
+| 15 | 2026-08-19 | Live-audit-driven codebase + doc remediation (6 findings) | 473 vitest + 14 `node --test` | F1 (LoginPage `state.from`), F2 (NETWORK_ERROR), F3 (prod-readiness gate), F4 (PAD reconciliation), F5 (worklog backfill), F6 (Sentry annotation) |
 
 ### Audit Reports
 

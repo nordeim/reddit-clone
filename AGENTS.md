@@ -234,6 +234,62 @@
 > and a full round-history audit trail. Any future agent building a
 > similar full-stack TypeScript monorepo (React SPA + Fastify API +
 > Drizzle/SQLite + Zod + JWT auth) should read this skill first.
+>
+> Round 15 (2026-08-19) was a **live-audit-driven codebase + doc
+> remediation** round, scoped against (a) a fresh live E2E audit
+> against `https://reddit.jesspete.shop/` (27/28 pass; backend +
+> security headers still broken on the deployment side), and (b) a
+> Mode-C alignment audit of AGENTS/CLAUDE/README/SKILL vs the
+> codebase. Six findings — five codebase-side fixes executed with TDD
+> + one pure doc reconciliation. No finding breaks the existing
+> "deploy anywhere" story or the 467-test vitest baseline.
+> - **F1 (LoginPage redirect-back):** `apps/web/src/pages/LoginPage.tsx`
+>   always navigated to `/` after login, ignoring the `state.from`
+>   value preserved by `<RequireAuth>`. Fixed: reads
+>   `location.state?.from`, validates it is a relative path
+>   (open-redirect guard: rejects `//evil.com`, `https://...`,
+>   `/\evil`), and navigates there. +3 RED→GREEN tests in
+>   `LoginPage.test.tsx`.
+> - **F2 (NETWORK_ERROR normalization):** `apps/web/src/lib/api.ts`
+>   surfaced the raw browser `TypeError("Failed to fetch")` when the
+>   backend was unreachable — meaningless to a non-engineer. Fixed:
+>   wrapped the top-level fetch + retry-fetch in try/catch; throws
+>   `ApiError(0, "NETWORK_ERROR", "Could not reach the embers server.
+>   Please try again later.", undefined, cause)`. `ApiError` constructor
+>   extended with optional 5th `cause` arg (preserves the original
+>   error via `Error.cause` ES2022). +3 RED→GREEN tests in
+>   `api.test.ts`.
+> - **F3 (strict prod-readiness gate):** the existing `e2e/live.spec.ts`
+>   documented LIVE-CRIT-2/3/4 gaps via `console.log` without failing.
+>   Added `scripts/verify-prod-readiness.mjs` — a Node script that
+>   probes `/health`, `/api/posts`, `/api/communities`,
+>   `/api/auth/login` + checks all 5 required security headers; exits 1
+>   when ANY probe fails; 0 when all pass; 0 when `PROD_READINESS=skip`.
+>   Added `test:prod-readiness` + `test:prod-readiness:test` npm scripts.
+>   +14 unit tests via `node --test` covering pure helpers.
+> - **F4 (PAD reconciliation):** `Project-Architecture-Document.md`
+>   (root) and `docs/Project-Architecture-Document.md` diverged after
+>   Round 14 updated only the root copy. Synced docs/ with root, then
+>   deleted the root duplicate (canonical: docs/ per the README
+>   Documentation Map). Extended `scripts/verify-plan-alignment.mjs`
+>   with a guard that fails when the root duplicate is re-introduced.
+> - **F5 (worklog backfill):** `worklog.md` had only the Round 10
+>   entry. Appended concise entries for Rounds 11, 12, 13, 14 following
+>   the existing template.
+> - **F6 (Sentry annotation):** `docs/REMEDIATION_PLAN.md` Phase 5.4
+>   (Sentry) + 5.5 (source maps) were aspirational since the original
+>   plan. Annotated both as "Deferred indefinitely (operator decision)"
+>   to clarify the items are not currently planned but remain
+>   documented as the original enterprise-grade target.
+> - Test count: 467 → 473 vitest (+3 LoginPage + +3 api) + 14
+>   `node --test` for the new prod-readiness helpers. E2E + opt-in
+>   live-audit counts unchanged.
+> - The live deployment gaps (LIVE-CRIT-2/3/4) remain operator-side —
+>   Round 15 added a gate that surfaces them clearly (`npm run
+>   test:prod-readiness` fails with the expected 4/4 API probe
+>   failures + 5/5 missing security headers) but does not fix them.
+> - See `docs/REMEDIATION_PLAN_ROUND_15.md` for the full plan, TDD
+>   breakdown, and verification ledger.
 
 ---
 
@@ -257,9 +313,11 @@
 | No-secrets check | `npm run test:no-secrets` | R9.1: asserts no secret-bearing files (`.env`, `env.bak`, `*.env`) are tracked by git. |
 | Gitignore enforcement | `npm run test:gitignore` | R9.3: asserts no tracked file matches a `.gitignore` pattern (catches `git add -f` bypasses). |
 | CI config check | `npm run test:ci-config` | R9.2: asserts `.github/workflows/ci.yml` has a gitleaks secret-scanning job. |
-| Plan-alignment check | `npm run test:plan-alignment` | R10: asserts `docs/REMEDIATION_PLAN.md` does not contain forbidden tokens (RPC framework names, non-npm package managers, asymmetric JWT algorithm names, or UUID primary-key specs) that contradict the implemented stack. |
+| Plan-alignment check | `npm run test:plan-alignment` | R10 (extended R15): asserts `docs/REMEDIATION_PLAN.md` does not contain forbidden tokens (RPC framework names, non-npm package managers, asymmetric JWT algorithm names, or UUID primary-key specs) that contradict the implemented stack. R15 F4 also asserts the root `Project-Architecture-Document.md` duplicate is absent (canonical: `docs/`). |
 | Local prod-build audit | `npm run test:local-prod` | R10: runs `e2e/live_extended.spec.ts` (16 tests) against a locally-served production build (`PROD_BASE_URL=...`). Verifies Round 10 bug fixes work end-to-end. |
 | R10 regression guard | `npm run test:repro` | R10: runs `e2e/repro_r10_postpage.spec.ts` against a local prod build — asserts the PostPage React error #185 has not regressed. |
+| Prod-readiness gate | `npm run test:prod-readiness` | R15 F3: opt-in strict gate. Probes `/health`, `/api/posts`, `/api/communities`, `/api/auth/login` + checks 5 required security headers against `PROD_BASE_URL` (default: `https://reddit.jesspete.shop/`). Exits 1 when ANY probe fails; 0 when all pass; 0 when `PROD_READINESS=skip`. |
+| Prod-readiness unit tests | `npm run test:prod-readiness:test` | R15 F3: 14 unit tests via `node --test` covering pure helpers (`checkSecurityHeaders`, `checkApiReachable`, `formatSummary`, `parseSkipFlag`). |
 | Production server (bare) | `npm run server:prod` | Session 6: starts Fastify in production mode (`node dist/index.js`), default port 4000. |
 | Production server (explicit) | `npm run server:start-prod` | Session 6: starts Fastify on port 5000 in production mode with `NODE_ENV=production`. |
 | Production orchestrator | `./start_production.sh` | Session 6: builds + starts backend (5000) + frontend (5173) + health check + PID tracking. `./start_production.sh stop` to stop. |
@@ -371,7 +429,7 @@ The server follows a **composition root** pattern — `buildApp(opts)` in `src/a
 - **Helmet/rate-limit** can be skipped via `skipHelmet`/`skipRateLimit` options (rate-limit auto-disabled in `NODE_ENV=test`)
 - **Auth tests** use the seeded demo user; **vote concurrency tests** seed 100 users directly via Drizzle insert (bypassing Argon2id for speed)
 - Test files: 8 in `apps/server/src/` (5 in `routes/`, 2 in `auth/`, 1 `config.test.ts` in root), 2 in `packages/db/src/`, 3 in `packages/shared/src/`, 19 in `apps/web/src/` (including `lib/api.test.ts` from Round 5, `auth/AuthProvider.test.tsx` + `auth/RequireAuth.test.tsx` from Rounds 6-7, `pages/LoginPage.test.tsx` from Round 6, `pages/RegisterPage.test.tsx` + `components/layout/Navbar.test.tsx` from Round 7, `pages/PostPage.test.tsx` + `pages/NotFoundPage.test.tsx` from Round 10), 5 E2E specs (`e2e/smoke.spec.ts` + `e2e/auth.spec.ts` + `e2e/live.spec.ts` from Round 8 + `e2e/live_extended.spec.ts` + `e2e/repro_r10_postpage.spec.ts` from Round 10)
-- **Total vitest count: 467** = 95 (server) + 70 (shared) + 31 (db) + 271 (web). The previously documented total of 428 (Round 6) was superseded when Round 7 added 25 new web tests (11 RegisterPage + 8 Navbar + 5 RequireAuth + 1 api register-displayName) to reach 453; Round 10 added 9 new web tests (3 PostPage + 4 NotFoundPage + 1 Navbar min-w-0 + 1 RegisterPage mismatch + 1 RegisterPage regression - 1 replaced alert-on-mismatch test = net +9) to reach 462; Round 11 added 4 new tests (1 db performance-index + 3 shared `registerResponseSchema`) to reach 466; Round 13 added 1 new db test (`backupDb` online backup) to reach 467. Round 8 did not add vitest tests — it silenced 6 React `act()` warnings in `LoginPage` + `RegisterPage` tests. Round 12 was a pure rename + hygiene round (no test count change). **E2E: 18 local** (9 smoke + 9 auth lifecycle, added in Round 7) + **12 live-audit** (Round 8, opt-in via `LIVE_BASE_URL`) + **16 extended-live-audit** (Round 10, opt-in via `LIVE_BASE_URL` against the live site OR `PROD_BASE_URL` against a local prod build) + **2 R10 regression guard** (Round 10, opt-in via `PROD_BASE_URL`).
+- **Total vitest count: 473** = 95 (server) + 70 (shared) + 31 (db) + 277 (web). The previously documented total of 428 (Round 6) was superseded when Round 7 added 25 new web tests (11 RegisterPage + 8 Navbar + 5 RequireAuth + 1 api register-displayName) to reach 453; Round 10 added 9 new web tests (3 PostPage + 4 NotFoundPage + 1 Navbar min-w-0 + 1 RegisterPage mismatch + 1 RegisterPage regression - 1 replaced alert-on-mismatch test = net +9) to reach 462; Round 11 added 4 new tests (1 db performance-index + 3 shared `registerResponseSchema`) to reach 466; Round 13 added 1 new db test (`backupDb` online backup) to reach 467; Round 15 added 6 new web tests (3 LoginPage `state.from` + 3 api `NETWORK_ERROR`) to reach 473. Round 8 did not add vitest tests — it silenced 6 React `act()` warnings in `LoginPage` + `RegisterPage` tests. Round 12 was a pure rename + hygiene round (no test count change). Round 14 was knowledge distillation only (no test count change). **E2E: 18 local** (9 smoke + 9 auth lifecycle, added in Round 7) + **12 live-audit** (Round 8, opt-in via `LIVE_BASE_URL`) + **16 extended-live-audit** (Round 10, opt-in via `LIVE_BASE_URL` against the live site OR `PROD_BASE_URL` against a local prod build) + **2 R10 regression guard** (Round 10, opt-in via `PROD_BASE_URL`). **Plus 14 `node --test` unit tests** for `scripts/verify-prod-readiness.mjs` (Round 15 F3).
 
 ### Backend Pitfalls
 
@@ -624,13 +682,13 @@ with `NODE_ENV=test` env vars. Playwright reports are uploaded as artifacts.
 ```bash
 npm run lint        # ESLint flat config — 0 errors, 0 warnings
 npm run typecheck   # tsc --noEmit — must pass clean (pretypecheck hook builds shared+db first)
-npm test            # vitest run (all workspaces) — all 467 tests must pass (R10: was 453; R11: +4; R13: +1 db backup)
+npm test            # vitest run (all workspaces) — all 473 tests must pass (R10: 462; R11: +4; R13: +1; R15: +6)
 npm run test:e2e    # playwright run — 18 tests must pass (9 smoke + 9 auth lifecycle)
 npm run test:build  # asserts dist/index.html is a production build (no Vite dev modules)
 npm run test:no-secrets  # asserts no .env / env.bak / *.env files are tracked by git
 npm run test:gitignore   # asserts no tracked file matches a .gitignore pattern
 npm run test:ci-config   # asserts .github/workflows/ci.yml has a gitleaks job
-npm run test:plan-alignment  # R10: asserts REMEDIATION_PLAN.md has no forbidden tokens
+npm run test:plan-alignment  # R10: asserts REMEDIATION_PLAN.md has no forbidden tokens; R15 F4: also asserts the root PAD duplicate is absent
 npm run build       # topological build — must succeed
 git ls-files | grep -E '(^|/)dist/' | wc -l   # must be 0 (no dist/ tracked)
 ```
@@ -640,6 +698,8 @@ git ls-files | grep -E '(^|/)dist/' | wc -l   # must be 0 (no dist/ tracked)
 > - `LIVE_BASE_URL=https://reddit.jesspete.shop/ npm run test:e2e:live` — opt-in live-deployment audit (12 + 16 tests). Skipped when `LIVE_BASE_URL` is unset.
 > - `PROD_BASE_URL=http://localhost:8765/ npm run test:local-prod` — R10: runs the extended audit suite against a locally-served prod build.
 > - `PROD_BASE_URL=http://localhost:8765/ npm run test:repro` — R10: runs the React-error-#185 regression guard against a local prod build.
+> - `npm run test:prod-readiness` — R15 F3: opt-in strict gate. Probes `/health`, `/api/posts`, `/api/communities`, `/api/auth/login` + checks 5 required security headers against `PROD_BASE_URL` (default: `https://reddit.jesspete.shop/`). Exits 1 when ANY probe fails. Set `PROD_READINESS=skip` to skip in local dev / CI without a live deployment.
+> - `npm run test:prod-readiness:test` — R15 F3: 14 unit tests via `node --test` for the prod-readiness pure helpers.
 
 See `CLAUDE.md` §Pre-commit checklist for the canonical list.
 

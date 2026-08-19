@@ -9,7 +9,7 @@ monorepo.
 reddit-clone/
 ├── apps/
 │   ├── web/          ← @embers/web — the original client-only React SPA
-│   │                   (HashRouter, vite-plugin-singlefile, 271 tests;
+│   │                   (HashRouter, vite-plugin-singlefile, 277 tests;
 │   │                    includes `src/lib/api.ts` foundational fetch client
 │   │                    added in Round 5, `src/auth/AuthProvider.tsx` React
 │   │                    context + `useAuth()` hook + 401 refresh-and-retry
@@ -55,7 +55,7 @@ npm run dev        --workspace @embers/server   # http://localhost:4000
 - Client: `http://localhost:5173` — the embers feed (320 posts across 18 communities, generated deterministically in-browser)
 - Server: `curl http://localhost:4000/health` → `{"status":"ok",…}`
 - Demo login (server): `POST /api/auth/login` with `{"username":"you","password":"embers-demo"}` → access token + refresh cookie
-- All tests pass: `npm test` (467 vitest + 18 Playwright E2E; plus 30 opt-in live-audit E2E — see Test Status)
+- All tests pass: `npm test` (473 vitest + 18 Playwright E2E; plus 30 opt-in live-audit E2E + 14 prod-readiness unit tests — see Test Status)
 
 ### Quick Start (Docker)
 
@@ -259,7 +259,7 @@ enables HSTS hardening and requires all production secrets via `loadEnv()`.
 ```bash
 npm run lint        # ESLint — 0 errors, 0 warnings
 npm run typecheck   # tsc --noEmit — all 4 workspaces clean
-npm test            # 467 vitest tests (pretest auto-builds shared + db)
+npm test            # 473 vitest tests (pretest auto-builds shared + db)
 npm run build       # topological build — all workspaces succeed
 ```
 
@@ -272,22 +272,24 @@ host (ADR-003 single-file build is still in force for the client).
 
 | Workspace | Tests | Command |
 |-----------|-------|---------|
-| `@embers/web` | 271 | `npm test --workspace @embers/web` |
+| `@embers/web` | 277 | `npm test --workspace @embers/web` |
 | `@embers/shared` | 70 | `npm test --workspace @embers/shared` |
 | `@embers/db` | 31 | `npm test --workspace @embers/db` |
 | `@embers/server` | 95 | `npm test --workspace @embers/server` |
-| **Vitest total** | **467** | `npm test --workspaces --if-present` |
+| **Vitest total** | **473** | `npm test --workspaces --if-present` |
 | E2E — local API (Playwright) | 18 | `npm run test:e2e` |
 | E2E — live audit, Round 8 (opt-in) | 12 | `LIVE_BASE_URL=… npm run test:e2e:live` |
 | E2E — extended live, Round 10 (opt-in) | 16 | `npm run test:local-prod` |
 | E2E — repro regression, Round 10 (opt-in) | 2 | `npm run test:repro` |
+| Prod-readiness gate, Round 15 (opt-in) | 1 script | `npm run test:prod-readiness` |
+| Prod-readiness unit tests, Round 15 | 14 | `npm run test:prod-readiness:test` |
 | Production-build check | 1 script | `npm run test:build` |
 | Fresh-clone typecheck | 1 script | `npm run test:fresh-clone` |
 | Lint (ESLint) | 0 errors, 0 warnings | `npm run lint` |
 
-All 467 vitest tests + 18 Playwright E2E tests pass (`npm test` — do NOT
+All 473 vitest tests + 18 Playwright E2E tests pass (`npm test` — do NOT
 run `vitest run` from root; it won't discover workspace configs), ESLint is
-clean, and typecheck + build succeed as of Round 8 (2026-08-10).
+clean, and typecheck + build succeed as of Round 15 (2026-08-19).
 
 > **Run tests correctly:** always use `npm test` (which triggers `pretest`)
 to build `@embers/shared` + `@embers/db` first via `--workspaces`). Running
@@ -502,9 +504,68 @@ remediation.
   distillation process).
 - Test count unchanged: 467/467.
 
+#### Round 15 (2026-08-19) — live-audit-driven codebase + doc remediation
+
+- Triggered by a fresh live E2E audit against
+  `https://reddit.jesspete.shop/` (27/28 pass — the 1 skip requires
+  the backend) plus a Mode-C alignment audit of
+  AGENTS/CLAUDE/README/SKILL vs the codebase. Six findings — five
+  TDD code fixes + one pure doc reconciliation.
+- **F1 (LoginPage redirect-back, deferred since Round 7):**
+  `apps/web/src/pages/LoginPage.tsx` always navigated to `/` after
+  login, ignoring the `state.from` value preserved by `<RequireAuth>`.
+  Fixed: reads `location.state?.from`, validates it is a relative
+  path (open-redirect guard: rejects `//evil.com`, `https://...`,
+  `/\evil`), and navigates there. +3 RED→GREEN tests in
+  `LoginPage.test.tsx`.
+- **F2 (NETWORK_ERROR normalization):** `apps/web/src/lib/api.ts`
+  surfaced the raw browser `TypeError("Failed to fetch")` when the
+  backend was unreachable — meaningless to a non-engineer (confirmed
+  by the live audit). Fixed: wrapped the top-level fetch +
+  retry-fetch in try/catch; throws `ApiError(0, "NETWORK_ERROR",
+  "Could not reach the embers server. Please try again later.",
+  undefined, cause)`. `ApiError` constructor extended with optional
+  5th `cause` arg (preserves the original error via `Error.cause`
+  ES2022). +3 RED→GREEN tests in `api.test.ts`.
+- **F3 (strict prod-readiness gate):** the existing `e2e/live.spec.ts`
+  documented LIVE-CRIT-2/3/4 gaps via `console.log` without failing.
+  Added `scripts/verify-prod-readiness.mjs` — a Node script that
+  probes `/health`, `/api/posts`, `/api/communities`,
+  `/api/auth/login` + checks all 5 required security headers; exits
+  1 when ANY probe fails. Added `test:prod-readiness` +
+  `test:prod-readiness:test` npm scripts. +14 unit tests via
+  `node --test` covering pure helpers.
+- **F4 (PAD reconciliation):** `Project-Architecture-Document.md`
+  (root) and `docs/Project-Architecture-Document.md` diverged after
+  Round 14 updated only the root copy. Synced docs/ with root, then
+  deleted the root duplicate (canonical: docs/ per the README
+  Documentation Map). Extended `scripts/verify-plan-alignment.mjs`
+  with a guard that fails when the root duplicate is re-introduced.
+- **F5 (worklog backfill):** `worklog.md` had only the Round 10
+  entry. Appended concise entries for Rounds 11, 12, 13, 14.
+- **F6 (Sentry annotation):** `docs/REMEDIATION_PLAN.md` Phase 5.4
+  (Sentry) + 5.5 (source maps) were aspirational since the original
+  plan. Annotated both as "Deferred indefinitely (operator decision)".
+- Test count: 467 → 473 vitest (+3 LoginPage + +3 api). Plus 14
+  `node --test` for the new prod-readiness helpers. E2E + opt-in
+  live-audit counts unchanged.
+- The live deployment gaps (LIVE-CRIT-2/3/4) remain operator-side —
+  Round 15 added a gate that surfaces them clearly (`npm run
+  test:prod-readiness` fails with the expected 4/4 API probe
+  failures + 5/5 missing security headers) but does not fix them.
+- See `docs/REMEDIATION_PLAN_ROUND_15.md` for the full plan, TDD
+  breakdown, and verification ledger.
+
 ### How to verify the live deployment
 
 ```bash
+# Strict prod-readiness gate (Round 15 F3) — exits 1 when any of:
+# /health, /api/posts, /api/communities, /api/auth/login, or any of
+# the 5 required security headers are missing on the live deployment.
+npm run test:prod-readiness
+# Expected (2026-08-19): exit 1 — backend unreachable (404/501) +
+# all 5 security headers missing. See docs/REMEDIATION_PLAN_ROUND_8.md.
+
 # Opt-in live audit (12 tests, ~30s):
 LIVE_BASE_URL=https://reddit.jesspete.shop/ npm run test:e2e:live
 
@@ -512,7 +573,7 @@ LIVE_BASE_URL=https://reddit.jesspete.shop/ npm run test:e2e:live
 curl -sS -o /dev/null -w "%{http_code} %{content_type}\n" https://reddit.jesspete.shop/
 curl -sS -o /dev/null -w "%{http_code} %{content_type}\n" https://reddit.jesspete.shop/api/posts
 curl -sS -o /dev/null -w "%{http_code} %{content_type}\n" https://reddit.jesspete.shop/health
-# Current state (2026-08-10): 200 text/html (SPA), 404 text/html (API broken), 404 text/html (health broken)
+# Current state (2026-08-19): 200 text/html (SPA), 404 text/html (API broken), 404 text/html (health broken)
 # Expected after fix:  200 text/html, 200 application/json, 200 application/json
 ```
 
@@ -580,7 +641,7 @@ TDD breakdown + the rationale for deferring B17 (build refactor) again.
 | `README.md` (this file) | Monorepo overview + quick start + test status |
 | `AGENTS.md` | Deep codebase reference (data layer, state, routes, auth) |
 | `CLAUDE.md` | Daily implementation conventions (TS, build, testing) |
-| `docs/Project-Architecture-Document.md` | Master PAD — full architecture + ADRs |
+| `docs/Project-Architecture-Document.md` | Master PAD — full architecture + ADRs (canonical location per Round 15 F4; the root duplicate was deleted and `npm run test:plan-alignment` enforces its absence) |
 | `docs/REMEDIATION_EXECUTION_PLAN.md` | Active execution plan (B0–B16 done, B17–B22 deferred; B23+B24 done) |
 | `docs/REMEDIATION_PLAN.md` | Master remediation plan (10 ADRs, B0–B24 backlog) |
 | `docs/REMEDIATION_PLAN_ROUND_5.md` | Round 5 changelog + detailed B17–B22 TDD breakdown |
@@ -591,7 +652,7 @@ TDD breakdown + the rationale for deferring B17 (build refactor) again.
 | `docs/IMPLEMENTATION_PLAN.md` | Original greenfield plan that produced `apps/web` |
 | `docs/MANUAL_QA.md` | Manual QA matrix for the client SPA |
 
-> **Additional docs:** `REMEDIATION_PLAN_ROUND_9.md`–`REMEDIATION_PLAN_ROUND_13.md`, `SECRET_ROTATION_GUIDE.md`, `audit_report_1.md`–`audit_report_4.md`, and `session_1.md`–`session_13.md` also live in `docs/` (Round changelogs, the security-incident guide, audit reports, and session worklogs).
+> **Additional docs:** `REMEDIATION_PLAN_ROUND_9.md`–`REMEDIATION_PLAN_ROUND_15.md`, `SECRET_ROTATION_GUIDE.md`, `audit_report_1.md`–`audit_report_4.md`, and `session_1.md`–`session_13.md` also live in `docs/` (Round changelogs, the security-incident guide, audit reports, and session worklogs).
 
 ## License
 
