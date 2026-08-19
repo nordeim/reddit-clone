@@ -90,8 +90,8 @@ Before implementing new features, we must explicitly update or alter several ADR
 *   [x] **5.1** Write backend integration tests for all Fastify routes using the `inject` method against an in-memory/test SQLite DB. ✅ Done (95 tests across 8 server test files).
 *   [x] **5.2** Install and configure Playwright for End-to-End (E2E) testing. ✅ Done (B24 — `playwright.config.ts` + 4 config variants for local/live/repro/local-prod.)
 *   [x] **5.3** Write E2E tests for critical flows: User registration, login, create post, upvote, comment, and logout. ✅ Done (B24 — `e2e/smoke.spec.ts` (9) + `e2e/auth.spec.ts` (9) = 18 local E2E; 16 live-audit + 2 repro guards are opt-in.)
-*   [ ] **5.4** Integrate Sentry for client-side and server-side error tracking and performance monitoring.
-*   [ ] **5.5** Configure Vite build to generate source maps and upload them to Sentry for error deobfuscation.
+*   [ ] **5.4** Integrate Sentry for client-side and server-side error tracking and performance monitoring. — **Deferred indefinitely (operator decision; Pino + requestId correlation is sufficient for current scale. Round 15 F6 annotation.)**
+*   [ ] **5.5** Configure Vite build to generate source maps and upload them to Sentry for error deobfuscation. — **Deferred indefinitely (depends on 5.4).**
 *   [x] **5.6** Add an automated database backup strategy (e.g., Litestream for continuous SQLite replication to S3, or cron-based snapshots). ✅ Done (Round 13, F1 — `backupDb()` in `packages/db/src/client.ts` + `packages/db/scripts/backup.ts` CLI + `npm run db:backup` script. Uses SQLite's online backup API — safe to run while the server is writing. Litestream for continuous replication to S3 remains a future enhancement.)
 *   [x] **5.7** Configure Dockerization (`Dockerfile` for multi-stage build of frontend and backend) and a `docker-compose.yml` for local development. ✅ Done (B23 — multi-stage `Dockerfile` (Node 20 bookworm-slim, healthcheck) + `docker-compose.yml` with persistent SQLite volume + secret env vars.)
 *   [ ] **5.8** Perform a final security audit (OWASP Top 10) and accessibility audit (WCAG 2.2 AA).
