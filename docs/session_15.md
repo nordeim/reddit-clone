@@ -110,4 +110,104 @@ Round 15 is complete and pushed to `main` on GitHub. Here's a summary of what wa
 
 ---
 
+Analysis: What Round 15 changed (code impact)
+
+The changeset is large by line count but only 5 code paths + 2 new scripts carry runtime/test risk. The rest is documentation (AGENTS/CLAUDE/README/SKILL/PAD/worklog/REMEDIATION_PLAN).
+
+┌────────────────────────────────────────────────────────────────────────────┬──────────┬──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ Change                                                                     │ Risk     │ Concern                                                                                                              │
+│                                                                            │ surface  │                                                                                                                      │
+├────────────────────────────────────────────────────────────────────────────┼──────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ apps/web/src/lib/api.ts — ApiError gains optional 5th cause arg +          │ Medium   │ The wrapper changes fetch rejection semantics for ALL 32 api tests. Must confirm existing 401-refresh tests still    │
+│ NETWORK_ERROR_* exports; both request and refresh-retry fetchFn calls      │          │ pass and the cause assignment typechecks under lib: ES2020. Two new exports (NETWORK_ERROR_STATUS/_CODE) are         │
+│ wrapped in try/catch                                                       │          │ currently unused — check they don't trip noUnusedLocals/ESLint.                                                      │
+├────────────────────────────────────────────────────────────────────────────┼──────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ apps/web/src/pages/LoginPage.tsx — useLocation + validateFromPath          │ Medium   │ navigate now passes replace: true and validates state.from. Must confirm existing "redirect to /" tests still pass   │
+│ open-redirect guard + navigate(safeFrom ?? "/", { replace: true })         │          │ and the guard rejects //evil, /\evil, absolute URLs.                                                                 │
+├────────────────────────────────────────────────────────────────────────────┼──────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ apps/web/src/lib/api.test.ts (+3 tests), LoginPage.test.tsx (+3 tests)     │ Low      │ New tests must pass; also must not break the 32 existing api + existing LoginPage tests.                             │
+├────────────────────────────────────────────────────────────────────────────┼──────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ scripts/verify-prod-readiness.mjs (new) + .test.mjs (14 node tests)        │ Medium   │ New logic — pure helpers must be correct; main() must be guarded so import-by-test doesn't make network calls.       │
+├────────────────────────────────────────────────────────────────────────────┼──────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ scripts/verify-plan-alignment.mjs (+root-PAD-duplicate check)              │ Low      │ Must still exit 0 now that root PAD is deleted.                                                                      │
+├────────────────────────────────────────────────────────────────────────────┼──────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ package.json (+2 test:prod-readiness* scripts)                             │ None     │ No risk.                                                                                                             │
+└────────────────────────────────────────────────────────────────────────────┴──────────┴──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+
+Key design note to verify: npm run test:prod-readiness is a strict gate that will exit 1 against the live site by design (LIVE-CRIT-2/3/4 gaps). So I must validate the pure helper unit tests, not the live
+probe. The live probe is correctly opt-in and skippable.
+
+Validation plan
+
+1. Typecheck all workspaces — catches api.ts cause/ES2020 typing + unused-export issues.
+2. Run web vitest suite (@embers/web) — confirms no regression in api.ts (32 tests) + LoginPage (existing + 3 new) and total count.
+3. Run the 14 node unit tests for verify-prod-readiness.mjs.
+4. Run verify-plan-alignment.mjs — expect exit 0 (root PAD deleted).
+5. Lint — catch unused exports / issues.
+6. Confirm root PAD absent + working tree clean.
+
+Let me execute the fast checks first, then the web suite.
+
+---
+
+Round 15 Changes — Validation & Regression Report
+
+Executive Summary
+
+The git pull delivered Round 15 changes. Of 19 changed files, only 5 carry runtime/test risk: api.ts (network-error normalization), LoginPage.tsx (open-redirect-guarded redirect-back), their 2 test files, and
+2 new scripts (verify-prod-readiness.mjs + 14 node tests). Everything else is documentation. No regressions were found. All baseline gates are green and the test count matches the documented baseline exactly.
+
+Validation Plan Executed
+
+┌───┬─────────────────────────────────────────┬────────────────────────────────────────────────────────────┬───────────────────────────────────────────────────────────────────────────────┐
+│ # │ Gate                                    │ Command                                                    │ Result                                                                        │
+├───┼─────────────────────────────────────────┼────────────────────────────────────────────────────────────┼───────────────────────────────────────────────────────────────────────────────┤
+│ 1 │ Working tree / root-PAD sanity          │ git status, ls root PAD                                    │ ✅ Clean (only your latest_changes.txt untracked); root PAD correctly deleted │
+├───┼─────────────────────────────────────────┼────────────────────────────────────────────────────────────┼───────────────────────────────────────────────────────────────────────────────┤
+│ 2 │ Plan-alignment CI gate                  │ node scripts/verify-plan-alignment.mjs                     │ ✅ Exit 0 (forbidden tokens + root-PAD-duplicate checks pass)                 │
+├───┼─────────────────────────────────────────┼────────────────────────────────────────────────────────────┼───────────────────────────────────────────────────────────────────────────────┤
+│ 3 │ Prod-readiness helper unit tests        │ node --test scripts/verify-prod-readiness.test.mjs         │ ✅ 14/14 pass                                                                 │
+├───┼─────────────────────────────────────────┼────────────────────────────────────────────────────────────┼───────────────────────────────────────────────────────────────────────────────┤
+│ 4 │ Typecheck (all 4 workspaces)            │ npm run typecheck                                          │ ✅ Exit 0 (ES2020 cause cast + unused exports OK)                             │
+├───┼─────────────────────────────────────────┼────────────────────────────────────────────────────────────┼───────────────────────────────────────────────────────────────────────────────┤
+│ 5 │ Lint (ESLint flat config)               │ npm run lint                                               │ ✅ Exit 0                                                                     │
+├───┼─────────────────────────────────────────┼────────────────────────────────────────────────────────────┼───────────────────────────────────────────────────────────────────────────────┤
+│ 6 │ Web vitest suite                        │ npm test --workspace @embers/web                           │ ✅ 277/277 pass (api 35, LoginPage 13)                                        │
+├───┼─────────────────────────────────────────┼────────────────────────────────────────────────────────────┼───────────────────────────────────────────────────────────────────────────────┤
+│ 7 │ Full multi-workspace suite              │ npm test                                                   │ ✅ 473/473 pass (95+277+31+70)                                                │
+├───┼─────────────────────────────────────────┼────────────────────────────────────────────────────────────┼───────────────────────────────────────────────────────────────────────────────┤
+│ 8 │ Prod-readiness script entry (skip path) │ PROD_READINESS=skip node scripts/verify-prod-readiness.mjs │ ✅ Exit 0, [SKIPPED] printed                                                  │
+└───┴─────────────────────────────────────────┴────────────────────────────────────────────────────────────┴───────────────────────────────────────────────────────────────────────────────┘
+
+Impact & Regression Assessment
+
+api.ts fetch-wrapper (R15-F2) — regressed? NO.
+- The new try/catch wraps both the primary fetchFn and the refresh-retry fetchFn. The 32 pre-existing api tests (including the 401 refresh-and-retry slice) still pass; 3 new tests confirm TypeError/Error
+  rejections are normalized to ApiError(0, "NETWORK_ERROR", …) and the original error is preserved on error.cause.
+- Subtle-but-correct behavior: a network failure during the refresh call is now caught and still propagates the original 401 (refresh error swallowed by design) — unchanged from prior behavior.
+- Typecheck confirms the (this as Error & { cause?: unknown }).cause assignment compiles under lib: ES2020 and is runtime-safe (Node 16.9+/modern browsers).
+
+LoginPage.tsx redirect-back (R15-F1) — regressed? NO.
+- navigate(safeFrom ?? "/", { replace: true }) — existing "redirect to /" behavior preserved (3 new tests cover happy-path state.from, missing-state fallback, and absolute-URL rejection). validateFromPath
+  correctly rejects //evil, /\evil, and https://… while allowing relative paths. No open-redirect vector introduced.
+
+New scripts — regressed? NO.
+- verify-prod-readiness.mjs is correctly import-guarded (isMain) so the 14 unit tests cover pure helpers without network. The live probe (npm run test:prod-readiness) is intentionally not run here — by design
+  it exits 1 against the live site (LIVE-CRIT-2/3/4 gaps) and is opt-in/skippable.
+
+Minor Observation (non-blocking)
+
+api.ts exports NETWORK_ERROR_STATUS (0) and NETWORK_ERROR_CODE ("NETWORK_ERROR") that are not currently consumed anywhere — only NETWORK_ERROR_MESSAGE is used. They're harmless public sentinels (won't fail
+typecheck/lint since they're exported), but if you want zero dead surface you could inline them or drop them. Not a regression; flagging for awareness only.
+
+Conclusion
+
+The Round 15 changeset is safe to keep. All 473 vitest tests + 14 node helper tests pass, typecheck and lint are clean, the plan-alignment guard passes, and no behavioral regression was introduced in the
+fetch wrapper or login navigation. The one intentional "failing" gate (test:prod-readiness against the live deployment) is by design and is fully covered by unit tests instead.
+
+Recommended next step: nothing required — the changes validate clean. If you want the deployment-side LIVE-CRIT gaps closed (backend reachable + 5 security headers), that's the operator-side fix documented in
+REMEDIATION_PLAN_ROUND_8/9.md, outside this changeset.
+
+---
+
 https://chat.z.ai/s/609f62b0-6052-476d-afe7-d4156ea614c9 
