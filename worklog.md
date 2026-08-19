@@ -117,3 +117,50 @@ Stage Summary:
 - No code changes. No test changes. Test count: 467/467 unchanged.
 - New file: reddit-clone_SKILL.md (1171 lines, 60 KB).
 - Any future agent building a similar full-stack TypeScript monorepo (React SPA + Fastify API + Drizzle/SQLite + Zod + JWT auth) should read this skill first.
+
+---
+Task ID: 15-live-audit-remediation
+Agent: Super Z (multi-phase TDD execution)
+Task: Round 15 — live-audit-driven codebase + doc remediation. Clone repo, review AGENTS/CLAUDE/README/PAD/SKILL, validate against codebase, run browser E2E against https://reddit.jesspete.shop/, refine REMEDIATION_PLAN.md into Round 15 plan, execute via TDD, update docs, commit + push.
+
+Work Log:
+- Cloned https://github.com/nordeim/reddit-clone.git to /home/z/my-project/workspace/reddit-clone.
+- Read AGENTS.md (675 lines), CLAUDE.md (762 lines), README.md (781 lines), docs/Project-Architecture-Document.md (1002 lines), reddit-clone_SKILL.md (1171 lines), docs/REMEDIATION_PLAN.md (300 lines), docs/ALIGNMENT_REVIEW.md (144 lines), worklog.md (42 lines — only Round 10 entry), skills/skills-catalog.md (323 lines), skills/how-to-git-push-using-ssh-wrapper/SKILL.md.
+- Validated codebase: 467 vitest pass (web 271 + db 31 + shared 70 + server 95); lint clean; typecheck clean; plan-alignment passes; no-secrets + gitignore gates pass.
+- Ran browser-based E2E against https://reddit.jesspete.shop/: 27/28 pass (1 skip — comment composer test needs the backend). Confirmed LIVE-CRIT-2/3/4 are still present (backend unreachable, security headers absent). Captured audit observations for the plan.
+- Surveyed skills-catalog.md for planning-relevant skills: tdd-workflow, planning-and-task-breakdown, code-review-and-audit, writing-plans, e2e-testing-lessons, documentation-and-adrs, git-workflow-and-versioning, how-to-git-push-using-ssh-wrapper.
+- Authored docs/REMEDIATION_PLAN_ROUND_15.md (comprehensive plan with 6 findings F1-F6 + 9 bite-sized TDD tasks T1-T9 + risk assessment + Definition of Done + Out of Scope).
+- Re-validated the plan against the codebase: confirmed every finding's root cause + evidence + fix path.
+- Executed T1 (LoginPage state.from redirect-back): RED → 3 new tests fail; GREEN → implement validateFromPath() with open-redirect guard; tests pass. Commit e80bdf9.
+- Executed T2 (lib/api.ts NETWORK_ERROR normalization): RED → 3 new tests fail; GREEN → wrap top-level fetch + retry-fetch in try/catch; ApiError constructor extended with optional cause arg (ES2022 Error.cause via index assignment to avoid ES2020 lib issue). Tests pass. Commit 5c50989.
+- Executed T3 (strict prod-readiness gate): RED → 14 unit tests fail (module not found); GREEN → implement scripts/verify-prod-readiness.mjs with pure helpers (REQUIRED_SECURITY_HEADERS, checkSecurityHeaders, checkApiReachable, formatSummary, parseSkipFlag) + main() entry. Added test:prod-readiness + test:prod-readiness:test npm scripts. Verified skip mode (PROD_READINESS=skip → exit 0) and live mode (against the broken deployment → exit 1 with expected failures). Commit 82cab1c.
+- Executed T4 (PAD reconciliation): synced docs/Project-Architecture-Document.md with root copy (Round 14 content), git rm'd the root duplicate, extended scripts/verify-plan-alignment.mjs with a guard that fails when the root duplicate is re-introduced. Verified the guard works (touching the root file → exit 1). Commit 0b1484a.
+- Executed T5 (worklog backfill): appended Round 11, 12, 13, 14 entries to worklog.md following the existing template. Commit b15d02c.
+- Executed T6 (Sentry annotation): annotated REMEDIATION_PLAN.md Phase 5.4 + 5.5 as "Deferred indefinitely (operator decision)". Verified plan-alignment gate still passes. Commit 538ad2a.
+- Executed T7 (doc banners): updated AGENTS.md, CLAUDE.md, README.md, reddit-clone_SKILL.md with Round 15 banners, test-count updates (467 → 473), pre-commit checklist updates (added test:prod-readiness + test:prod-readiness:test to opt-in checks), README Test Status table updates (added 2 new rows + web 271→277), SKILL.md frontmatter updates (version 1.0.0 → 1.1.0; 13 → 15 rounds), fixed 3 root-PAD references in SKILL.md to point at docs/, added 3 new Lessons (11: open-redirect guards; 12: network error normalization; 13: strict gates vs informational audits), added Round 14 + 15 rows to the round-history audit trail. Commit c95ba83.
+
+Stage Summary:
+- 7 commits total (T1-T7). T8 = this worklog entry. T9 = push.
+- TDD code changes: +6 vitest (3 LoginPage + 3 api), +14 node:test (prod-readiness helpers). Test count: 467 → 473 vitest + 14 node:test.
+- Code files changed:
+  * apps/web/src/pages/LoginPage.tsx (+validateFromPath, +state.from redirect-back, +open-redirect guard).
+  * apps/web/src/pages/LoginPage.test.tsx (+3 tests, widened initialEntries type to accept state objects, +/notifications route).
+  * apps/web/src/lib/api.ts (+NETWORK_ERROR_MESSAGE/STATUS/CODE constants, +ApiError cause arg, +try/catch wrapper around top-level fetch + retry-fetch).
+  * apps/web/src/lib/api.test.ts (+3 tests for NETWORK_ERROR normalization).
+  * scripts/verify-prod-readiness.mjs (new file, 268 lines).
+  * scripts/verify-prod-readiness.test.mjs (new file, 14 tests).
+  * scripts/verify-plan-alignment.mjs (+root-PAD-duplicate check).
+  * package.json (+test:prod-readiness + test:prod-readiness:test scripts).
+- Doc files changed:
+  * docs/REMEDIATION_PLAN_ROUND_15.md (new file, comprehensive plan).
+  * docs/REMEDIATION_PLAN.md (Sentry phases 5.4/5.5 annotated as deferred).
+  * docs/Project-Architecture-Document.md (synced with Round 14 content from root).
+  * Project-Architecture-Document.md (root duplicate deleted).
+  * worklog.md (Rounds 11-14 backfilled + this Round 15 entry).
+  * AGENTS.md (Round 15 banner + test counts + opt-in checks + commands table).
+  * CLAUDE.md (Round 15 banner + test counts + opt-in checks).
+  * README.md (Round 15 subsection + Test Status table + Quick Start + Quality Gates + repo layout + verify-the-live-deployment + Documentation Map).
+  * reddit-clone_SKILL.md (version 1.1.0 + Round 15 banner + 3 new Lessons + Round 14/15 audit-trail rows + root-PAD refs fixed).
+- Gates verified green: lint (0 errors/0 warnings), typecheck (all 4 workspaces clean), test (473 vitest), test:plan-alignment (no forbidden tokens + no root PAD), test:no-secrets (clean), test:gitignore (clean), test:prod-readiness:test (14 node:test pass).
+- Live E2E still passes 27/28 (1 skip — needs backend). No regression.
+- Live deployment gaps (LIVE-CRIT-2/3/4) remain operator-side. The new test:prod-readiness gate now surfaces them clearly: exits 1 with a summary table showing 0/4 API probes OK + 5/5 missing security headers.
