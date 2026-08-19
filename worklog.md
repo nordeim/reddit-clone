@@ -40,3 +40,80 @@ Stage Summary:
 - worklog.md created at /home/z/my-project/reddit-clone/worklog.md with this entry.
 - No issues encountered beyond one minor typo (non-ASCII token) that was fixed in a follow-up Edit before completion.
 - No code or test files touched; REMEDIATION_PLAN.md was deliberately left untouched per the constraint.
+
+---
+Task ID: 11-doc-schema-recon
+Agent: general-purpose (audit-driven remediation)
+Task: Round 11 — audit-driven doc + schema reconciliation (CSRF claim removal, performance indexes migration, registerResponseSchema, refresh-cookie Path correction, ID-strategy reconciliation, FTS5 Postgres escape-hatch step, session_10 route-count math, 5-Phase checkbox ticks, Prettier rationale).
+
+Work Log:
+- Triggered by validating docs/audit_report_1.md, docs/audit_report_2.md, and a fresh Mode-C audit (docs/session_11.md) against the codebase. 9 findings (1 High, 2 Medium, 3 Low, 3 Informational), all fixed.
+- (F1) Removed fabricated CSRF "double-submit cookie" claim from REMEDIATION_PLAN.md §5.2 — actual posture is Bearer tokens + SameSite=Strict cookie.
+- (F2) Added migration 0001_add_performance_indexes.sql + Drizzle index() builders in packages/db/src/schema/index.ts for posts(community_id, created_at DESC), comments(post_id), notifications(user_id, read). +1 RED→GREEN test in packages/db/src/client.test.ts.
+- (F3) Added the missing registerResponseSchema to packages/shared/src/api/index.ts + 3 RED→GREEN tests in packages/shared/src/api.test.ts.
+- (F4) Corrected refresh-cookie Path=/api/auth/refresh → Path=/api/auth.
+- (F5) Reconciled three divergent ID-strategy descriptions across plan/schema-comment/runtime.
+- (F6) Added FTS5 → tsvector rewrite step to the Postgres escape hatch (4th step).
+- (F7) Fixed session_10.md route-count math (auth × 5 → auth × 4).
+- (F8) Ticked 11 5-Phase checkboxes that were already Done per the B0–B24 backlog.
+- (F9) Clarified Phase 1.4 — Prettier intentionally omitted (ESLint 9 flat config + --fix is the formatter).
+- Updated AGENTS.md, CLAUDE.md, README.md, docs/Project-Architecture-Document.md with Round 11 banners + test-count updates.
+
+Stage Summary:
+- TDD code changes: 4 new tests (1 db + 3 shared). Test count: 462 → 466 (db 29→30, shared 67→70).
+- Doc changes: REMEDIATION_PLAN.md §5.1/§5.2/§4.4 reconciled; session_10.md corrected; 11 5-Phase checkboxes ticked.
+- See docs/REMEDIATION_PLAN_ROUND_11.md for the full plan, TDD breakdown, and verification ledger.
+
+---
+Task ID: 12-hygiene-schema-naming
+Agent: general-purpose (audit-driven remediation)
+Task: Round 12 — hygiene + schema-naming reconciliation (DATABASE_URL doc precision, stale allowScripts entry, skills/ untracking, *OutputSchema → *ResponseSchema rename, stray root session_11.md deletion).
+
+Work Log:
+- Triggered by validating docs/session_12.md (Mode-C alignment audit of AGENTS/CLAUDE/README vs the codebase), docs/audit_report_3.md, docs/audit_report_4.md. All three audits confirmed exceptional doc-code alignment; only 6 minor findings.
+- (F1) Tightened DATABASE_URL doc-precision in README — code default is ./dev.db (resolved to repo-root), .env.example overrides to packages/db/dev.db.
+- (F2) Stray apps/server/dev.db — already clean, no action.
+- (F3) Removed stale better-sqlite3@11.10.0 from package.json allowScripts (actual dep is 13.0.3).
+- (F4) git rm -r --cached skills/ — untracked 13,926 skill files that were committed despite the .gitignore rule (files stay on disk for local use; future clones won't include them).
+- (F5) Standardized @embers/shared response-schema naming — renamed loginOutputSchema → loginResponseSchema, refreshTokenOutputSchema → refreshTokenResponseSchema, castVoteOutputSchema → castVoteResponseSchema (and their *Output types → *Response). paginateOutputSchema() retains its name (factory function).
+- (F6) Deleted stray root-level session_11.md (76-line transcript dump; authoritative version is docs/session_11.md).
+- RED→GREEN TDD: updated api.test.ts imports first (RED), then renamed in api/index.ts (GREEN). Zero downstream breakage — the renamed types were only used inside @embers/shared.
+- Updated AGENTS.md, CLAUDE.md, README.md, docs/Project-Architecture-Document.md with Round 12 banners + schema-naming convention note.
+
+Stage Summary:
+- Test count unchanged: 466/466 (pure rename + hygiene round).
+- See docs/REMEDIATION_PLAN_ROUND_12.md for the full plan, TDD breakdown, and verification ledger.
+
+---
+Task ID: 13-infra-type-safety
+Agent: general-purpose (self-scoped remediation)
+Task: Round 13 — self-scoped infrastructure + type-safety (database backup, type drift detection, doc cleanup of remaining checkboxes).
+
+Work Log:
+- Self-scoped (no new audit reports). Surveyed remaining non-breaking gaps in REMEDIATION_PLAN.md.
+- (F1) Database backup — added backupDb() to packages/db/src/client.ts using better-sqlite3's online backup API (safe to run while the server writes). Added packages/db/scripts/backup.ts CLI (timestamped backup files, BACKUP_DIR env var). Added npm run db:backup root script. +1 RED→GREEN test in packages/db/src/client.test.ts (backs up a seeded DB, verifies same tables + data in the backup).
+- (F2) Type drift detection — added @embers/shared as a devDependency of @embers/web + compile-time AssertExact type assertions in apps/web/src/lib/api.ts that enforce AuthUser, LoginResponse, RegisterResponse interfaces stay structurally identical to the shared Zod schemas. If a field is added/removed on either side, npm run typecheck fails. Type-only imports are erased at compile time — zero runtime/bundle impact.
+- (F3) Doc cleanup — ticked 14 remaining [ ] checkboxes in REMEDIATION_PLAN.md that had ✅ Done notes (Phase 1.1-1.5, 3.1-3.8, 5.1, 5.6).
+- Updated AGENTS.md, CLAUDE.md, README.md, docs/Project-Architecture-Document.md with Round 13 banners + backup script + type-drift detection in the architecture doc.
+
+Stage Summary:
+- TDD code changes: 1 new db test (backupDb). Test count: 466 → 467 (db 30→31).
+- Doc changes: REMEDIATION_PLAN.md 14 checkboxes ticked.
+- See docs/REMEDIATION_PLAN_ROUND_13.md for the full plan, TDD breakdown, and verification ledger.
+
+---
+Task ID: 14-knowledge-distillation
+Agent: general-purpose (distillation)
+Task: Round 14 — knowledge distillation. No code changes — distilled all patterns, anti-patterns, lessons, and pitfalls from 13 rounds of remediation into reddit-clone_SKILL.md at the repo root.
+
+Work Log:
+- Audited the entire codebase + all 13 prior rounds of remediation plans.
+- Authored reddit-clone_SKILL.md (21 sections, ~1171 lines) at the repo root capturing: project identity, tech stack, bootstrapping, design system, component architecture, hooks, data layer, accessibility, 14 anti-patterns, 8 debugging scenarios, 11-step pre-ship checklist, 10 lessons, 14 pitfalls, 14 best practices, 8 coding patterns, 7 coding anti-patterns, monorepo/build config, DB schema, security architecture, TS interfaces, and a full round-history audit trail.
+- Skills used: distill-codebase-skill (reference template) + to-distill-project-into-skill (meta-skill guiding the 6-phase distillation process).
+- Updated AGENTS.md, CLAUDE.md, README.md banners with Round 14 + a reference to the new SKILL.md.
+- Updated root Project-Architecture-Document.md "Last Updated" line to Round 14. (Note: the docs/Project-Architecture-Document.md copy was NOT updated in Round 14 — this divergence was caught and fixed in Round 15 F4.)
+
+Stage Summary:
+- No code changes. No test changes. Test count: 467/467 unchanged.
+- New file: reddit-clone_SKILL.md (1171 lines, 60 KB).
+- Any future agent building a similar full-stack TypeScript monorepo (React SPA + Fastify API + Drizzle/SQLite + Zod + JWT auth) should read this skill first.
