@@ -1,35 +1,47 @@
 #!/usr/bin/env node
 /**
- * verify-plan-alignment.mjs — Round 10 plan-alignment CI gate.
+ * verify-plan-alignment.mjs — Round 10 plan-alignment CI gate
+ * (extended Round 15 F4 to also check for the duplicate PAD).
  *
- * Asserts that `docs/REMEDIATION_PLAN.md` does NOT contain forbidden
- * tokens that contradict the implemented codebase. The audit reports
- * (audit_report_1.md §2.1, audit_report_2.md F1-F4) flagged these
- * drift points:
+ * Two checks:
  *
- *   - "tRPC"             — plan says tRPC, codebase uses REST + Zod (ADR-101)
- *   - "pnpm"             — plan says pnpm, codebase uses npm-workspaces (ADR-107)
- *   - "Turborepo"        — plan says Turborepo, codebase has no Turborepo
- *   - "RS256"            — plan says RS256, codebase uses HS256 via `jose`
- *   - "Asymmetric JWT"   — same as RS256
- *   - "id (UUID)"        — plan says UUID, codebase uses branded string IDs
+ * 1. Forbidden-token check (Round 10). Asserts that
+ *    `docs/REMEDIATION_PLAN.md` does NOT contain forbidden tokens that
+ *    contradict the implemented codebase. The audit reports
+ *    (audit_report_1.md §2.1, audit_report_2.md F1-F4) flagged these
+ *    drift points:
  *
- * Allowed contexts (NOT flagged):
- *   - "Postgres escape hatch" — the plan legitimately mentions UUIDs as
- *     a Postgres migration note. The allowed context is the literal
- *     phrase "Postgres escape hatch" or "PostgreSQL" near the UUID
- *     reference.
+ *      - "tRPC"             — plan says tRPC, codebase uses REST + Zod (ADR-101)
+ *      - "pnpm"             — plan says pnpm, codebase uses npm-workspaces (ADR-107)
+ *      - "Turborepo"        — plan says Turborepo, codebase has no Turborepo
+ *      - "RS256"            — plan says RS256, codebase uses HS256 via `jose`
+ *      - "Asymmetric JWT"   — same as RS256
+ *      - "id (UUID)"        — plan says UUID, codebase uses branded string IDs
  *
- * Exits 1 with a clear error if any forbidden token is found, 0 if the
- * plan is clean.
+ *    Allowed contexts (NOT flagged):
+ *      - "Postgres escape hatch" — the plan legitimately mentions UUIDs as
+ *        a Postgres migration note. The allowed context is the literal
+ *        phrase "Postgres escape hatch" or "PostgreSQL" near the UUID
+ *        reference.
+ *
+ * 2. Root-PAD-duplicate check (Round 15 F4). Asserts that the root
+ *    `Project-Architecture-Document.md` does NOT exist — the canonical
+ *    copy lives at `docs/Project-Architecture-Document.md` per the
+ *    README Documentation Map. Round 14 updated the root copy but
+ *    forgot the docs/ copy, causing them to diverge. Round 15 deleted
+ *    the root duplicate and added this guard to prevent re-introduction.
+ *
+ * Exits 1 with a clear error if any check fails, 0 if all pass.
  */
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const planPath = join(__dirname, "..", "docs", "REMEDIATION_PLAN.md");
+const REPO_ROOT = join(__dirname, "..");
+const planPath = join(REPO_ROOT, "docs", "REMEDIATION_PLAN.md");
+const rootPadPath = join(REPO_ROOT, "Project-Architecture-Document.md");
 
 const FORBIDDEN_TOKENS = [
   // Audit F1: tRPC vs REST+Zod
@@ -127,4 +139,33 @@ try {
     process.exit(1);
   }
   throw err;
+}
+
+// ---------------------------------------------------------------------------
+// Round 15 F4 — root PAD-duplicate check.
+// ---------------------------------------------------------------------------
+// Round 14 updated the root `Project-Architecture-Document.md` but
+// forgot the `docs/` copy, causing them to diverge. Round 15 deleted
+// the root duplicate (canonical: `docs/Project-Architecture-Document.md`
+// per the README Documentation Map). This guard prevents
+// re-introduction.
+//
+// Idempotent: passes silently when the root copy doesn't exist.
+if (existsSync(rootPadPath)) {
+  console.error(
+    `❌ Root duplicate found: ${rootPadPath}`
+  );
+  console.error(
+    "   The canonical Project Architecture Document lives at docs/Project-Architecture-Document.md"
+  );
+  console.error(
+    "   (per the README Documentation Map). Round 15 F4 deleted the root duplicate."
+  );
+  console.error(
+    "   Re-introducing it causes the two copies to diverge — see Round 14 incident."
+  );
+  console.error(
+    "   Fix: delete the root copy, or merge any new content into docs/Project-Architecture-Document.md."
+  );
+  process.exit(1);
 }

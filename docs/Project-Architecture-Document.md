@@ -3,7 +3,7 @@
 **Classification:** Internal Engineering Reference
 **Status:** DEFINITIVE, PRODUCTION-LOCKED BLUEPRINT
 **Companion Documents:** `AGENTS.md` (deep codebase reference), `CLAUDE.md` (daily implementation guide)
-**Last Updated:** 2026-08-13 (Round 13 — self-scoped infrastructure + type-safety: added `backupDb()` online backup to `@embers/db` + `npm run db:backup` script; added compile-time type drift detection between `@embers/web` and `@embers/shared`; ticked 14 remaining `[ ]` checkboxes; test count 466 → 467)
+**Last Updated:** 2026-08-18 (Round 14 — knowledge distillation: audited the entire codebase and distilled all patterns, anti-patterns, lessons, and pitfalls from 13 rounds of remediation into `reddit-clone_SKILL.md` at the repo root; no code changes; test count unchanged at 467)
 **Audience:** Senior Engineers, Tech Leads, DevOps, and Onboarding Engineers
 **Rule:** Every architectural decision in this document traces to a specific rationale.
            Nothing is here "because it's popular."
