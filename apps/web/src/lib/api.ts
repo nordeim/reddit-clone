@@ -41,15 +41,61 @@ export class ApiError extends Error {
     status: number,
     code: string,
     message: string,
-    requestId?: string
+    requestId?: string,
+    /**
+     * The original error that caused this ApiError, if any.
+     *
+     * Round 15 F2: when `fetchFn` rejects (network failure, CORS
+     * rejection, DNS failure, etc.), the wrapper constructs an
+     * `ApiError(0, "NETWORK_ERROR", ...)`. The original `TypeError`
+     * or other thrown value is preserved on `cause` (ES2022) for
+     * diagnostic purposes — operators can inspect it via
+     * `error.cause` without losing the friendly user-facing message.
+     *
+     * The 5th positional arg is intentionally optional — existing
+     * callers (which pass 4 args) are unaffected.
+     *
+     * Implementation note: assigned via index access (`this.cause =
+     * cause`) instead of `super(message, { cause })` because the
+     * 2-arg `Error` constructor signature is part of the ES2022 lib
+     * (`lib.es2022.error.d.ts`), and `apps/web/tsconfig.json`
+     * currently targets `lib: ["ES2020", ...]`. The `cause` property
+     * itself exists at runtime in all modern engines (Node 16.9+,
+     * Chrome 93+, Firefox 91+, Safari 15+), so the index assignment
+     * works at runtime without changing the tsconfig lib. The cast
+     * `Error & { cause?: unknown }` is the standard workaround.
+     */
+    cause?: unknown
   ) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.code = code;
     this.requestId = requestId;
+    if (cause !== undefined) {
+      // Assign via index access — the property exists at runtime, but
+      // the ES2020 lib type defs don't expose it on the constructor.
+      (this as Error & { cause?: unknown }).cause = cause;
+    }
   }
 }
+
+/**
+ * User-facing message shown when `fetchFn` rejects (network failure,
+ * CORS rejection, DNS failure, server unreachable, etc.).
+ *
+ * Round 15 F2. The raw browser error is `TypeError("Failed to fetch")`
+ * — meaningless to a non-engineer. This friendly message tells the
+ * user what happened and what to do next.
+ */
+export const NETWORK_ERROR_MESSAGE =
+  "Could not reach the embers server. Please try again later.";
+
+/** HTTP-style status code sentinel for "no response received" (network failure). */
+export const NETWORK_ERROR_STATUS = 0;
+
+/** Error code string for network failures. */
+export const NETWORK_ERROR_CODE = "NETWORK_ERROR";
 
 /** Constructor options. All optional — sensible defaults are applied. */
 export interface ApiClientOptions {
@@ -288,11 +334,28 @@ export function createApiClient(options: ApiClientOptions = {}) {
     const token = getToken();
     if (token) headers.Authorization = `Bearer ${token}`;
 
-    const res = await fetchFn(url, {
-      method,
-      headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
+    // Round 15 F2: wrap fetchFn in a try/catch that normalizes network
+    // errors (TypeError "Failed to fetch", generic Error, etc.) to a
+    // uniform `ApiError(0, "NETWORK_ERROR", friendlyMessage, undefined, cause)`.
+    // Without this, the raw browser error propagates up and the UI
+    // surfaces "Failed to fetch" — meaningless to a non-engineer. The
+    // original error is preserved on `cause` (ES2022) for diagnostics.
+    let res: Response;
+    try {
+      res = await fetchFn(url, {
+        method,
+        headers,
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+    } catch (err) {
+      throw new ApiError(
+        0,
+        "NETWORK_ERROR",
+        NETWORK_ERROR_MESSAGE,
+        undefined,
+        err
+      );
+    }
 
     const requestId =
       res.headers.get("x-request-id") ?? undefined;
@@ -335,11 +398,25 @@ export function createApiClient(options: ApiClientOptions = {}) {
           "Content-Type": "application/json",
           Authorization: `Bearer ${refreshedToken}`,
         };
-        const retryRes = await fetchFn(url, {
-          method,
-          headers: retryHeaders,
-          body: body === undefined ? undefined : JSON.stringify(body),
-        });
+        // Round 15 F2: the retry fetch can ALSO fail with a network
+        // error (e.g., the server died between the refresh and the
+        // retry). Wrap it with the same normalizer.
+        let retryRes: Response;
+        try {
+          retryRes = await fetchFn(url, {
+            method,
+            headers: retryHeaders,
+            body: body === undefined ? undefined : JSON.stringify(body),
+          });
+        } catch (err) {
+          throw new ApiError(
+            0,
+            "NETWORK_ERROR",
+            NETWORK_ERROR_MESSAGE,
+            undefined,
+            err
+          );
+        }
         const retryRequestId =
           retryRes.headers.get("x-request-id") ?? undefined;
         if (!retryRes.ok) {

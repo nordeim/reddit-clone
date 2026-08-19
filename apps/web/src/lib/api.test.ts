@@ -357,6 +357,55 @@ describe("error handling", () => {
       message: "HTTP 502",
     });
   });
+
+  // ─── Round 15 F2 — network error normalization ──────────────────
+
+  it("R15-F2a: network TypeError from fetch is normalized to ApiError(0, NETWORK_ERROR)", async () => {
+    // Browsers throw TypeError("Failed to fetch") when the request never
+    // reaches the server (DNS failure, CORS rejection, server down, etc.).
+    // Without the wrapper, the raw TypeError propagates and surfaces as
+    // "Failed to fetch" in the UI — meaningless to a non-engineer.
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValue(new TypeError("Failed to fetch")) as unknown as typeof fetch;
+    const api = createApiClient({ baseUrl: "http://test", fetch: fetchMock });
+    const err = await api.health().catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err).toMatchObject({
+      status: 0,
+      code: "NETWORK_ERROR",
+    });
+    expect((err as Error).message).toMatch(/could not reach/i);
+  });
+
+  it("R15-F2b: generic Error from fetch is also normalized to NETWORK_ERROR", async () => {
+    // Any thrown error from fetchFn — not just TypeError — should be
+    // normalized. This guards against edge cases like a fetch polyfill
+    // that throws a non-TypeError.
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValue(new Error("boom")) as unknown as typeof fetch;
+    const api = createApiClient({ baseUrl: "http://test", fetch: fetchMock });
+    const err = await api.getPosts().catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err).toMatchObject({
+      status: 0,
+      code: "NETWORK_ERROR",
+    });
+  });
+
+  it("R15-F2c: original error is preserved on error.cause (ES2022)", async () => {
+    // Error.cause is the ES2022 standard way to chain errors. Preserving
+    // the original lets the application log the root cause without losing
+    // the friendly NETWORK_ERROR message shown to the user.
+    const original = new TypeError("Failed to fetch");
+    const fetchMock = vi.fn().mockRejectedValue(original) as unknown as typeof fetch;
+    const api = createApiClient({ baseUrl: "http://test", fetch: fetchMock });
+    const err = (await api.health().catch((e: unknown) => e)) as ApiError & {
+      cause?: unknown;
+    };
+    expect(err.cause).toBe(original);
+  });
 });
 
 // ---------------------------------------------------------------------------
