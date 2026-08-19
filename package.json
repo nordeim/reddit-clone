@@ -23,6 +23,8 @@
     "test:plan-alignment": "node scripts/verify-plan-alignment.mjs",
     "test:local-prod": "LIVE_BASE_URL=${PROD_BASE_URL:-http://localhost:8765/} playwright test --config=playwright.local-prod.config.ts",
     "test:repro": "PROD_BASE_URL=${PROD_BASE_URL:-http://localhost:8765/} playwright test --config=playwright.repro.config.ts",
+    "test:prod-readiness": "node scripts/verify-prod-readiness.mjs",
+    "test:prod-readiness:test": "node --test scripts/verify-prod-readiness.test.mjs",
     "typecheck": "npm run typecheck --workspace @embers/shared && npm run typecheck --workspace @embers/db && npm run typecheck --workspace @embers/server && npm run typecheck --workspace @embers/web",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
