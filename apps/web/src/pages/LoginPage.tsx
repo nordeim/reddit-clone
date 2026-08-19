@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
 
 /**
@@ -13,6 +13,12 @@ import { useAuth } from "../auth/AuthProvider";
  * HashRouter makes the URL `#/login` — B17 will switch to BrowserRouter
  * + clean `/login` in a future round.
  *
+ * Round 15 F1: when `<RequireAuth>` redirects an anonymous user here,
+ * it preserves the intended destination via `state: { from: pathname }`.
+ * LoginPage reads `location.state?.from`, validates it is a relative
+ * path (open-redirect guard), and navigates there on success. Falls
+ * back to `/` when `state.from` is missing, invalid, or absolute.
+ *
  * Accessibility (WCAG 2.2 AA):
  *   - Each input has a `<label htmlFor>` pointing at its `id`.
  *   - The submit button has `aria-busy` while submitting.
@@ -22,9 +28,41 @@ import { useAuth } from "../auth/AuthProvider";
  * @packageDocumentation
  */
 
+/**
+ * Validate that a `state.from` value is safe to navigate to.
+ *
+ * Returns the validated string when ALL of the following are true:
+ *   - It is a string.
+ *   - It starts with `/`.
+ *   - It does NOT start with `//` (protocol-relative URL — would
+ *     navigate to `evil.com/path`).
+ *   - It does NOT start with `/\` (some browsers normalize backslashes
+ *     to forward slashes — reject defensively).
+ *
+ * Returns `null` for any other value — callers fall back to `/`.
+ *
+ * Open-redirect background: `react-router-dom`'s `navigate(to, ...)` and
+ * `<Navigate to={to} />` accept strings, location objects, or
+ * `{ pathname }` objects. If `to` is a full URL string like
+ * `https://evil.example.com`, react-router will issue a full page
+ * navigation (or a `location.assign`), which is an open-redirect
+ * vulnerability when the input is attacker-controlled. The `state.from`
+ * value comes from `<RequireAuth>`'s `state: { from: location.pathname }`
+ * — which is always a path — but a hostile link can land the user on
+ * `/login` with crafted state. The guard makes the value safe.
+ */
+function validateFromPath(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  if (!raw.startsWith("/")) return null;
+  if (raw.startsWith("//")) return null;
+  if (raw.startsWith("/\\")) return null;
+  return raw;
+}
+
 export function LoginPage() {
   const auth = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -41,7 +79,13 @@ export function LoginPage() {
     setError(null);
     try {
       await auth.login(username, password);
-      navigate("/");
+      // Round 15 F1: redirect back to the page the user was trying to
+      // reach (preserved by <RequireAuth> via state.from), with an
+      // open-redirect guard. Fall back to / when state.from is missing
+      // or unsafe.
+      const fromState = (location.state as { from?: unknown } | null)?.from;
+      const safeFrom = validateFromPath(fromState);
+      navigate(safeFrom ?? "/", { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setSubmitting(false);

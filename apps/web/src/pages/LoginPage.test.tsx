@@ -51,9 +51,13 @@ function makeStubClient(overrides: Partial<AuthApiClient> = {}): AuthApiClient &
   };
 }
 
+type InitialEntry =
+  | string
+  | { pathname: string; state?: unknown };
+
 function renderLogin(opts: {
   stubClient: AuthApiClient;
-  initialEntries?: string[];
+  initialEntries?: InitialEntry[];
   onLogin?: () => void;
 }) {
   const factory = (o: AuthApiClientOptions): AuthApiClient => {
@@ -69,6 +73,10 @@ function renderLogin(opts: {
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/" element={<div data-testid="home">home-page</div>} />
+            <Route
+              path="/notifications"
+              element={<div data-testid="notifications">notifications-page</div>}
+            />
           </Routes>
         </MemoryRouter>
       </AuthProvider>
@@ -235,6 +243,62 @@ describe("LoginPage (Slice 6)", () => {
     const stub = makeStubClient();
     renderLogin({ stubClient: stub });
     expect(screen.getByLabelText(/password/i)).toHaveAttribute("type", "password");
+  });
+
+  // ─── Round 15 F1 — state.from redirect-back ───────────────────────
+
+  it("R15-F1a: redirects to state.from when set after successful login", async () => {
+    const stub = makeStubClient();
+    renderLogin({
+      stubClient: stub,
+      initialEntries: [{ pathname: "/login", state: { from: "/notifications" } }],
+    });
+
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText(/username/i), "you");
+    await user.type(screen.getByLabelText(/password/i), "embers-demo");
+    await user.click(screen.getByRole("button", { name: /log in|sign in|submit/i }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("notifications")).toBeInTheDocument();
+    });
+  });
+
+  it("R15-F1b: falls back to / when state.from is missing", async () => {
+    const stub = makeStubClient();
+    renderLogin({
+      stubClient: stub,
+      initialEntries: [{ pathname: "/login" /* no state */ }],
+    });
+
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText(/username/i), "you");
+    await user.type(screen.getByLabelText(/password/i), "embers-demo");
+    await user.click(screen.getByRole("button", { name: /log in|sign in|submit/i }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("home")).toBeInTheDocument();
+    });
+  });
+
+  it("R15-F1c: rejects absolute URLs in state.from (open-redirect guard)", async () => {
+    const stub = makeStubClient();
+    renderLogin({
+      stubClient: stub,
+      initialEntries: [
+        { pathname: "/login", state: { from: "https://evil.example.com" } },
+      ],
+    });
+
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText(/username/i), "you");
+    await user.type(screen.getByLabelText(/password/i), "embers-demo");
+    await user.click(screen.getByRole("button", { name: /log in|sign in|submit/i }));
+
+    // Must land on /, NOT navigate away to the external URL.
+    await waitFor(() => {
+      expect(screen.getByTestId("home")).toBeInTheDocument();
+    });
   });
 });
 
