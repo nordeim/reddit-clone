@@ -223,7 +223,7 @@
 >
 > Round 14 (2026-08-18) was a **knowledge distillation** round. No code
 > changes — instead, the entire codebase was audited and all patterns,
-> anti-patterns, lessons, and pitfalls from 13 rounds of remediation
+> anti-patterns, lessons, and pitfalls from 16 rounds of remediation
 > were distilled into a comprehensive `reddit-clone_SKILL.md` (21
 > sections, ~800 lines) at the repo root. The skill captures: project
 > identity, tech stack, bootstrapping, design system, component
@@ -290,6 +290,24 @@
 >   failures + 5/5 missing security headers) but does not fix them.
 > - See `docs/REMEDIATION_PLAN_ROUND_15.md` for the full plan, TDD
 >   breakdown, and verification ledger.
+
+> Round 16 (2026-08-19) was a **live-E2E + production-origin** remediations.
+> Re-audited `https://reddit.jesspete.shop/` (27 Playwright tests passed,
+> 1 skipped): LIVE-CRIT-1 still fixed; LIVE-CRIT-2/3/4 still broken because
+> the public origin is `python -m http.server` (GET /api/* → 404, POST
+> /api/auth/login → 501, no Helmet headers). Login surfaced **"Failed to
+> fetch"** because the production bundle defaulted to
+> `http://localhost:4000`. Round 15: (1) production API client is
+> same-origin (`resolveApiBaseUrl({ PROD: true }) === ""`) and all
+> fetches send `credentials: "include"`; (2) Fastify optionally serves
+> the SPA via `STATIC_DIR` (`@fastify/static`, `wildcard: false`) so one
+> process owns `/`, `/api/*`, `/health`, and Helmet; (3) CSP allows
+> `'unsafe-inline'` scripts only when `STATIC_DIR` is set (ADR-003
+> tradeoff); (4) LoginPage redirects to sanitized `state.from` and links
+> to `/register`; (5) inline favicon; (6) `start_production.sh` + Docker
+> no longer start Python http.server. B17 / B19–B22 / Sentry remain
+> deferred. Test count: 467 → 482 (web 271→278, server 95→103). See
+> `docs/REMEDIATION_PLAN_ROUND_15.md`.
 
 ---
 
@@ -429,7 +447,7 @@ The server follows a **composition root** pattern — `buildApp(opts)` in `src/a
 - **Helmet/rate-limit** can be skipped via `skipHelmet`/`skipRateLimit` options (rate-limit auto-disabled in `NODE_ENV=test`)
 - **Auth tests** use the seeded demo user; **vote concurrency tests** seed 100 users directly via Drizzle insert (bypassing Argon2id for speed)
 - Test files: 8 in `apps/server/src/` (5 in `routes/`, 2 in `auth/`, 1 `config.test.ts` in root), 2 in `packages/db/src/`, 3 in `packages/shared/src/`, 19 in `apps/web/src/` (including `lib/api.test.ts` from Round 5, `auth/AuthProvider.test.tsx` + `auth/RequireAuth.test.tsx` from Rounds 6-7, `pages/LoginPage.test.tsx` from Round 6, `pages/RegisterPage.test.tsx` + `components/layout/Navbar.test.tsx` from Round 7, `pages/PostPage.test.tsx` + `pages/NotFoundPage.test.tsx` from Round 10), 5 E2E specs (`e2e/smoke.spec.ts` + `e2e/auth.spec.ts` + `e2e/live.spec.ts` from Round 8 + `e2e/live_extended.spec.ts` + `e2e/repro_r10_postpage.spec.ts` from Round 10)
-- **Total vitest count: 473** = 95 (server) + 70 (shared) + 31 (db) + 277 (web). The previously documented total of 428 (Round 6) was superseded when Round 7 added 25 new web tests (11 RegisterPage + 8 Navbar + 5 RequireAuth + 1 api register-displayName) to reach 453; Round 10 added 9 new web tests (3 PostPage + 4 NotFoundPage + 1 Navbar min-w-0 + 1 RegisterPage mismatch + 1 RegisterPage regression - 1 replaced alert-on-mismatch test = net +9) to reach 462; Round 11 added 4 new tests (1 db performance-index + 3 shared `registerResponseSchema`) to reach 466; Round 13 added 1 new db test (`backupDb` online backup) to reach 467; Round 15 added 6 new web tests (3 LoginPage `state.from` + 3 api `NETWORK_ERROR`) to reach 473. Round 8 did not add vitest tests — it silenced 6 React `act()` warnings in `LoginPage` + `RegisterPage` tests. Round 12 was a pure rename + hygiene round (no test count change). Round 14 was knowledge distillation only (no test count change). **E2E: 18 local** (9 smoke + 9 auth lifecycle, added in Round 7) + **12 live-audit** (Round 8, opt-in via `LIVE_BASE_URL`) + **16 extended-live-audit** (Round 10, opt-in via `LIVE_BASE_URL` against the live site OR `PROD_BASE_URL` against a local prod build) + **2 R10 regression guard** (Round 10, opt-in via `PROD_BASE_URL`). **Plus 14 `node --test` unit tests** for `scripts/verify-prod-readiness.mjs` (Round 15 F3).
+- **Total vitest count: 485** = 103 (server) + 70 (shared) + 31 (db) + 281 (web). The previously documented total of 428 (Round 6) was superseded when Round 7 added 25 new web tests (11 RegisterPage + 8 Navbar + 5 RequireAuth + 1 api register-displayName) to reach 453; Round 10 added 9 new web tests (3 PostPage + 4 NotFoundPage + 1 Navbar min-w-0 + 1 RegisterPage mismatch + 1 RegisterPage regression - 1 replaced alert-on-mismatch test = net +9) to reach 462; Round 11 added 4 new tests (1 db performance-index + 3 shared `registerResponseSchema`) to reach 466; Round 13 added 1 new db test (`backupDb` online backup) to reach 467. Round 8 did not add vitest tests — it silenced 6 React `act()` warnings in `LoginPage` + `RegisterPage` tests. Round 12 was a pure rename + hygiene round (no test count change). Round 15 added 15 tests (web +7: 3 `resolveApiBaseUrl` + 1 `credentials: include` + 3 LoginPage; server +8: 1 `STATIC_DIR` config + 6 static-serving + 1 CSP-when-STATIC_DIR) to reach 482. **E2E: 18 local** (9 smoke + 9 auth lifecycle, added in Round 7) + **12 live-audit** (Round 8, opt-in via `LIVE_BASE_URL`) + **16 extended-live-audit** (Round 10, opt-in via `LIVE_BASE_URL` against the live site OR `PROD_BASE_URL` against a local prod build) + **2 R10 regression guard** (Round 10, opt-in via `PROD_BASE_URL`). Live re-audit 2026-08-19: 27 passed, 1 skipped. Round 16 restored the NETWORK_ERROR web tests (R15-F2) and added SPA-serving tests, bringing the total to 485 (web 281).
 
 ### Backend Pitfalls
 
@@ -441,6 +459,8 @@ The server follows a **composition root** pattern — `buildApp(opts)` in `src/a
 6. **Don't leak stack traces** — `errorHandler` returns structured `{ error: { code, message, requestId } }` only
 7. **Don't skip `requestId` plugin** — the error handler depends on `req.id` being set
 8. **Don't commit secret-bearing files** (R9.1) — `.env`, `.env.local`, `env.bak`, and any `*.env` file must stay gitignored. CI runs `gitleaks` on every push (R9.2) and `npm run test:no-secrets` + `npm run test:gitignore` catch force-added files locally.
+9. **Don't default the production API client to `http://localhost:4000`** (R15) — a production build that does this makes live login surface "Failed to fetch". Use `resolveApiBaseUrl()` (same-origin when `PROD`). Always pass `credentials: "include"` so the HttpOnly refresh cookie is forwarded.
+10. **Don't put `python -m http.server` in front of the public origin** (R15) — it cannot handle POST (501) and emits no Helmet headers. Set `STATIC_DIR` and let Fastify serve the SPA.
 
 ## Tech Stack
 
@@ -682,7 +702,7 @@ with `NODE_ENV=test` env vars. Playwright reports are uploaded as artifacts.
 ```bash
 npm run lint        # ESLint flat config — 0 errors, 0 warnings
 npm run typecheck   # tsc --noEmit — must pass clean (pretypecheck hook builds shared+db first)
-npm test            # vitest run (all workspaces) — all 473 tests must pass (R10: 462; R11: +4; R13: +1; R15: +6)
+npm test            # vitest run (all workspaces) — all 482 tests must pass (R15: was 467; web 278 + server 103 + shared 70 + db 31)
 npm run test:e2e    # playwright run — 18 tests must pass (9 smoke + 9 auth lifecycle)
 npm run test:build  # asserts dist/index.html is a production build (no Vite dev modules)
 npm run test:no-secrets  # asserts no .env / env.bak / *.env files are tracked by git

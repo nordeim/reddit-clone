@@ -26,7 +26,29 @@ describe("Phase J: hardening", () => {
       expect(csp).toContain("style-src 'self' 'unsafe-inline' https://fonts.googleapis.com");
       expect(csp).toContain("img-src 'self' data:");
       expect(csp).toContain("script-src 'self'");
+      expect(csp).not.toContain("script-src 'self' 'unsafe-inline'");
       await app.close();
+    });
+
+    it("allows 'unsafe-inline' scripts when STATIC_DIR is set (single-file SPA)", async () => {
+      // ADR-003 inlines JS into index.html. Helmet must not block it.
+      const { mkdtempSync, writeFileSync, rmSync } = await import("node:fs");
+      const { join } = await import("node:path");
+      const { tmpdir } = await import("node:os");
+      const dir = mkdtempSync(join(tmpdir(), "embers-csp-"));
+      writeFileSync(join(dir, "index.html"), "<!doctype html><title>x</title>", "utf8");
+      const app = await buildApp({
+        env: { NODE_ENV: "test", STATIC_DIR: dir },
+      });
+      try {
+        const res = await app.inject({ method: "GET", url: "/health" });
+        const csp = res.headers["content-security-policy"] as string | undefined;
+        expect(csp).toBeTruthy();
+        expect(csp).toContain("script-src 'self' 'unsafe-inline'");
+      } finally {
+        await app.close();
+        rmSync(dir, { recursive: true, force: true });
+      }
     });
 
     it("emits X-Content-Type-Options: nosniff", async () => {

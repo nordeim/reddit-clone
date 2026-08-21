@@ -1,10 +1,9 @@
 # syntax=docker/dockerfile:1.7
 
 # embers — multi-stage Dockerfile
-# Builds the @embers/server Fastify backend as a production image.
-# The client SPA (@embers/web) is built separately and deployed to a static host
-# (see docs/REMEDIATION_PLAN.md §4 — ADR-003 single-file build is still in force
-# for the client until the deferred B17 frontend refactor pass).
+# Builds @embers/server and copies the @embers/web production SPA into the
+# image. Fastify serves both (STATIC_DIR=/app/apps/web/dist) — Round 15.
+# ADR-003 single-file build is still in force for the client (B17 deferred).
 
 # ----------------------------------------------------------------------------
 # Stage 1: builder — install all deps, build all workspaces
@@ -71,6 +70,8 @@ COPY --from=builder /app/packages/db/node_modules /app/packages/db/node_modules
 COPY --from=builder /app/apps/server/dist /app/apps/server/dist
 COPY --from=builder /app/packages/shared/dist /app/packages/shared/dist
 COPY --from=builder /app/packages/db/dist /app/packages/db/dist
+# Round 15: serve the SPA from the same origin as the API.
+COPY --from=builder /app/apps/web/dist /app/apps/web/dist
 
 # Copy Drizzle migrations (runtime-applied by openDb() on first start).
 COPY --from=builder /app/packages/db/src/migrations /app/packages/db/src/migrations
@@ -86,7 +87,8 @@ ENV NODE_ENV=production \
     HOST=0.0.0.0 \
     PORT=4000 \
     DATABASE_URL=/data/dev.db \
-    LOG_LEVEL=info
+    LOG_LEVEL=info \
+    STATIC_DIR=/app/apps/web/dist
 
 # Production secrets MUST be provided at runtime via -e or env_file.
 # The image refuses to start if these are missing (enforced by loadEnv()).

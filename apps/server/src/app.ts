@@ -41,7 +41,8 @@ export interface BuildAppOptions {
  *   5. requestId — assigns req.id before error handler uses it
  *   6. auth (decorator) — registers `app.authenticate`
  *   7. routes — health + (when db provided) all API routes
- *   8. errorHandler — last, so it can wrap everything
+ *   8. static  — optional SPA (when STATIC_DIR set); after routes
+ *   9. errorHandler — last, so it can wrap everything
  */
 export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInstance> {
   const env: Env = loadEnv(opts.env);
@@ -71,7 +72,13 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
           styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
           fontSrc: ["'self'", "https://fonts.gstatic.com"],
           imgSrc: ["'self'", "data:"],
-          scriptSrc: ["'self'"],
+          // ADR-003 inlines the SPA bundle + theme-bootstrap script into
+          // index.html. When we serve that file (STATIC_DIR set) Helmet
+          // must allow 'unsafe-inline' or the page is a blank root.
+          // When STATIC_DIR is unset we keep the stricter default.
+          scriptSrc: env.STATIC_DIR
+            ? ["'self'", "'unsafe-inline'"]
+            : ["'self'"],
         },
       },
       hsts: env.NODE_ENV === "production",
@@ -181,7 +188,20 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
     await app.register(buildNotificationRoutes({ notificationRepo }));
   }
 
-  // 8. Error handler — last so it wraps everything.
+  // 8. Optional static SPA — after API routes so /health and /api/*
+  //    keep precedence. wildcard:false globs the dist tree at boot
+  //    and does NOT install a catch-all, so unknown /api/* still
+  //    fall through to the JSON 404 error handler.
+  if (env.STATIC_DIR) {
+    const { default: fastifyStatic } = await import("@fastify/static");
+    await app.register(fastifyStatic, {
+      root: env.STATIC_DIR,
+      wildcard: false,
+      index: ["index.html"],
+    });
+  }
+
+  // 9. Error handler — last so it wraps everything.
   await app.register(errorHandlerPlugin);
 
   // Decorate app with env for downstream plugins/routes

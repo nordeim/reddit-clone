@@ -36,6 +36,7 @@ test-results/
 e2e/.auth/
 blob-report/
 playwright/.cache/
+.cache/
 
 # Code audit artifacts (skills/code-review-and-audit)
 .audit-report.md

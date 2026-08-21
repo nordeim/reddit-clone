@@ -181,6 +181,17 @@
 >   `node --test` for the new prod-readiness helpers. E2E unchanged.
 > - See `docs/REMEDIATION_PLAN_ROUND_15.md` for the full plan, TDD
 >   breakdown, and verification ledger.
+> 
+> **Round 16 (2026-08-19) — live-E2E + production-origin remediations:**
+> Re-ran `LIVE_BASE_URL=https://reddit.jesspete.shop/ npm run test:e2e:live`
+> (27 passed, 1 skipped). Root cause of remaining live gaps is
+> `python -m http.server` in front of the SPA. In-repo remediations:
+> same-origin production API default + `credentials: "include"`;
+> Fastify `STATIC_DIR` SPA serving; LoginPage `state.from` + register
+> link; inline favicon; unified `start_production.sh` / Docker.
+> B17 / B19–B22 / Sentry still deferred. Tests: 467 → 482
+> (web 278, server 103, shared 70, db 31). See
+> `docs/REMEDIATION_PLAN_ROUND_15.md`.
 
 ---
 
@@ -425,7 +436,7 @@ git ls-files | grep -E '(^|/)dist/' | wc -l   # must be 0 (no dist/ tracked)
 > - `LIVE_BASE_URL=https://reddit.jesspete.shop/ npm run test:e2e:live` — R8.3: opt-in live-deployment audit (12 tests). Skipped when `LIVE_BASE_URL` is unset.
 > - `npm run test:prod-readiness` — R15 F3: opt-in strict gate. Probes `/health`, `/api/posts`, `/api/communities`, `/api/auth/login` + checks 5 required security headers against `PROD_BASE_URL` (default: `https://reddit.jesspete.shop/`). Exits 1 when ANY probe fails. Set `PROD_READINESS=skip` to skip in local dev / CI without a live deployment.
 > - `npm run test:prod-readiness:test` — R15 F3: 14 unit tests via `node --test` for the prod-readiness pure helpers.
-
+ 
 > **Test count breakdown (473 vitest + 18 e2e + 30 opt-in live + 14 node:test):** `@embers/web` = 277
 > (incl. 23 in `src/lib/api.test.ts` from Round 5, 20 in
 > `src/auth/AuthProvider.test.tsx` + 9 api refresh-and-retry + 10 in
@@ -433,7 +444,7 @@ git ls-files | grep -E '(^|/)dist/' | wc -l   # must be 0 (no dist/ tracked)
 > `src/pages/RegisterPage.test.tsx` + 9 in `src/components/layout/Navbar.test.tsx`
 > + 5 in `src/auth/RequireAuth.test.tsx` + 1 api register-displayName from
 > Round 7, +9 from Round 10 covering PostPage / NotFoundPage / mobile
-> overflow / RegisterPage validation), `@embers/server` = 95, `@embers/shared` = 70, `@embers/db` = 31.
+> overflow / RegisterPage validation, +7 from Round 15 covering `resolveApiBaseUrl` / `credentials: include` / LoginPage `state.from` + register link), `@embers/server` = 103, `@embers/shared` = 70, `@embers/db` = 31.
 > E2E = 18 local (9 smoke from Round 3 + 9 auth lifecycle from Round 7) +
 > 12 live-audit (Round 8, opt-in via `LIVE_BASE_URL`) + 16 extended-live
 > (Round 10, `npm run test:local-prod`) + 2 repro regression-guard
@@ -448,6 +459,7 @@ git ls-files | grep -E '(^|/)dist/' | wc -l   # must be 0 (no dist/ tracked)
 > Round 11 added +4 (db 29→30, shared 67→70; total 462→466). Round 13
 > added +1 (db 30→31; total 466→467). Round 15 added +6 (web 271→277,
 > +3 LoginPage `state.from` + +3 api `NETWORK_ERROR`; total 467→473).
+> Round 15 added +15 vitest tests (web 271 → 278, server 95 → 103; total 467 → 482).
 
 **Build-before-test prerequisite (Round 5, extended in Round 8):** `@embers/server`'s test suites import
 `@embers/db` and `@embers/shared` as runtime packages, so their `dist/` builds
@@ -678,7 +690,7 @@ reddit-clone/
 │   │                        # guards protected routes. `components/layout/Navbar.tsx`
 │   │                        # (Round 7) is auth-aware — uses useAuth() instead of
 │   │                        # the hardcoded CURRENT_USER.
-│   └── server/              ← @embers/server (Fastify, 95 tests)
+│   └── server/              ← @embers/server (Fastify, 103 tests)
 │       └── src/
 │           ├── app.ts       # buildApp() composition root
 │           ├── index.ts     # Entry point (listen + graceful shutdown)

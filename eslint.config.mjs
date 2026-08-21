@@ -50,6 +50,7 @@ export default tseslint.config(
       'test-results/**',
       'blob-report/**',
       'playwright/.cache/**',
+      '.cache/**',
       'e2e/.auth/**',
       'public/**',
       'skills/**',

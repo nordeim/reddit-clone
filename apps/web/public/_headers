@@ -1,0 +1,15 @@
+# Cloudflare Pages / compatible static-host headers (Round 16).
+# Copied to dist/ by Vite. Closes LIVE-CRIT-3 when the SPA is still
+# served from a static host instead of Fastify. Helmet already emits
+# these on the API origin.
+#
+# script-src includes 'unsafe-inline' because vite-plugin-singlefile
+# inlines the bundle + the theme-bootstrap script (ADR-003 tradeoff).
+
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; object-src 'none'; base-uri 'self'
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: SAMEORIGIN
+  Referrer-Policy: no-referrer
+  Permissions-Policy: camera=(), microphone=(), geolocation=()

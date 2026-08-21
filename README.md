@@ -9,7 +9,7 @@ monorepo.
 reddit-clone/
 ├── apps/
 │   ├── web/          ← @embers/web — the original client-only React SPA
-│   │                   (HashRouter, vite-plugin-singlefile, 277 tests;
+│   │                   (HashRouter, vite-plugin-singlefile, 278 tests;
 │   │                    includes `src/lib/api.ts` foundational fetch client
 │   │                    added in Round 5, `src/auth/AuthProvider.tsx` React
 │   │                    context + `useAuth()` hook + 401 refresh-and-retry
@@ -18,7 +18,7 @@ reddit-clone/
 │   │                    real /register form (Round 7), `src/auth/RequireAuth.tsx`
 │   │                    route guard (Round 7), auth-aware Navbar (Round 7))
 │   └── server/       ← @embers/server — Fastify REST API + auth + FTS5 search
-│                       (95 tests, /health, /api/auth, /api/posts,
+│                       (103 tests, /health, /api/auth, /api/posts,
 │                        /api/communities, /api/votes, /api/comments,
 │                        /api/search, /api/notifications)
 ├── packages/
@@ -55,7 +55,7 @@ npm run dev        --workspace @embers/server   # http://localhost:4000
 - Client: `http://localhost:5173` — the embers feed (320 posts across 18 communities, generated deterministically in-browser)
 - Server: `curl http://localhost:4000/health` → `{"status":"ok",…}`
 - Demo login (server): `POST /api/auth/login` with `{"username":"you","password":"embers-demo"}` → access token + refresh cookie
-- All tests pass: `npm test` (473 vitest + 18 Playwright E2E; plus 30 opt-in live-audit E2E + 14 prod-readiness unit tests — see Test Status)
+- All tests pass: `npm test` (482 vitest + 18 Playwright E2E; plus 30 opt-in live-audit E2E — see Test Status)
 
 ### Quick Start (Docker)
 
@@ -172,6 +172,12 @@ npm run server:start-prod
 #    HashRouter means no server rewrite rules needed.
 #    Any static host works: nginx, S3, GitHub Pages, `python -m http.server`.
 cp -r apps/web/dist/* /var/www/html/
+
+# 6. Preferred: let Fastify serve the SPA from the same origin (Round 15)
+STATIC_DIR=apps/web/dist npm run server:start-prod
+#    Or: ./start_production.sh
+#    Do NOT put `python -m http.server` in front of the public origin
+#    (POST → 501, no Helmet headers — that is LIVE-CRIT-2/3/4).
 ```
 
 Verify the production deployment:
@@ -192,7 +198,8 @@ curl http://localhost:5000/health
 | `JWT_REFRESH_SECRET` | Yes | Min 32 chars |
 | `CORS_ORIGIN` | Yes | Your frontend origin |
 | `DATABASE_URL` | No | Code default: `./dev.db` (resolved to repo-root by `loadEnv()`). `.env.example` overrides to `packages/db/dev.db` so server + seed agree. |
-| `PORT` | No | Defaults to 5000 |
+| `STATIC_DIR` | No | Round 15: directory of the built SPA. When set, Fastify serves `index.html` + `/images/*` from this origin. `./start_production.sh` sets `apps/web/dist`. |
+| `PORT` | No | Defaults to 4000 (`loadEnv`); `server:start-prod` uses 5000 |
 
 ### Architecture
 
@@ -259,7 +266,7 @@ enables HSTS hardening and requires all production secrets via `loadEnv()`.
 ```bash
 npm run lint        # ESLint — 0 errors, 0 warnings
 npm run typecheck   # tsc --noEmit — all 4 workspaces clean
-npm test            # 473 vitest tests (pretest auto-builds shared + db)
+npm test            # 482 vitest tests (pretest auto-builds shared + db)
 npm run build       # topological build — all workspaces succeed
 ```
 
@@ -267,16 +274,19 @@ The Dockerfile is a multi-stage Node 20 build that produces a production image
 for `@embers/server` only. The client SPA is not containerised — it is built
 separately via `npm run build --workspace @embers/web` and served from a static
 host (ADR-003 single-file build is still in force for the client).
+The Dockerfile is a multi-stage Node 20 build. Round 15 copies `apps/web/dist`
+into the image and sets `STATIC_DIR` so **one container** serves `/`, `/api/*`,
+and `/health`. ADR-003 single-file build is still in force for the client.
 
 ## Test Status
 
 | Workspace | Tests | Command |
 |-----------|-------|---------|
-| `@embers/web` | 277 | `npm test --workspace @embers/web` |
+| `@embers/web` | 278 | `npm test --workspace @embers/web` |
 | `@embers/shared` | 70 | `npm test --workspace @embers/shared` |
 | `@embers/db` | 31 | `npm test --workspace @embers/db` |
-| `@embers/server` | 95 | `npm test --workspace @embers/server` |
-| **Vitest total** | **473** | `npm test --workspaces --if-present` |
+| `@embers/server` | 103 | `npm test --workspace @embers/server` |
+| **Vitest total** | **482** | `npm test --workspaces --if-present` |
 | E2E — local API (Playwright) | 18 | `npm run test:e2e` |
 | E2E — live audit, Round 8 (opt-in) | 12 | `LIVE_BASE_URL=… npm run test:e2e:live` |
 | E2E — extended live, Round 10 (opt-in) | 16 | `npm run test:local-prod` |
@@ -287,7 +297,7 @@ host (ADR-003 single-file build is still in force for the client).
 | Fresh-clone typecheck | 1 script | `npm run test:fresh-clone` |
 | Lint (ESLint) | 0 errors, 0 warnings | `npm run lint` |
 
-All 473 vitest tests + 18 Playwright E2E tests pass (`npm test` — do NOT
+All 482 vitest tests + 18 Playwright E2E tests pass (`npm test` — do NOT
 run `vitest run` from root; it won't discover workspace configs), ESLint is
 clean, and typecheck + build succeed as of Round 15 (2026-08-19).
 
@@ -333,10 +343,10 @@ The embers SPA is deployed at **`https://reddit.jesspete.shop/`**.
 | ID | Severity | Status | Gap | Operator fix |
 |----|----------|--------|-----|--------------|
 | LIVE-CRIT-1 | Critical | **FIXED** (2026-08-10) | The live site was serving the Vite dev server. | Now resolved -- the live site serves a 537 KB production build (no `/@react-refresh` or `/@vite/client` in the HTML). Verified by `e2e/live.spec.ts` test #1. |
-| LIVE-CRIT-2 | Critical | **Still broken** | The Fastify backend is **not reachable** from the live URL. `/api/posts`, `/api/communities`, `/api/search`, `/health` all return HTTP 404 (335 bytes, `text/html`). `/api/auth/login` returns HTTP 501. | Start the Fastify backend (`npm run server:start-prod` or `docker compose up`) and configure the reverse proxy to route `/api/*` and `/health` to the Fastify port (5000). |
-| LIVE-CRIT-3 | Critical | **Still broken** | No production security headers are set (CSP, HSTS, X-Content-Type-Options, X-Frame-Options, Referrer-Policy all absent). | Add the 5 required security headers at the CDN/reverse-proxy layer. Fastify Helmet already sets them on the backend -- the proxy must not strip them. |
-| LIVE-CRIT-4 | Critical | **New (Round 9)** | `/api/auth/login` returns HTTP 501 (Not Implemented) instead of 404 or 200. This suggests the reverse proxy has a partial route to the backend but the route is misconfigured. | Investigate the reverse proxy config -- the `/api/auth/*` route may be pointing to the wrong upstream or the backend may not be running. All other `/api/*` routes return 404 (SPA fallback), but `/api/auth/login` returns 501 (proxy error). |
-| LIVE-HIGH-2 | High | **Still broken** | `/api/*` requests receive a Python 404 error page (not the SPA `index.html`) instead of JSON, masking API failures. | Configure the reverse proxy to return 502/503 when the backend is down, not a generic 404. Ensure the Fastify backend is running and reachable. |
+| LIVE-CRIT-2 | Critical | **Still broken on live** (in-repo remediations in R15) | The public origin is `python -m http.server`. `/api/posts`, `/api/communities`, `/api/search`, `/health` return HTTP 404 Python HTML. | Point the public origin at Fastify with `STATIC_DIR` set (`./start_production.sh` or `docker compose up`). Re-verified 2026-08-19. |
+| LIVE-CRIT-3 | Critical | **Still broken on live** (in-repo remediations in R15) | No production security headers (CSP, HSTS, XCTO, XFO, Referrer-Policy all absent). | Helmet emits them when Fastify is the origin. `apps/web/public/_headers` covers a static-only CDN. Re-verified 2026-08-19. |
+| LIVE-CRIT-4 | Critical | **Still broken on live** (root cause: Python http.server) | `POST /api/auth/login` returns HTTP 501 "Unsupported method ('POST')". | Stop using `python -m http.server` on the public origin. Fastify handles POST. Re-verified 2026-08-19. |
+| LIVE-HIGH-2 | High | **Still broken on live** | `/api/*` requests receive a Python 404 error page instead of JSON. | Same cutover as LIVE-CRIT-2. |
 
 ### SECRET ROTATION REQUIRED (R9.1, 2026-08-10)
 
@@ -556,6 +566,21 @@ remediation.
 - See `docs/REMEDIATION_PLAN_ROUND_15.md` for the full plan, TDD
   breakdown, and verification ledger.
 
+#### Round 16 (2026-08-19) — live-E2E + production-origin remediations
+
+- Re-ran `LIVE_BASE_URL=https://reddit.jesspete.shop/ npm run test:e2e:live`:
+  **27 passed, 1 skipped**. Client R10 fixes are live (PostPage, 404 text,
+  mobile no-overflow, register mismatch). Login error is **"Failed to fetch"**
+  (production bundle called `http://localhost:4000`). Backend probes 0/4.
+- **In-repo remediations (need operator redeploy to show on live):**
+  - Production API client defaults to same-origin; fetches send `credentials: "include"`.
+  - Fastify serves the SPA when `STATIC_DIR` is set (`@fastify/static`).
+  - LoginPage redirects to sanitized `state.from` and links to `/register`.
+  - Inline favicon; Cloudflare `_headers`; unified `start_production.sh` + Docker.
+- **Still deferred:** B17 (HashRouter/singlefile), B19–B22 (React Query), Sentry.
+- Vitest count: 467 → 482 (web 271→278, server 95→103).
+- See `docs/REMEDIATION_PLAN_ROUND_15.md`.
+
 ### How to verify the live deployment
 
 ```bash
@@ -652,7 +677,7 @@ TDD breakdown + the rationale for deferring B17 (build refactor) again.
 | `docs/IMPLEMENTATION_PLAN.md` | Original greenfield plan that produced `apps/web` |
 | `docs/MANUAL_QA.md` | Manual QA matrix for the client SPA |
 
-> **Additional docs:** `REMEDIATION_PLAN_ROUND_9.md`–`REMEDIATION_PLAN_ROUND_15.md`, `SECRET_ROTATION_GUIDE.md`, `audit_report_1.md`–`audit_report_4.md`, and `session_1.md`–`session_13.md` also live in `docs/` (Round changelogs, the security-incident guide, audit reports, and session worklogs).
+> **Additional docs:** `REMEDIATION_PLAN_ROUND_9.md`–`REMEDIATION_PLAN_ROUND_15.md`, `SECRET_ROTATION_GUIDE.md`, `audit_report_1.md`–`audit_report_4.md`, and `session_1.md`–`session_15.md` also live in `docs/` (Round changelogs, the security-incident guide, audit reports, and session worklogs).
 
 ## License
 

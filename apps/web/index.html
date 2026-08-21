@@ -4,6 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>embers — a Reddit-style community feed</title>
+    <!-- Inline data-URI favicon (Round 15). Avoids the live-site /favicon.ico
+         404 and keeps the single-file build self-contained. -->
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23ea580c'/%3E%3Cpath d='M18 5c5 7 3 11 3 15a7 7 0 1 1-14 0c0-4 3-8 11-15z' fill='%23fff7ed'/%3E%3C/svg%3E"
+    />
     <!--
       Theme bootstrap — runs synchronously before React mounts so the
       persisted `.dark` class is on <html> for the very first paint,

@@ -64,6 +64,15 @@ const envSchema = z.object({
   RATE_LIMIT_WINDOW: z.string().default("1 minute"),
   AUTH_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(5),
   AUTH_RATE_LIMIT_WINDOW: z.string().default("1 minute"),
+
+  /**
+   * Optional directory of built SPA assets (`apps/web/dist`). When set,
+   * Fastify serves the single-file HTML + `/images/*` from this origin
+   * so Helmet headers, POST /api/*, and /health share one process.
+   * Round 16 — closes LIVE-CRIT-2/3/4 when the operator points the
+   * public origin at this server instead of `python -m http.server`.
+   */
+  STATIC_DIR: z.string().min(1).optional(),
 })
   .superRefine((env, ctx) => {
     // Set log level default based on environment if not explicitly provided.
@@ -113,6 +122,10 @@ export function loadEnv(overrides: Partial<Record<string, string | undefined>> =
   // special `:memory:` value are passed through unchanged.
   if (env.DATABASE_URL && !isAbsolute(env.DATABASE_URL) && env.DATABASE_URL !== ":memory:") {
     env.DATABASE_URL = resolve(REPO_ROOT, env.DATABASE_URL);
+  }
+
+  if (env.STATIC_DIR && !isAbsolute(env.STATIC_DIR)) {
+    env.STATIC_DIR = resolve(REPO_ROOT, env.STATIC_DIR);
   }
 
   return env;

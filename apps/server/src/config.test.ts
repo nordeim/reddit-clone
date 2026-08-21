@@ -16,6 +16,15 @@ describe("env config", () => {
     expect(env.CORS_ORIGIN).toBe("*");
     expect(env.RATE_LIMIT_MAX).toBe(100);
     expect(env.RATE_LIMIT_WINDOW).toBe("1 minute");
+    expect(env.STATIC_DIR).toBeUndefined();
+  });
+
+  it("accepts an optional STATIC_DIR (Round 15 unified SPA serving)", () => {
+    const env: Env = envSchema.parse({
+      NODE_ENV: "development",
+      STATIC_DIR: "/app/apps/web/dist",
+    });
+    expect(env.STATIC_DIR).toBe("/app/apps/web/dist");
   });
 
   it("requires DATABASE_URL in production", () => {

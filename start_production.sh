@@ -2,22 +2,25 @@
 set -euo pipefail
 
 # embers — production startup script
-# Starts both the Fastify backend (apps/server) and a static frontend server (apps/web/dist).
+# Starts a single Fastify process that serves BOTH the REST API and the
+# built SPA (`apps/web/dist`) from one origin (Round 15).
 #
 # Usage:
-#   ./start_production.sh          # start both servers
-#   ./start_production.sh stop     # stop both servers
+#   ./start_production.sh          # build + start
+#   ./start_production.sh stop     # stop
 #
-# The backend runs via `npm run server:start-prod` which spawns a child `node`
-# process. The stop command kills the entire process tree, not just the npm wrapper.
+# Do NOT use `python -m http.server` for the SPA in production — it cannot
+# handle POST (LIVE-CRIT-4) and emits no security headers (LIVE-CRIT-3).
 
 # cd /Home1/project/reddit-clone && pkill -f "node dist/index.js" 2>/dev/null; pkill -f "http.server 5173" 2>/dev/null; sleep 1; echo "Cleaned up old processes" && echo "=== Syntax check ===" && bash -n start_production.sh && echo "Syntax OK"
 # cd /Home1/project/reddit-clone && echo "=== Port check ===" && (curl -sf http://localhost:5000/health > /dev/null 2>&1 && echo "Backend STILL responding") || echo "Port 5000 free ✓" && (curl -sf http://localhost:5173 > /dev/null 2>&1 && echo "Frontend STILL responding") || echo "Port 5173 free ✓" 
 
 LOG_DIR="/tmp"
 SERVER_LOG="$LOG_DIR/embers-server.log"
-WEB_LOG="$LOG_DIR/embers-web.log"
 SERVER_PID="$LOG_DIR/embers-server.pid"
+WEB_LOG="$LOG_DIR/embers-web.log"
+# Legacy path kept so `stop` still reaps a previous python http.server
+# started by older versions of this script.
 WEB_PID="$LOG_DIR/embers-web.pid"
 
 # ---------------------------------------------------------------------------
@@ -80,36 +83,30 @@ fi
 # ---------------------------------------------------------------------------
 # 2. Install dependencies
 # ---------------------------------------------------------------------------
-echo "[1/5] Installing dependencies..."
+echo "[1/4] Installing dependencies..."
 npm install --no-audit --no-fund
 
 # ---------------------------------------------------------------------------
 # 3. Initialize the database (if not already seeded)
 # ---------------------------------------------------------------------------
-echo "[2/5] Checking database..."
+echo "[2/4] Checking database..."
 [ -f packages/db/dev.db ] || npm run db:setup
 
 # ---------------------------------------------------------------------------
 # 4. Build all workspaces (topological: shared → db → server → web)
 # ---------------------------------------------------------------------------
-echo "[3/5] Building all workspaces..."
+echo "[3/4] Building all workspaces..."
 npm run build
 
 # ---------------------------------------------------------------------------
-# 5. Start the backend (Fastify, production mode, port 5000)
+# 5. Start Fastify in production mode, serving the SPA from the same origin
 # ---------------------------------------------------------------------------
-echo "[4/5] Starting backend (Fastify, port 5000, NODE_ENV=production)..."
+echo "[4/4] Starting Fastify (port 5000, NODE_ENV=production, STATIC_DIR=apps/web/dist)..."
+export STATIC_DIR="${STATIC_DIR:-$PWD/apps/web/dist}"
 nohup npm run server:start-prod > "$SERVER_LOG" 2>&1 &
 echo "$!" > "$SERVER_PID"
 echo "       PID: $(cat "$SERVER_PID")  |  log: $SERVER_LOG"
-
-# ---------------------------------------------------------------------------
-# 6. Start the frontend (static file server, port 5173)
-# ---------------------------------------------------------------------------
-echo "[5/5] Starting frontend (static server, port 5173)..."
-nohup python3 -m http.server 5173 --directory apps/web/dist > "$WEB_LOG" 2>&1 &
-echo "$!" > "$WEB_PID"
-echo "       PID: $(cat "$WEB_PID")  |  log: $WEB_LOG"
+echo "       STATIC_DIR=$STATIC_DIR"
 
 # ---------------------------------------------------------------------------
 # 7. Health check — poll /health for up to 10 seconds
@@ -134,14 +131,16 @@ done
 echo ""
 echo "=== embers is running ==="
 echo ""
-echo "  Backend:   http://localhost:5000  (Fastify, NODE_ENV=production)"
-echo "  Frontend:  http://localhost:5173  (static files from apps/web/dist)"
+echo "  Origin:  http://localhost:5000  (Fastify serves /api/* + /health + the SPA)"
+echo "  SPA:     http://localhost:5000/          (HashRouter, #/login etc.)"
+echo "  Health:  http://localhost:5000/health"
 echo ""
-echo "  Backend PID:  $(cat "$SERVER_PID")  |  log: $SERVER_LOG"
-echo "  Frontend PID: $(cat "$WEB_PID")  |  log: $WEB_LOG"
+echo "  PID:  $(cat "$SERVER_PID")  |  log: $SERVER_LOG"
 echo ""
 echo "  Stop:  $0 stop"
-echo "  Logs:  tail -f $SERVER_LOG $WEB_LOG"
+echo "  Logs:  tail -f $SERVER_LOG"
 echo ""
 echo "  NOTE: If you created .env from .env.example, edit it with real secrets:"
 echo "        JWT_ACCESS_SECRET, JWT_REFRESH_SECRET, CORS_ORIGIN"
+echo "  Live cutover: point the public origin at this process. Do not put"
+echo "        python -m http.server in front of it (POST → 501, no headers)."

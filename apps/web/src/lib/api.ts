@@ -45,25 +45,18 @@ export class ApiError extends Error {
     /**
      * The original error that caused this ApiError, if any.
      *
-     * Round 15 F2: when `fetchFn` rejects (network failure, CORS
-     * rejection, DNS failure, etc.), the wrapper constructs an
-     * `ApiError(0, "NETWORK_ERROR", ...)`. The original `TypeError`
-     * or other thrown value is preserved on `cause` (ES2022) for
-     * diagnostic purposes — operators can inspect it via
+     * When `fetchFn` rejects (network failure, CORS rejection, DNS
+     * failure, etc.) the wrapper constructs an `ApiError(0, "NETWORK_ERROR",
+     * ...)`. The original `TypeError` or other thrown value is preserved on
+     * `cause` (ES2022) for diagnostics — operators can inspect it via
      * `error.cause` without losing the friendly user-facing message.
      *
-     * The 5th positional arg is intentionally optional — existing
-     * callers (which pass 4 args) are unaffected.
-     *
-     * Implementation note: assigned via index access (`this.cause =
-     * cause`) instead of `super(message, { cause })` because the
-     * 2-arg `Error` constructor signature is part of the ES2022 lib
-     * (`lib.es2022.error.d.ts`), and `apps/web/tsconfig.json`
-     * currently targets `lib: ["ES2020", ...]`. The `cause` property
-     * itself exists at runtime in all modern engines (Node 16.9+,
-     * Chrome 93+, Firefox 91+, Safari 15+), so the index assignment
-     * works at runtime without changing the tsconfig lib. The cast
-     * `Error & { cause?: unknown }` is the standard workaround.
+     * Assigned via index access (`this.cause = cause`) instead of
+     * `super(message, { cause })` because `apps/web/tsconfig.json`
+     * currently targets `lib: ["ES2020", ...]`, where the 2-arg `Error`
+     * constructor's `cause` option isn't in the lib types. The property
+     * exists at runtime in all modern engines, so the index assignment
+     * works without changing the tsconfig lib.
      */
     cause?: unknown
   ) {
@@ -73,8 +66,8 @@ export class ApiError extends Error {
     this.code = code;
     this.requestId = requestId;
     if (cause !== undefined) {
-      // Assign via index access — the property exists at runtime, but
-      // the ES2020 lib type defs don't expose it on the constructor.
+      // Assign via index access — the property exists at runtime, but the
+      // ES2020 lib type defs don't expose it on the constructor.
       (this as Error & { cause?: unknown }).cause = cause;
     }
   }
@@ -84,9 +77,9 @@ export class ApiError extends Error {
  * User-facing message shown when `fetchFn` rejects (network failure,
  * CORS rejection, DNS failure, server unreachable, etc.).
  *
- * Round 15 F2. The raw browser error is `TypeError("Failed to fetch")`
- * — meaningless to a non-engineer. This friendly message tells the
- * user what happened and what to do next.
+ * Round 15 F2 (restored this round): the raw browser error is
+ * `TypeError("Failed to fetch")` — meaningless to a non-engineer. This
+ * friendly message tells the user what happened and what to do next.
  */
 export const NETWORK_ERROR_MESSAGE =
   "Could not reach the embers server. Please try again later.";
@@ -269,11 +262,35 @@ export interface Notification {
 
 // --- Internal helpers --------------------------------------------------------
 
+/**
+ * Resolve the API base URL.
+ *
+ * Round 16: a production build that still defaulted to
+ * `http://localhost:4000` made live login surface "Failed to fetch"
+ * (the browser called the visitor's own machine). Production now
+ * defaults to same-origin (`""`) so `/api/*` and `/health` hit the
+ * host that served the SPA — which is Fastify when `STATIC_DIR` is set.
+ * Vite dev still defaults to `http://localhost:4000`. An explicit
+ * `VITE_API_URL` always wins.
+ *
+ * Exported so the decision is unit-testable without a Vite production
+ * build (the `import.meta.env.PROD` flag is baked in at compile time).
+ */
+export function resolveApiBaseUrl(
+  env: { PROD?: boolean; VITE_API_URL?: string } = {}
+): string {
+  if (env.VITE_API_URL) return env.VITE_API_URL;
+  if (env.PROD) return "";
+  return "http://localhost:4000";
+}
+
 function defaultBaseUrl(): string {
   // Vite injects import.meta.env at build time. The cast keeps this file
   // typecheck-clean even when consumed outside Vite (e.g. unit tests).
-  const env = (import.meta as unknown as { env?: Record<string, string> }).env;
-  return env?.VITE_API_URL ?? "http://localhost:4000";
+  const env = (import.meta as unknown as {
+    env?: { PROD?: boolean; VITE_API_URL?: string };
+  }).env;
+  return resolveApiBaseUrl(env ?? {});
 }
 
 interface ServerErrorBody {
@@ -334,18 +351,17 @@ export function createApiClient(options: ApiClientOptions = {}) {
     const token = getToken();
     if (token) headers.Authorization = `Bearer ${token}`;
 
-    // Round 15 F2: wrap fetchFn in a try/catch that normalizes network
-    // errors (TypeError "Failed to fetch", generic Error, etc.) to a
-    // uniform `ApiError(0, "NETWORK_ERROR", friendlyMessage, undefined, cause)`.
-    // Without this, the raw browser error propagates up and the UI
-    // surfaces "Failed to fetch" — meaningless to a non-engineer. The
-    // original error is preserved on `cause` (ES2022) for diagnostics.
+    // Round 16: forward the HttpOnly refresh cookie. Default fetch
+    // credentials ("same-origin") drop the cookie on the Vite-dev
+    // cross-origin hop (5173 → 4000). "include" is required there
+    // and is a no-op extra on same-origin production.
     let res: Response;
     try {
       res = await fetchFn(url, {
         method,
         headers,
         body: body === undefined ? undefined : JSON.stringify(body),
+        credentials: "include",
       });
     } catch (err) {
       throw new ApiError(
@@ -398,15 +414,13 @@ export function createApiClient(options: ApiClientOptions = {}) {
           "Content-Type": "application/json",
           Authorization: `Bearer ${refreshedToken}`,
         };
-        // Round 15 F2: the retry fetch can ALSO fail with a network
-        // error (e.g., the server died between the refresh and the
-        // retry). Wrap it with the same normalizer.
         let retryRes: Response;
         try {
           retryRes = await fetchFn(url, {
             method,
             headers: retryHeaders,
             body: body === undefined ? undefined : JSON.stringify(body),
+            credentials: "include",
           });
         } catch (err) {
           throw new ApiError(

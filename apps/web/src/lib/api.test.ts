@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { createApiClient, ApiError } from "./api";
+import { createApiClient, ApiError, resolveApiBaseUrl } from "./api";
 
 /**
  * TDD test suite for the foundational API client (Round 5).
@@ -41,6 +41,34 @@ describe("createApiClient — constructor", () => {
       "http://test-host/health",
       expect.objectContaining({ method: "GET" })
     );
+  });
+
+  it("sends credentials: include so the HttpOnly refresh cookie is forwarded", async () => {
+    // Round 15: without this, cross-origin Vite-dev (5173 → 4000) and
+    // same-origin production refresh both fail to send embers_refresh.
+    const fetchMock = mockFetch({ status: 200, body: { status: "ok" } });
+    const api = createApiClient({ baseUrl: "http://test", fetch: fetchMock });
+    await api.health();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://test/health",
+      expect.objectContaining({ credentials: "include" })
+    );
+  });
+});
+
+describe("resolveApiBaseUrl (Round 15 — same-origin production default)", () => {
+  it("defaults to the Fastify dev origin when not in a production build", () => {
+    expect(resolveApiBaseUrl({})).toBe("http://localhost:4000");
+  });
+
+  it("uses same-origin (empty string) in a production build", () => {
+    expect(resolveApiBaseUrl({ PROD: true })).toBe("");
+  });
+
+  it("honours an explicit VITE_API_URL over the production default", () => {
+    expect(
+      resolveApiBaseUrl({ PROD: true, VITE_API_URL: "https://api.example.com" })
+    ).toBe("https://api.example.com");
   });
 });
 
@@ -358,7 +386,7 @@ describe("error handling", () => {
     });
   });
 
-  // ─── Round 15 F2 — network error normalization ──────────────────
+  // ─── Round 15 F2 — network error normalization (restored this round) ──
 
   it("R15-F2a: network TypeError from fetch is normalized to ApiError(0, NETWORK_ERROR)", async () => {
     // Browsers throw TypeError("Failed to fetch") when the request never

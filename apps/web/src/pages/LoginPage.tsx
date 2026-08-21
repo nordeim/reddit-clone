@@ -1,23 +1,31 @@
 import { useState, type FormEvent } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
+
+/**
+ * Only allow in-app paths as a post-login destination.
+ * Rejects protocol-relative (`//evil`) and absolute (`https://…`) URLs
+ * so `state.from` cannot be used as an open redirect.
+ */
+export function safePostLoginPath(from: unknown): string {
+  if (typeof from !== "string") return "/";
+  if (!from.startsWith("/")) return "/";
+  if (from.startsWith("//")) return "/";
+  if (from.startsWith("/\\")) return "/";
+  return from;
+}
 
 /**
  * LoginPage (Round 6, B18.4) — the entry point for real authentication.
  *
  * Renders a username + password form, calls `useAuth().login` on submit,
- * shows loading + error states, and navigates to "/" on success.
+ * shows loading + error states, and navigates to `state.from` (or "/")
+ * on success. `state.from` is sanitized against open redirects.
  *
  * The page is rendered at `/login` (added to App.tsx in the same slice)
  * and lives outside `AppShell` so it has no sidebar/navbar. The
  * HashRouter makes the URL `#/login` — B17 will switch to BrowserRouter
  * + clean `/login` in a future round.
- *
- * Round 15 F1: when `<RequireAuth>` redirects an anonymous user here,
- * it preserves the intended destination via `state: { from: pathname }`.
- * LoginPage reads `location.state?.from`, validates it is a relative
- * path (open-redirect guard), and navigates there on success. Falls
- * back to `/` when `state.from` is missing, invalid, or absolute.
  *
  * Accessibility (WCAG 2.2 AA):
  *   - Each input has a `<label htmlFor>` pointing at its `id`.
@@ -27,37 +35,6 @@ import { useAuth } from "../auth/AuthProvider";
  *
  * @packageDocumentation
  */
-
-/**
- * Validate that a `state.from` value is safe to navigate to.
- *
- * Returns the validated string when ALL of the following are true:
- *   - It is a string.
- *   - It starts with `/`.
- *   - It does NOT start with `//` (protocol-relative URL — would
- *     navigate to `evil.com/path`).
- *   - It does NOT start with `/\` (some browsers normalize backslashes
- *     to forward slashes — reject defensively).
- *
- * Returns `null` for any other value — callers fall back to `/`.
- *
- * Open-redirect background: `react-router-dom`'s `navigate(to, ...)` and
- * `<Navigate to={to} />` accept strings, location objects, or
- * `{ pathname }` objects. If `to` is a full URL string like
- * `https://evil.example.com`, react-router will issue a full page
- * navigation (or a `location.assign`), which is an open-redirect
- * vulnerability when the input is attacker-controlled. The `state.from`
- * value comes from `<RequireAuth>`'s `state: { from: location.pathname }`
- * — which is always a path — but a hostile link can land the user on
- * `/login` with crafted state. The guard makes the value safe.
- */
-function validateFromPath(raw: unknown): string | null {
-  if (typeof raw !== "string") return null;
-  if (!raw.startsWith("/")) return null;
-  if (raw.startsWith("//")) return null;
-  if (raw.startsWith("/\\")) return null;
-  return raw;
-}
 
 export function LoginPage() {
   const auth = useAuth();
@@ -79,13 +56,11 @@ export function LoginPage() {
     setError(null);
     try {
       await auth.login(username, password);
-      // Round 15 F1: redirect back to the page the user was trying to
-      // reach (preserved by <RequireAuth> via state.from), with an
-      // open-redirect guard. Fall back to / when state.from is missing
-      // or unsafe.
-      const fromState = (location.state as { from?: unknown } | null)?.from;
-      const safeFrom = validateFromPath(fromState);
-      navigate(safeFrom ?? "/", { replace: true });
+      const from =
+        location.state && typeof location.state === "object"
+          ? (location.state as { from?: unknown }).from
+          : undefined;
+      navigate(safePostLoginPath(from), { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setSubmitting(false);
@@ -166,6 +141,15 @@ export function LoginPage() {
         <p className="mt-4 text-center text-sm text-zinc-500 dark:text-zinc-400">
           Demo credentials: <code className="font-mono">you</code> /{" "}
           <code className="font-mono">embers-demo</code>
+        </p>
+        <p className="mt-2 text-center text-sm text-zinc-500 dark:text-zinc-400">
+          New here?{" "}
+          <Link
+            to="/register"
+            className="font-medium text-orange-600 hover:text-orange-700 dark:text-orange-500 dark:hover:text-orange-400"
+          >
+            Create an account
+          </Link>
         </p>
       </div>
     </main>

@@ -3,7 +3,7 @@
 **Classification:** Internal Engineering Reference
 **Status:** DEFINITIVE, PRODUCTION-LOCKED BLUEPRINT
 **Companion Documents:** `AGENTS.md` (deep codebase reference), `CLAUDE.md` (daily implementation guide)
-**Last Updated:** 2026-08-18 (Round 14 — knowledge distillation: audited the entire codebase and distilled all patterns, anti-patterns, lessons, and pitfalls from 13 rounds of remediation into `reddit-clone_SKILL.md` at the repo root; no code changes; test count unchanged at 467)
+**Last Updated:** 2026-08-19 (Round 16 — live-E2E + production-origin remediations: same-origin API default, Fastify `STATIC_DIR` SPA serving, LoginPage `state.from`, unified production start; test count 467 → 485)
 **Audience:** Senior Engineers, Tech Leads, DevOps, and Onboarding Engineers
 **Rule:** Every architectural decision in this document traces to a specific rationale.
            Nothing is here "because it's popular."
@@ -498,7 +498,7 @@ Dark mode: Custom variant `@custom-variant dark (&:where(.dark, .dark *));` — 
 
 | Rule | Enforcement |
 |---|---|
-| No user input to server | No server exists — no injection surface |
+| No user HTML to the server | All content is rendered via JSX text nodes. API input is Zod-validated. There **is** a Fastify server (`apps/server`) — this row used to claim "No server exists" and was corrected in Round 15. |
 | No `dangerouslySetInnerHTML` | All content rendered via JSX text nodes |
 | No `eval` or dynamic code | Zero dynamic code execution |
 | Clipboard access is read-only | `navigator.clipboard.writeText()` only on user click (share button) |
@@ -543,7 +543,7 @@ Dark mode: Custom variant `@custom-variant dark (&:where(.dark, .dark *));` — 
 | Linter | **ESLint 9 flat config** (`eslint.config.mjs` at repo root, added Round 4 — 0 errors, 0 warnings) |
 | Coverage | **`@vitest/coverage-v8`** in `@embers/server` (added Round 5 — informational, no CI gate yet) |
 | Typechecker | `npm run typecheck` (alias for `tsc --noEmit` across all 4 workspaces) |
-| Total tests | **453 vitest** (web=262, server=95, shared=67, db=29) + **18 Playwright E2E** (9 smoke + 9 auth lifecycle) |
+| Total tests | **482 vitest** (web=278, server=103, shared=70, db=31) + **18 Playwright E2E** (9 smoke + 9 auth lifecycle) |
 
 ### 7.2 Test layout
 
@@ -591,7 +591,7 @@ src/
 The project relies on:
 
 1. **TypeScript strict mode** — catches type errors, unused variables, fallthrough cases
-2. **Vitest unit + integration tests** — 262 tests across 17 files covering pure utilities, store logic, the foundational API client (Round 5), the AuthProvider context + 401 refresh-and-retry (Round 6), the LoginPage + RegisterPage forms + auth-aware Navbar + RequireAuth route guard (Round 7), and key components (web) + 95 server tests + 67 shared tests + 29 db tests = **453 total**
+2. **Vitest unit + integration tests** — 278 tests across 19 files covering pure utilities, store logic, the foundational API client (Round 5 + 15), the AuthProvider context + 401 refresh-and-retry (Round 6), the LoginPage + RegisterPage forms + auth-aware Navbar + RequireAuth route guard (Round 7), and key components (web) + 103 server tests + 70 shared tests + 31 db tests = **482 total**
 3. **ESLint 9 flat config** (Round 4) — 0 errors, 0 warnings across all workspaces
 4. **Playwright E2E** (Round 3 smoke + Round 7 auth lifecycle) — 18 tests covering health, register, login, feed, single post, search, communities, + the full auth lifecycle (register → login → access protected → logout → refresh revoked; 409/401/422 error paths; refresh rotation)
 5. **Manual typecheck** — `npm run typecheck` before claiming a change compiles
@@ -604,7 +604,7 @@ The project relies on:
 ```bash
 npm run lint        # ESLint flat config — 0 errors, 0 warnings (Round 4)
 npm run typecheck   # tsc --noEmit across all 4 workspaces — must pass clean
-npm test            # vitest run — all 453 tests must pass (pretest auto-builds shared+db)
+npm test            # vitest run — all 482 tests must pass (pretest auto-builds shared+db)
 npm run test:e2e    # playwright run — 18 tests must pass (9 smoke + 9 auth lifecycle)
 npm run build       # topological build — must succeed
 git ls-files | grep -E '(^|/)dist/' | wc -l   # must be 0 (no dist/ tracked)
@@ -718,7 +718,7 @@ npm run preview  # → serves dist/ on a local port
 | ~~MEDIUM~~ | ~~No linter installed~~ | ~~No enforced code style~~ | **Resolved in Round 4** — ESLint 9 flat config with `typescript-eslint` + React + react-hooks plugins |
 | LOW | Google Fonts loaded externally | Breaks when offline or blocked by CSP | Open |
 | LOW | `apps/web` and `apps/server` have separate data layers (deterministic browser generation vs. Drizzle/seeded SQLite) | Votes/saves in the browser don't sync to the backend | **By design** — frontend integration (B19–B22) deferred pending B17 build refactor |
-| LOW | LoginPage doesn't redirect back to `state.from` after login | User lands on `/` instead of the page they were trying to access | **Deferred** — `<RequireAuth>` preserves `state.from` but LoginPage always navigates to `/`. A future round can read `location.state?.from` and redirect back. |
+| LOW | LoginPage didn't redirect back to `state.from` after login | User landed on `/` instead of the page they were trying to access | **Resolved in Round 15** — LoginPage reads `location.state.from`, sanitizes it (`safePostLoginPath`), and falls back to `/` on open-redirect attempts. |
 
 ### 10.1 Resolved in the latest remediation pass
 
@@ -726,7 +726,7 @@ The following previously-open issues are now resolved (see `docs/REMEDIATION_PLA
 
 | Issue | Resolution |
 |---|---|
-| No test runner installed | Vitest + Testing Library + jsdom installed; 262 tests across 17 files (web) + 95 server + 67 shared + 29 db = 453 total |
+| No test runner installed | Vitest + Testing Library + jsdom installed; 278 tests across 19 files (web) + 103 server + 70 shared + 31 db = 482 total |
 | No `version`/`migrate` on `persist` | `schemaVersion: 1` + custom `merge` + `migrate` hook on `persist` |
 | Corrupt localStorage could crash the app | `mergePersistedState` validates every field, drops invalid entries, never throws |
 | Theme flash on reload | Synchronous inline script in `index.html` applies `.dark` before React mounts |
@@ -859,7 +859,7 @@ apply to `apps/server` and the `packages/{shared,db}` workspaces.
 ┌──────────────────────────────────────────────────────────────┐
 │                  CLIENT (Browser) — apps/web                  │
 │   React 19 SPA (unchanged from §2, runs via HashRouter +       │
-│   vite-plugin-singlefile, 262 tests passing)                  │
+│   vite-plugin-singlefile, 278 tests passing)                  │
 └──────────────────────────────────────────────────────────────┘
                               │
                               │  (frontend integration deferred — §5)
