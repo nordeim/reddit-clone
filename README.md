@@ -9,7 +9,7 @@ monorepo.
 reddit-clone/
 ├── apps/
 │   ├── web/          ← @embers/web — the original client-only React SPA
-│   │                   (HashRouter, vite-plugin-singlefile, 278 tests;
+│   │                   (HashRouter, vite-plugin-singlefile, 281 tests;
 │   │                    includes `src/lib/api.ts` foundational fetch client
 │   │                    added in Round 5, `src/auth/AuthProvider.tsx` React
 │   │                    context + `useAuth()` hook + 401 refresh-and-retry
@@ -55,7 +55,7 @@ npm run dev        --workspace @embers/server   # http://localhost:4000
 - Client: `http://localhost:5173` — the embers feed (320 posts across 18 communities, generated deterministically in-browser)
 - Server: `curl http://localhost:4000/health` → `{"status":"ok",…}`
 - Demo login (server): `POST /api/auth/login` with `{"username":"you","password":"embers-demo"}` → access token + refresh cookie
-- All tests pass: `npm test` (482 vitest + 18 Playwright E2E; plus 30 opt-in live-audit E2E — see Test Status)
+- All tests pass: `npm test` (485 vitest + 18 Playwright E2E; plus 30 opt-in live-audit E2E — see Test Status)
 
 ### Quick Start (Docker)
 
@@ -266,7 +266,7 @@ enables HSTS hardening and requires all production secrets via `loadEnv()`.
 ```bash
 npm run lint        # ESLint — 0 errors, 0 warnings
 npm run typecheck   # tsc --noEmit — all 4 workspaces clean
-npm test            # 482 vitest tests (pretest auto-builds shared + db)
+npm test            # 485 vitest tests (pretest auto-builds shared + db)
 npm run build       # topological build — all workspaces succeed
 ```
 
@@ -282,11 +282,11 @@ and `/health`. ADR-003 single-file build is still in force for the client.
 
 | Workspace | Tests | Command |
 |-----------|-------|---------|
-| `@embers/web` | 278 | `npm test --workspace @embers/web` |
+| `@embers/web` | 281 | `npm test --workspace @embers/web` |
 | `@embers/shared` | 70 | `npm test --workspace @embers/shared` |
 | `@embers/db` | 31 | `npm test --workspace @embers/db` |
 | `@embers/server` | 103 | `npm test --workspace @embers/server` |
-| **Vitest total** | **482** | `npm test --workspaces --if-present` |
+| **Vitest total** | **485** | `npm test --workspaces --if-present` |
 | E2E — local API (Playwright) | 18 | `npm run test:e2e` |
 | E2E — live audit, Round 8 (opt-in) | 12 | `LIVE_BASE_URL=… npm run test:e2e:live` |
 | E2E — extended live, Round 10 (opt-in) | 16 | `npm run test:local-prod` |
@@ -297,7 +297,7 @@ and `/health`. ADR-003 single-file build is still in force for the client.
 | Fresh-clone typecheck | 1 script | `npm run test:fresh-clone` |
 | Lint (ESLint) | 0 errors, 0 warnings | `npm run lint` |
 
-All 482 vitest tests + 18 Playwright E2E tests pass (`npm test` — do NOT
+All 485 vitest tests + 18 Playwright E2E tests pass (`npm test` — do NOT
 run `vitest run` from root; it won't discover workspace configs), ESLint is
 clean, and typecheck + build succeed as of Round 15 (2026-08-19).
 
@@ -578,8 +578,8 @@ remediation.
   - LoginPage redirects to sanitized `state.from` and links to `/register`.
   - Inline favicon; Cloudflare `_headers`; unified `start_production.sh` + Docker.
 - **Still deferred:** B17 (HashRouter/singlefile), B19–B22 (React Query), Sentry.
-- Vitest count: 467 → 482 (web 271→278, server 95→103).
-- See `docs/REMEDIATION_PLAN_ROUND_15.md`.
+- Vitest count: 467 → 485 (web 271→281, server 95→103).
+- See `docs/REMEDIATION_PLAN_ROUND_16.md`.
 
 ### How to verify the live deployment
 

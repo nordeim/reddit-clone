@@ -543,7 +543,7 @@ Dark mode: Custom variant `@custom-variant dark (&:where(.dark, .dark *));` — 
 | Linter | **ESLint 9 flat config** (`eslint.config.mjs` at repo root, added Round 4 — 0 errors, 0 warnings) |
 | Coverage | **`@vitest/coverage-v8`** in `@embers/server` (added Round 5 — informational, no CI gate yet) |
 | Typechecker | `npm run typecheck` (alias for `tsc --noEmit` across all 4 workspaces) |
-| Total tests | **482 vitest** (web=278, server=103, shared=70, db=31) + **18 Playwright E2E** (9 smoke + 9 auth lifecycle) |
+| Total tests | **485 vitest** (web=281, server=103, shared=70, db=31) + **18 Playwright E2E** (9 smoke + 9 auth lifecycle) |
 
 ### 7.2 Test layout
 
@@ -591,7 +591,7 @@ src/
 The project relies on:
 
 1. **TypeScript strict mode** — catches type errors, unused variables, fallthrough cases
-2. **Vitest unit + integration tests** — 278 tests across 19 files covering pure utilities, store logic, the foundational API client (Round 5 + 15), the AuthProvider context + 401 refresh-and-retry (Round 6), the LoginPage + RegisterPage forms + auth-aware Navbar + RequireAuth route guard (Round 7), and key components (web) + 103 server tests + 70 shared tests + 31 db tests = **482 total**
+2. **Vitest unit + integration tests** — 281 tests across 19 files covering pure utilities, store logic, the foundational API client (Round 5 + 15), the AuthProvider context + 401 refresh-and-retry (Round 6), the LoginPage + RegisterPage forms + auth-aware Navbar + RequireAuth route guard (Round 7), and key components (web) + 103 server tests + 70 shared tests + 31 db tests = **485 total**
 3. **ESLint 9 flat config** (Round 4) — 0 errors, 0 warnings across all workspaces
 4. **Playwright E2E** (Round 3 smoke + Round 7 auth lifecycle) — 18 tests covering health, register, login, feed, single post, search, communities, + the full auth lifecycle (register → login → access protected → logout → refresh revoked; 409/401/422 error paths; refresh rotation)
 5. **Manual typecheck** — `npm run typecheck` before claiming a change compiles
@@ -604,7 +604,7 @@ The project relies on:
 ```bash
 npm run lint        # ESLint flat config — 0 errors, 0 warnings (Round 4)
 npm run typecheck   # tsc --noEmit across all 4 workspaces — must pass clean
-npm test            # vitest run — all 482 tests must pass (pretest auto-builds shared+db)
+npm test            # vitest run — all 485 tests must pass (pretest auto-builds shared+db)
 npm run test:e2e    # playwright run — 18 tests must pass (9 smoke + 9 auth lifecycle)
 npm run build       # topological build — must succeed
 git ls-files | grep -E '(^|/)dist/' | wc -l   # must be 0 (no dist/ tracked)
@@ -726,7 +726,7 @@ The following previously-open issues are now resolved (see `docs/REMEDIATION_PLA
 
 | Issue | Resolution |
 |---|---|
-| No test runner installed | Vitest + Testing Library + jsdom installed; 278 tests across 19 files (web) + 103 server + 70 shared + 31 db = 482 total |
+| No test runner installed | Vitest + Testing Library + jsdom installed; 281 tests across 19 files (web) + 103 server + 70 shared + 31 db = 485 total |
 | No `version`/`migrate` on `persist` | `schemaVersion: 1` + custom `merge` + `migrate` hook on `persist` |
 | Corrupt localStorage could crash the app | `mergePersistedState` validates every field, drops invalid entries, never throws |
 | Theme flash on reload | Synchronous inline script in `index.html` applies `.dark` before React mounts |
@@ -859,7 +859,7 @@ apply to `apps/server` and the `packages/{shared,db}` workspaces.
 ┌──────────────────────────────────────────────────────────────┐
 │                  CLIENT (Browser) — apps/web                  │
 │   React 19 SPA (unchanged from §2, runs via HashRouter +       │
-│   vite-plugin-singlefile, 278 tests passing)                  │
+│   vite-plugin-singlefile, 281 tests passing)                  │
 └──────────────────────────────────────────────────────────────┘
                               │
                               │  (frontend integration deferred — §5)
