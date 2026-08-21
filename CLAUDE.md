@@ -189,7 +189,7 @@
 > same-origin production API default + `credentials: "include"`;
 > Fastify `STATIC_DIR` SPA serving; LoginPage `state.from` + register
 > link; inline favicon; unified `start_production.sh` / Docker.
-> B17 / B19–B22 / Sentry still deferred. Tests: 467 → 485
+> B17 / B19–B22 / Sentry still deferred. Tests: 473 → 485
 > (web 281, server 103, shared 70, db 31). See
 > `docs/REMEDIATION_PLAN_ROUND_16.md`.
 
@@ -410,7 +410,7 @@ Tests use **Vitest** with **Fastify's `inject()`** — no port binding needed.
 - **Skip middleware**: `skipHelmet`/`skipRateLimit` options (rate-limit auto-disabled in `NODE_ENV=test`).
 - **Auth flow**: tests log in as the seeded demo user (`you` / `embers-demo`) to get access tokens.
 - **Direct seeding**: performance tests (vote concurrency) insert users directly via Drizzle to bypass Argon2id.
-- Test files: `*.test.ts` alongside source — 8 in server, 2 in db, 3 in shared.
+- Test files: `*.test.ts` alongside source — 9 in server, 2 in db, 3 in shared.
 
 ### Pre-commit checklist
 
@@ -545,7 +545,7 @@ already cover) but is useful for ad-hoc manual checks before a release.
 **Round 6 additions (B18 — Auth Provider):**
 - New `apps/web/src/auth/AuthProvider.tsx` — React context + `useAuth()` hook.
   Holds the access token in a `useRef`, exposes `{ user, status, error, login,
-  logout }`. The api client factory signature is `(opts) => AuthApiClient` so
+  logout, register }` (widened in Round 7 to full server `AuthUser` shape). The api client factory signature is `(opts) => AuthApiClient` so
   the AuthProvider can pass the live `getToken` / `tryRefreshOn401` /
   `onTokenRefresh` accessors; `main.tsx` wires it to `createApiClient`.
 - New `apps/web/src/auth/AuthProvider.test.tsx` — 20 TDD tests covering
@@ -680,7 +680,7 @@ Custom variant, not v3 `darkMode: 'class'`:
 ```
 reddit-clone/
 ├── apps/
-│   ├── web/                 ← @embers/web (React SPA, Vite, 277 tests)
+│   ├── web/                 ← @embers/web (React SPA, Vite, 281 tests)
 │   │   └── src/             # See AGENTS.md for full web tree.
 │   │                        # Note: `lib/api.ts` (Round 5) is the foundational
 │   │                        # fetch-based client, wired into the React tree via
@@ -727,7 +727,9 @@ reddit-clone/
 | `/comments/:postId` | PostPage |
 | `/u/:username` | ProfilePage |
 | `/search` | SearchPage |
-| `/notifications` | NotificationsPage |
+| `/notifications` | NotificationsPage (protected — `<RequireAuth>` → redirects to `/login` with `state.from`) |
+| `/login` | LoginPage (outside `AppShell`, sanitized `state.from` redirect) |
+| `/register` | RegisterPage (outside `AppShell`) |
 | `*` | NotFoundPage |
 
 ### Server API
@@ -791,19 +793,19 @@ This is why vote keys are namespaced (`post:` / `comment:`) — to avoid collisi
 
 The embers SPA is deployed at **`https://reddit.jesspete.shop/`**.
 
-### Known gaps (re-audited 2026-08-10, see `docs/REMEDIATION_PLAN_ROUND_8.md` + `docs/REMEDIATION_PLAN_ROUND_9.md`)
+### Known gaps (re-audited 2026-08-19, see `docs/REMEDIATION_PLAN_ROUND_8.md` + `docs/REMEDIATION_PLAN_ROUND_9.md` + `docs/REMEDIATION_PLAN_ROUND_16.md`; in-repo fixes landed in R15+R16, live cutover still operator-side)
 
 | ID | Severity | Status | Gap | Operator fix |
 |----|----------|--------|-----|--------------|
 | LIVE-CRIT-1 | Critical | **FIXED** (2026-08-10) | The live site was serving the Vite dev server. | Now resolved -- the live site serves a production build (no `/@react-refresh` or `/@vite/client`). |
-| LIVE-CRIT-2 | Critical | **Still broken** | The Fastify backend is **not reachable** from the live URL. All `/api/*` and `/health` return HTTP 404 or 501. | Start the Fastify backend and configure the reverse proxy to route `/api/*` and `/health` to port 5000. |
-| LIVE-CRIT-3 | Critical | **Still broken** | No production security headers (CSP, HSTS, X-Content-Type-Options, X-Frame-Options, Referrer-Policy all absent). | Add security headers at the CDN/reverse-proxy layer. |
-| LIVE-CRIT-4 | Critical | **New (Round 9)** | `/api/auth/login` returns HTTP 501 (Not Implemented) instead of 404 or 200. | Investigate the reverse proxy config -- the `/api/auth/*` route may be misconfigured. |
-| LIVE-HIGH-2 | High | **Still broken** | `/api/*` requests receive a Python 404 error page (not the SPA `index.html`) instead of JSON, masking API failures. | Configure the reverse proxy to return 502/503 when the backend is down. |
+| LIVE-CRIT-2 | Critical | **Still broken on live** (in-repo fix in R15+R16) | Public origin is `python -m http.server` → `/api/*`, `/health` return 404. | Point public origin at Fastify with `STATIC_DIR` (`./start_production.sh` or Docker). Re-verified 2026-08-19. |
+| LIVE-CRIT-3 | Critical | **Still broken on live** (in-repo fix in R15+R16) | No security headers (CSP, HSTS, X-Content-Type-Options, X-Frame-Options, Referrer-Policy all absent) — `python -m http.server` emits none. | Helmet emits them when Fastify is origin; `apps/web/public/_headers` covers static-host CDN. Re-verified 2026-08-19. |
+| LIVE-CRIT-4 | Critical | **Still broken on live** (root cause: Python `http.server`) | `POST /api/auth/login` returns 501 “Unsupported method ('POST')”. | Stop using `python -m http.server` on public origin; Fastify handles POST. Re-verified 2026-08-19. |
+| LIVE-HIGH-2 | High | **Still broken on live** | `/api/*` returns Python 404 HTML instead of JSON. | Same cutover as LIVE-CRIT-2. |
 
 ### SECRET ROTATION REQUIRED (R9.1, 2026-08-10)
 
-A `.env` file containing real JWT signing secrets was committed to git history (commits `89f1012` + `526a836`). The secrets have been removed from tracking but **remain in git history**. **Rotate immediately:**
+A `.env` file containing real JWT signing secrets was committed to git history (commits `89f1012` + `526a836` + `e09e425` — see `docs/SECRET_ROTATION_GUIDE.md`). The secrets have been removed from tracking but **remain in git history**. **Rotate immediately:**
 
 1. Generate new secrets: `openssl rand -hex 32` (run twice -- use a DIFFERENT value for each)
 2. Update `.env` (gitignored): set `JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET`

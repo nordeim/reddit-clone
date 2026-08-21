@@ -121,7 +121,7 @@ Probes against `https://reddit.jesspete.shop/` (Cloudflare in front):
 
 ### Phase C — Static-host hardening (operator-side, in-repo)
 
-- [ ] **C1.** `apps/web/public/_headers` (Cloudflare Pages / similar) with CSP, HSTS, XCTO, XFO, Referrer-Policy.
+- [x] **C1.** `apps/web/public/_headers` (Cloudflare Pages / similar) with CSP, HSTS, XCTO, XFO, Referrer-Policy — implemented: `apps/web/public/_headers` (841 B) shipped to `dist/_headers`; Vite copies it (closes LIVE-CRIT-3 for static-host deploys).
 - [ ] **C2.** Document the operator cutover: point the live origin at Fastify (or Docker) instead of `python -m http.server`.
 
 ### Phase D — Docs (after code is green)

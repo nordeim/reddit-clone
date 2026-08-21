@@ -270,10 +270,6 @@ npm test            # 485 vitest tests (pretest auto-builds shared + db)
 npm run build       # topological build — all workspaces succeed
 ```
 
-The Dockerfile is a multi-stage Node 20 build that produces a production image
-for `@embers/server` only. The client SPA is not containerised — it is built
-separately via `npm run build --workspace @embers/web` and served from a static
-host (ADR-003 single-file build is still in force for the client).
 The Dockerfile is a multi-stage Node 20 build. Round 15 copies `apps/web/dist`
 into the image and sets `STATIC_DIR` so **one container** serves `/`, `/api/*`,
 and `/health`. ADR-003 single-file build is still in force for the client.
@@ -299,7 +295,7 @@ and `/health`. ADR-003 single-file build is still in force for the client.
 
 All 485 vitest tests + 18 Playwright E2E tests pass (`npm test` — do NOT
 run `vitest run` from root; it won't discover workspace configs), ESLint is
-clean, and typecheck + build succeed as of Round 15 (2026-08-19).
+clean, and typecheck + build succeed as of Round 16 (2026-08-19).
 
 > **Run tests correctly:** always use `npm test` (which triggers `pretest`)
 to build `@embers/shared` + `@embers/db` first via `--workspaces`). Running
@@ -338,19 +334,19 @@ B17 / B19--B22 status is unchanged.
 
 The embers SPA is deployed at **`https://reddit.jesspete.shop/`**.
 
-### Known gaps (re-audited 2026-08-10, see `docs/REMEDIATION_PLAN_ROUND_8.md` + `docs/REMEDIATION_PLAN_ROUND_9.md`)
+### Known gaps (re-audited 2026-08-19, see `docs/REMEDIATION_PLAN_ROUND_8.md` + `docs/REMEDIATION_PLAN_ROUND_9.md` + `docs/REMEDIATION_PLAN_ROUND_16.md`; in-repo fixes in R15+R16, live cutover still operator-side)
 
 | ID | Severity | Status | Gap | Operator fix |
 |----|----------|--------|-----|--------------|
 | LIVE-CRIT-1 | Critical | **FIXED** (2026-08-10) | The live site was serving the Vite dev server. | Now resolved -- the live site serves a 537 KB production build (no `/@react-refresh` or `/@vite/client` in the HTML). Verified by `e2e/live.spec.ts` test #1. |
-| LIVE-CRIT-2 | Critical | **Still broken on live** (in-repo remediations in R15) | The public origin is `python -m http.server`. `/api/posts`, `/api/communities`, `/api/search`, `/health` return HTTP 404 Python HTML. | Point the public origin at Fastify with `STATIC_DIR` set (`./start_production.sh` or `docker compose up`). Re-verified 2026-08-19. |
-| LIVE-CRIT-3 | Critical | **Still broken on live** (in-repo remediations in R15) | No production security headers (CSP, HSTS, XCTO, XFO, Referrer-Policy all absent). | Helmet emits them when Fastify is the origin. `apps/web/public/_headers` covers a static-only CDN. Re-verified 2026-08-19. |
+| LIVE-CRIT-2 | Critical | **Still broken on live** (in-repo remediations in R15+R16) | The public origin is `python -m http.server`. `/api/posts`, `/api/communities`, `/api/search`, `/health` return HTTP 404 Python HTML. | Point the public origin at Fastify with `STATIC_DIR` set (`./start_production.sh` or `docker compose up`). Re-verified 2026-08-19. |
+| LIVE-CRIT-3 | Critical | **Still broken on live** (in-repo remediations in R15+R16) | No production security headers (CSP, HSTS, XCTO, XFO, Referrer-Policy all absent). | Helmet emits them when Fastify is the origin. `apps/web/public/_headers` covers a static-only CDN. Re-verified 2026-08-19. |
 | LIVE-CRIT-4 | Critical | **Still broken on live** (root cause: Python http.server) | `POST /api/auth/login` returns HTTP 501 "Unsupported method ('POST')". | Stop using `python -m http.server` on the public origin. Fastify handles POST. Re-verified 2026-08-19. |
 | LIVE-HIGH-2 | High | **Still broken on live** | `/api/*` requests receive a Python 404 error page instead of JSON. | Same cutover as LIVE-CRIT-2. |
 
 ### SECRET ROTATION REQUIRED (R9.1, 2026-08-10)
 
-**A `.env` file containing real JWT signing secrets was committed to git history** (commits `89f1012` and `526a836`) and pushed to GitHub. The secrets have been removed from the current commit (R9.1), but **they remain in the git history**.
+**A `.env` file containing real JWT signing secrets was committed to git history** (commits `89f1012`, `526a836` and `e09e425` — see `docs/SECRET_ROTATION_GUIDE.md`) and pushed to GitHub. The secrets have been removed from the current commit (R9.1, re-removed in R10), but **they remain in the git history**.
 
 **The operator MUST rotate the following secrets immediately:**
 - `JWT_ACCESS_SECRET` (was: a 64-hex-char value, committed in plain text)
@@ -578,7 +574,7 @@ remediation.
   - LoginPage redirects to sanitized `state.from` and links to `/register`.
   - Inline favicon; Cloudflare `_headers`; unified `start_production.sh` + Docker.
 - **Still deferred:** B17 (HashRouter/singlefile), B19–B22 (React Query), Sentry.
-- Vitest count: 467 → 485 (web 271→281, server 95→103).
+- Vitest count: 473 → 485 (web 277→281, server 95→103).
 - See `docs/REMEDIATION_PLAN_ROUND_16.md`.
 
 ### How to verify the live deployment
@@ -677,7 +673,7 @@ TDD breakdown + the rationale for deferring B17 (build refactor) again.
 | `docs/IMPLEMENTATION_PLAN.md` | Original greenfield plan that produced `apps/web` |
 | `docs/MANUAL_QA.md` | Manual QA matrix for the client SPA |
 
-> **Additional docs:** `REMEDIATION_PLAN_ROUND_9.md`–`REMEDIATION_PLAN_ROUND_15.md`, `SECRET_ROTATION_GUIDE.md`, `audit_report_1.md`–`audit_report_4.md`, and `session_1.md`–`session_15.md` also live in `docs/` (Round changelogs, the security-incident guide, audit reports, and session worklogs).
+> **Additional docs:** `REMEDIATION_PLAN_ROUND_9.md`–`REMEDIATION_PLAN_ROUND_16.md`, `SECRET_ROTATION_GUIDE.md`, `audit_report_1.md`–`audit_report_5.md`, and `session_1.md`–`session_16.md` also live in `docs/` (Round changelogs, the security-incident guide, audit reports, and session worklogs).
 
 ## License
 

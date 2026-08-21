@@ -297,7 +297,7 @@
 > the public origin is `python -m http.server` (GET /api/* → 404, POST
 > /api/auth/login → 501, no Helmet headers). Login surfaced **"Failed to
 > fetch"** because the production bundle defaulted to
-> `http://localhost:4000`. Round 15: (1) production API client is
+> `http://localhost:4000`. Round 16: (1) production API client is
 > same-origin (`resolveApiBaseUrl({ PROD: true }) === ""`) and all
 > fetches send `credentials: "include"`; (2) Fastify optionally serves
 > the SPA via `STATIC_DIR` (`@fastify/static`, `wildcard: false`) so one
@@ -306,7 +306,7 @@
 > tradeoff); (4) LoginPage redirects to sanitized `state.from` and links
 > to `/register`; (5) inline favicon; (6) `start_production.sh` + Docker
 > no longer start Python http.server. B17 / B19–B22 / Sentry remain
-> deferred. Test count: 467 → 485 (web 271→281, server 95→103). See
+> deferred. Test count: 473 → 485 (web 277→281, server 95→103). See
 > `docs/REMEDIATION_PLAN_ROUND_16.md`.
 
 ---
@@ -388,7 +388,8 @@ The server follows a **composition root** pattern — `buildApp(opts)` in `src/a
 5. **requestId** — assigns `req.id` before error handler uses it
 6. **auth** — registers `app.authenticate` decorator
 7. **routes** — health + (when `db` provided) all API routes
-8. **errorHandler** — last, so it can wrap everything
+8. **static** — optional SPA (when `STATIC_DIR` set, `wildcard: false`, after routes; does not shadow `/api/*` or `/health`)
+9. **errorHandler** — last, so it can wrap everything
 
 **Lazy route registration:** API routes (auth, posts, communities, votes, comments, search, notifications) are only registered when `db` + `rawDb` are passed to `buildApp()`. Without them, only health + error handler are registered (used by health tests).
 
@@ -446,7 +447,7 @@ The server follows a **composition root** pattern — `buildApp(opts)` in `src/a
 - `buildApp({ env, db, rawDb })` wires repositories + routes for integration tests
 - **Helmet/rate-limit** can be skipped via `skipHelmet`/`skipRateLimit` options (rate-limit auto-disabled in `NODE_ENV=test`)
 - **Auth tests** use the seeded demo user; **vote concurrency tests** seed 100 users directly via Drizzle insert (bypassing Argon2id for speed)
-- Test files: 8 in `apps/server/src/` (5 in `routes/`, 2 in `auth/`, 1 `config.test.ts` in root), 2 in `packages/db/src/`, 3 in `packages/shared/src/`, 19 in `apps/web/src/` (including `lib/api.test.ts` from Round 5, `auth/AuthProvider.test.tsx` + `auth/RequireAuth.test.tsx` from Rounds 6-7, `pages/LoginPage.test.tsx` from Round 6, `pages/RegisterPage.test.tsx` + `components/layout/Navbar.test.tsx` from Round 7, `pages/PostPage.test.tsx` + `pages/NotFoundPage.test.tsx` from Round 10), 5 E2E specs (`e2e/smoke.spec.ts` + `e2e/auth.spec.ts` + `e2e/live.spec.ts` from Round 8 + `e2e/live_extended.spec.ts` + `e2e/repro_r10_postpage.spec.ts` from Round 10)
+- Test files: 9 in `apps/server/src/` (6 in `routes/`, 2 in `auth/`, 1 `config.test.ts` in root), 2 in `packages/db/src/`, 3 in `packages/shared/src/`, 19 in `apps/web/src/` (including `lib/api.test.ts` from Round 5, `auth/AuthProvider.test.tsx` + `auth/RequireAuth.test.tsx` from Rounds 6-7, `pages/LoginPage.test.tsx` from Round 6, `pages/RegisterPage.test.tsx` + `components/layout/Navbar.test.tsx` from Round 7, `pages/PostPage.test.tsx` + `pages/NotFoundPage.test.tsx` from Round 10), 5 E2E specs (`e2e/smoke.spec.ts` + `e2e/auth.spec.ts` + `e2e/live.spec.ts` from Round 8 + `e2e/live_extended.spec.ts` + `e2e/repro_r10_postpage.spec.ts` from Round 10)
 - **Total vitest count: 485** = 103 (server) + 70 (shared) + 31 (db) + 281 (web). The previously documented total of 428 (Round 6) was superseded when Round 7 added 25 new web tests (11 RegisterPage + 8 Navbar + 5 RequireAuth + 1 api register-displayName) to reach 453; Round 10 added 9 new web tests (3 PostPage + 4 NotFoundPage + 1 Navbar min-w-0 + 1 RegisterPage mismatch + 1 RegisterPage regression - 1 replaced alert-on-mismatch test = net +9) to reach 462; Round 11 added 4 new tests (1 db performance-index + 3 shared `registerResponseSchema`) to reach 466; Round 13 added 1 new db test (`backupDb` online backup) to reach 467. Round 8 did not add vitest tests — it silenced 6 React `act()` warnings in `LoginPage` + `RegisterPage` tests. Round 12 was a pure rename + hygiene round (no test count change). Round 15 added 6 tests (web +6: 3 LoginPage state.from + 3 api NETWORK_ERROR) to reach 473 (web 277). Round 16 added 12 tests (web +4: 3 `resolveApiBaseUrl` + 1 `credentials: include`; server +8: 1 `STATIC_DIR` config + 1 CSP-when-STATIC_DIR + 6 static-serving) to reach 485 (web 281, server 103). **E2E: 18 local** (9 smoke + 9 auth lifecycle, added in Round 7) + **12 live-audit** (Round 8, opt-in via `LIVE_BASE_URL`) + **16 extended-live-audit** (Round 10, opt-in via `LIVE_BASE_URL` against the live site OR `PROD_BASE_URL` against a local prod build) + **2 R10 regression guard** (Round 10, opt-in via `PROD_BASE_URL`). Live re-audit 2026-08-19: 27 passed, 1 skipped.
 
 ### Backend Pitfalls

@@ -7,8 +7,8 @@
 #   docker compose down            # stop + remove container (volume persists)
 #   docker compose logs -f         # tail logs
 #
-# The client SPA is NOT containerised here — it is built separately via
-# `npm run build --workspace @embers/web` and served from a static host.
+# The client SPA is built in the Dockerfile (COPY apps/web/dist →
+# /app/apps/web/dist) and served via STATIC_DIR — Round 15 unified origin.
 # See docs/REMEDIATION_PLAN.md §4 (ADR-003 single-file build is still in force).
 
 services:

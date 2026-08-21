@@ -10,7 +10,7 @@ description: >
   to the embers codebase.
 version: 1.1.0
 last_updated: 2026-08-19
-project_state: 473 vitest tests (web 277 + server 95 + shared 70 + db 31), 18 local E2E, 8 CI gates, 14 prod-readiness unit tests
+project_state: 485 vitest tests (web 281 + server 103 + shared 70 + db 31), 18 local E2E, 8 CI gates, 14 prod-readiness unit tests
 ---
 
 # reddit-clone SKILL — Engineering Reference for Full-Stack TypeScript Monorepos
@@ -513,7 +513,7 @@ The backend mirrors the client's data using:
 ```bash
 npm run lint                    # 0 errors, 0 warnings
 npm run typecheck               # all 4 workspaces clean (pretypecheck builds shared+db first)
-npm test --workspaces --if-present  # 467/467 vitest tests pass
+npm test --workspaces --if-present  # 485 vitest tests pass
 npm run test:plan-alignment     # REMEDIATION_PLAN.md has no forbidden tokens
 npm run test:build              # dist/index.html is a valid production build (no Vite dev modules)
 npm run test:no-secrets         # no .env / env.bak tracked
@@ -553,7 +553,7 @@ npm run test:e2e                # 18 local Playwright tests pass (9 smoke + 9 au
 - **How to avoid:** Run a Mode-C audit (review existing code without fixing) before every major release. Validate every documentation claim against the actual source file at the exact line number.
 
 ### Lesson 2: TDD prevents regression
-- **What happened:** Every code change in Rounds 11–13 followed RED → GREEN → REFACTOR. The failing test was written BEFORE the implementation. Zero regressions across 467 tests.
+- **What happened:** Every code change in Rounds 11–13 followed RED → GREEN → REFACTOR. The failing test was written BEFORE the implementation. Zero regressions across 485 tests.
 - **Why it mattered:** When the migration `0001_add_performance_indexes.sql` was first written without `--> statement-breakpoint`, the test caught it immediately (RED). When the schema rename in Round 12 was applied, the test suite confirmed zero downstream breakage in minutes.
 - **How to avoid:** Never write implementation without a failing test first. Even for "trivial" changes like a rename — the test verifies the blast radius.
 
@@ -1157,6 +1157,7 @@ export interface Env {
 | 13 | 2026-08-13 | Self-scoped infrastructure + type-safety (3 deliverables) | 467 | F1 (backupDb), F2 (type drift detection), F3 (14 checkboxes ticked) |
 | 14 | 2026-08-18 | Knowledge distillation — distilled 13 rounds into reddit-clone_SKILL.md | 467 | No code changes; 21-section SKILL.md created |
 | 15 | 2026-08-19 | Live-audit-driven codebase + doc remediation (6 findings) | 473 vitest + 14 `node --test` | F1 (LoginPage `state.from`), F2 (NETWORK_ERROR), F3 (prod-readiness gate), F4 (PAD reconciliation), F5 (worklog backfill), F6 (Sentry annotation) |
+| 16 | 2026-08-19 | Live-E2E + production-origin remediations (9 items) | 485 vitest + 14 `node --test` | R15.1 same-origin + R15.2 STATIC_DIR + R15.3 CSP unsafe-inline + R15.4 LoginPage state.from + R15.5 register link + R15.6 favicon + R15.7 unified start/Docker + R15.8 _headers + R15.9 doc alignment |
 
 ### Audit Reports
 
