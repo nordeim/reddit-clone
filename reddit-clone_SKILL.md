@@ -182,7 +182,7 @@ The project uses **Tailwind CSS v4** with the CSS-first `@theme` approach — no
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
 }
 
-@utility line-clamp-1 {
+.line-clamp-1 { /* plain class — functional identical under @tailwindcss/vite; @utility is not used in this codebase */
   overflow: hidden;
   display: -webkit-box;
   -webkit-box-orient: vertical;
@@ -210,7 +210,7 @@ To prevent a flash of light theme before React hydrates, an inline `<script>` in
 
 ### 4.3 Category Color Gradients
 
-Each of the 7 community categories (tech, gaming, food, space, art, animals, sports) has a deterministic gradient derived from the community name via FNV-1a hash → mulberry32 PRNG. (The `ImageCategory` type defines an 8th value, `nature`, but it appears only in the post-image `TITLE_BANK`/`CATEGORY_IMAGES` fallbacks and is never assigned to a community.) The `gradientFor()` function in `packages/db/src/seed/random.ts` (ported from `apps/web/src/utils/random.ts`) produces identical gradients on both client and server.
+Avatars use `gradientFor(seed)` → 10 deterministic pairs via FNV-1a hash → mulberry32 PRNG (`apps/web/src/utils/random.ts:59` / `packages/db/src/seed/random.ts:59`) — client and server share the same hash so avatar gradients are identical. Communities do **not** use `gradientFor`; their `colorFrom`/`colorTo` are hard-coded in `SEEDS` (`apps/web/src/data/communities.ts:8-15`). (The `ImageCategory` type defines an 8th value, `nature`, but it appears only in the post-image `TITLE_BANK`/`CATEGORY_IMAGES` fallbacks and is never assigned to a community.)
 
 ---
 
@@ -234,7 +234,10 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   // 5. requestId — assigns req.id before error handler uses it
   // 6. auth      — registers app.authenticate decorator
   // 7. routes    — health + (when db provided) all API routes
-  // 8. errorHandler — last, wraps everything
+  // 8. static    — optional SPA (when STATIC_DIR set, wildcard:false, after routes; does not shadow /api/* or /health)
+  // 9. errorHandler — last, wraps everything
+
+  // Note: §5 lists 8 in earlier versions — Round 16 added `static` (apps/server/src/app.ts:195) via @fastify/static for same-origin SPA serving; CSP allows 'unsafe-inline' only when STATIC_DIR is set (ADR-003 tradeoff).
 
   if (opts.db && opts.rawDb) {
     // Lazy-import repositories + routes only when a DB is provided
@@ -360,7 +363,7 @@ All client-side content is generated at import time in `apps/web/src/data/*`:
 - `communities.ts` — `generateCommunities()` → 18 communities across 7 categories
 - `posts.ts` — `generatePosts(320)` → 320 posts with titles, bodies, comment trees
 - `notifications.ts` — 18 notifications
-- `comments.ts` — per-post comment trees (total ~3037 comments)
+- `comments.ts` — per-post comment trees (total ~2881 in client PRNG vs ~3037 in DB seed — 5% demo parity gap due to RNG call order at `apps/web/src/data/comments.ts:40` vs `packages/db/src/seed/comments.ts:64`; DB is source of truth post-B16)
 
 **Seed strings (reshuffling hazard):** `users-seed-v1`, `posts-seed-v2`, `notifications-seed-v1`, `community-${name}`, `comments-${postId}`. Changing any seed or the order of `rng()` calls reshuffles all downstream data.
 
@@ -415,7 +418,7 @@ The backend mirrors the client's data using:
 ### AP-4: Reading `process.env` directly (High)
 - **Symptom:** Tests fail because env vars aren't set; production starts with missing secrets
 - **Root cause:** `process.env.SOME_VAR` bypasses validation and defaults
-- **Fix:** Use `loadEnv()` (zod-validated) from `apps/server/src/config.ts`
+- **Fix:** Use `loadEnv()` (zod-validated) from `apps/server/src/config.ts`. **Bounded exception:** CLI entrypoints `packages/db/scripts/{backup,migrate,seed}.ts` read `process.env.DATABASE_URL` directly to avoid importing the full server config — acceptable at the process boundary.
 
 ### AP-5: Using `any` instead of `unknown` (Medium)
 - **Symptom:** Type errors propagate silently; runtime crashes in production
@@ -436,7 +439,7 @@ The backend mirrors the client's data using:
 ### AP-8: Committing `.env` files to git (Critical)
 - **Symptom:** JWT secrets leak in git history
 - **Root cause:** `.env` was tracked before `.gitignore` was added
-- **Fix:** `git rm --cached .env` + add to `.gitignore` + **rotate all leaked secrets** + add `test:no-secrets` CI gate. (Round 9, R9.1 incident)
+- **Fix:** `git rm --cached .env` + add to `.gitignore` + **rotate all leaked secrets** + add `test:no-secrets` CI gate. (Round 9, R9.1 incident) **Bounded exception:** `skills/` is intentionally tracked (13,896 files) despite `.gitignore:skills/` — verifier `scripts/verify-gitignore-enforced.sh:12-20` excludes `^skills/` so the gate still passes; do not `git rm -r --cached skills/`.
 
 ### AP-9: Leaving stale `allowScripts` entries (Low)
 - **Symptom:** `package.json` `allowScripts` lists `better-sqlite3@11.10.0` but the actual dep is `13.0.3`
@@ -981,7 +984,10 @@ RUN npm prune --omit=dev
 FROM node:20-bookworm-slim AS runner
 COPY --from=builder /app/node_modules /app/node_modules
 COPY --from=builder /app/apps/server/dist /app/apps/server/dist
+COPY --from=builder /app/apps/web/dist /app/apps/web/dist
+ENV STATIC_DIR=/app/apps/web/dist
 CMD ["node", "apps/server/dist/index.js"]
+# Note: web dist copy + STATIC_DIR added in Round 15 for unified origin (Fastify serves / + /api/* + /health from one process).
 ```
 
 ---
