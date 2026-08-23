@@ -84,6 +84,24 @@ export class ApiError extends Error {
 export const NETWORK_ERROR_MESSAGE =
   "Could not reach the embers server. Please try again later.";
 
+/**
+ * User-facing message shown when a non-2xx response's body is NOT the
+ * structured `{ error: { message } }` envelope — e.g. a static host's
+ * empty-body 404, an HTML gateway/proxy error page, or a message-less
+ * JSON body.
+ *
+ * Round 17 F1 (live-verified 2026-08-23): the previous `HTTP ${status}`
+ * fallback surfaced raw strings like "HTTP 404" on the login and register
+ * pages when the SPA was deployed to an origin without the API behind it
+ * (static host with SPA fallback). This message keeps the status visible
+ * for diagnostics while telling the user what happened and what to do
+ * next — the same treatment Round 15 F2 applied to network failures.
+ * The server's own structured message always wins when present.
+ */
+export function unexpectedResponseMessage(status: number): string {
+  return `The server returned an unexpected response (HTTP ${status}). Please try again later.`;
+}
+
 /** HTTP-style status code sentinel for "no response received" (network failure). */
 export const NETWORK_ERROR_STATUS = 0;
 
@@ -403,7 +421,8 @@ export function createApiClient(options: ApiClientOptions = {}) {
             (): ServerErrorBody => ({})
           );
           const code = errorBody.error?.code ?? "INTERNAL";
-          const message = errorBody.error?.message ?? `HTTP ${res.status}`;
+          const message =
+            errorBody.error?.message ?? unexpectedResponseMessage(res.status);
           throw new ApiError(res.status, code, message, requestId);
         }
 
@@ -439,7 +458,8 @@ export function createApiClient(options: ApiClientOptions = {}) {
           );
           const retryCode = retryErrorBody.error?.code ?? "INTERNAL";
           const retryMessage =
-            retryErrorBody.error?.message ?? `HTTP ${retryRes.status}`;
+            retryErrorBody.error?.message ??
+            unexpectedResponseMessage(retryRes.status);
           throw new ApiError(
             retryRes.status,
             retryCode,
@@ -454,7 +474,8 @@ export function createApiClient(options: ApiClientOptions = {}) {
       // Standard error path — no refresh, or refresh disabled.
       const errorBody = await parseErrorBody(res);
       const code = errorBody.error?.code ?? "INTERNAL";
-      const message = errorBody.error?.message ?? `HTTP ${res.status}`;
+      const message =
+        errorBody.error?.message ?? unexpectedResponseMessage(res.status);
       throw new ApiError(res.status, code, message, requestId);
     }
 

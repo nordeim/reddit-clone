@@ -362,28 +362,76 @@ describe("error handling", () => {
     });
   });
 
-  it("falls back to HTTP <status> message when body has no error.message field", async () => {
+  it("falls back to the friendly unexpected-response message when body has no error.message field", async () => {
+    // Round 17 F1: the old `HTTP <status>` fallback surfaced raw strings
+    // like "HTTP 503" to end users. The fallback must now be the friendly
+    // unexpected-response message (status still visible for diagnostics).
     const fetchMock = mockFetch({ status: 503, body: { error: {} } });
     const api = createApiClient({ baseUrl: "http://test", fetch: fetchMock });
     await expect(api.getPosts()).rejects.toMatchObject({
       status: 503,
-      message: "HTTP 503",
+      message: "The server returned an unexpected response (HTTP 503). Please try again later.",
     });
   });
 
-  it("falls back to defaults when body is not valid JSON", async () => {
+  it("falls back to friendly defaults when body is not valid JSON", async () => {
+    // Round 17 F1 (live-verified 2026-08-23): a static host with SPA
+    // fallback answers POST /api/auth/login with an empty 404 — no JSON
+    // envelope. The UI must NOT show the raw "HTTP 404" string.
     const fetchMock = vi.fn().mockResolvedValue(
-      new Response("not json", {
-        status: 502,
-        headers: { "Content-Type": "text/plain" },
+      new Response("", {
+        status: 404,
       })
     ) as unknown as typeof fetch;
     const api = createApiClient({ baseUrl: "http://test", fetch: fetchMock });
     await expect(api.getPosts()).rejects.toMatchObject({
-      status: 502,
+      status: 404,
       code: "INTERNAL",
-      message: "HTTP 502",
+      message: "The server returned an unexpected response (HTTP 404). Please try again later.",
     });
+  });
+
+  // ─── Round 17 F1 — friendly fallback for unparseable error bodies ──
+
+  it("R17-F1a: non-JSON error body (static-host 404 shape) yields the friendly fallback, not raw 'HTTP 404'", async () => {
+    // Exact shape observed on the live deployment: SPA-fallback origin
+    // returns an empty-body 404 for POST /api/auth/login.
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response("", { status: 404 })
+    ) as unknown as typeof fetch;
+    const api = createApiClient({ baseUrl: "http://test", fetch: fetchMock });
+    const err = await api.login("you", "embers-demo").catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as Error).message).not.toBe("HTTP 404");
+    expect((err as Error).message).toMatch(/unexpected response/i);
+    expect((err as Error).message).toContain("HTTP 404");
+    expect((err as ApiError).status).toBe(404);
+    expect((err as ApiError).code).toBe("INTERNAL");
+  });
+
+  it("R17-F1b: HTML error body (gateway/proxy page) also yields the friendly fallback", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response("<html><body>502 Bad Gateway</body></html>", {
+        status: 502,
+        headers: { "Content-Type": "text/html" },
+      })
+    ) as unknown as typeof fetch;
+    const api = createApiClient({ baseUrl: "http://test", fetch: fetchMock });
+    const err = await api.getPosts().catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as Error).message).toMatch(/unexpected response/i);
+    expect((err as Error).message).toContain("HTTP 502");
+  });
+
+  it("R17-F1c: structured server message still wins over the friendly fallback", async () => {
+    // The fallback must never mask the server's own error message.
+    const fetchMock = mockFetch({
+      status: 401,
+      body: { error: { code: "INVALID_CREDENTIALS", message: "Wrong username or password" } },
+    });
+    const api = createApiClient({ baseUrl: "http://test", fetch: fetchMock });
+    const err = await api.login("you", "wrong").catch((e: unknown) => e);
+    expect((err as Error).message).toBe("Wrong username or password");
   });
 
   // ─── Round 15 F2 — network error normalization (restored this round) ──
@@ -634,5 +682,69 @@ describe("createApiClient — 401 refresh-and-retry (Slice 4)", () => {
     const retryCall = fetchMock.calls[2];
     const headers = new Headers(retryCall.init.headers as HeadersInit);
     expect(headers.get("Authorization")).toBe("Bearer tok-fresh");
+  });
+
+  it("R17-F1d: refresh-retry path — retry returns non-2xx non-JSON → friendly fallback", async () => {
+    // Original 401 (structured) → refresh 200 → retry fails with a
+    // non-JSON body (static-host shape). The retry error message must use
+    // the friendly fallback, not the raw "HTTP 500" string.
+    const calls: Array<Response> = [
+      new Response(JSON.stringify({ error: { code: "TOKEN_EXPIRED", message: "expired" } }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      }),
+      new Response(JSON.stringify({ accessToken: "tok-fresh", user: { id: "u1", username: "you" } }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+      new Response("", { status: 500 }),
+    ];
+    let i = 0;
+    const fetchMock = vi.fn().mockImplementation(() => {
+      const res = calls[i];
+      i += 1;
+      return Promise.resolve(res);
+    }) as unknown as typeof fetch;
+    const api = createApiClient({
+      baseUrl: "http://test",
+      fetch: fetchMock,
+      getToken: () => "tok-old",
+      tryRefreshOn401: true,
+    });
+    const err = await api.getPosts().catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).status).toBe(500);
+    expect((err as Error).message).not.toBe("HTTP 500");
+    expect((err as Error).message).toMatch(/unexpected response/i);
+    expect((err as Error).message).toContain("HTTP 500");
+  });
+
+  it("R17-F1e: 401-refresh-fail path — original 401 with non-JSON body → friendly fallback", async () => {
+    // Original request 401 with an unparseable body; refresh also fails.
+    // The propagated ORIGINAL error must carry the friendly fallback.
+    const calls: Array<Response> = [
+      new Response("", { status: 401 }), // original — non-JSON body
+      new Response(JSON.stringify({ error: { code: "REFRESH_FAILED", message: "revoked" } }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      }),
+    ];
+    let i = 0;
+    const fetchMock = vi.fn().mockImplementation(() => {
+      const res = calls[i];
+      i += 1;
+      return Promise.resolve(res);
+    }) as unknown as typeof fetch;
+    const api = createApiClient({
+      baseUrl: "http://test",
+      fetch: fetchMock,
+      getToken: () => "tok-old",
+      tryRefreshOn401: true,
+    });
+    const err = await api.getPosts().catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).status).toBe(401);
+    expect((err as Error).message).toMatch(/unexpected response/i);
+    expect((err as Error).message).toContain("HTTP 401");
   });
 });
