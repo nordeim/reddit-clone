@@ -1,4 +1,4 @@
-# embers
+# embers 
 
 **A Reddit-style community feed.** Client-only SPA + an enterprise backend
 monorepo.
