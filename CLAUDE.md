@@ -703,7 +703,7 @@ Custom variant, not v3 `darkMode: 'class'`:
 ```
 reddit-clone/
 ├── apps/
-│   ├── web/                 ← @embers/web (React SPA, Vite, 281 tests)
+│   ├── web/                 ← @embers/web (React SPA, Vite, 286 tests)
 │   │   └── src/             # See AGENTS.md for full web tree.
 │   │                        # Note: `lib/api.ts` (Round 5) is the foundational
 │   │                        # fetch-based client, wired into the React tree via
