@@ -9,7 +9,7 @@ monorepo.
 reddit-clone/
 ├── apps/
 │   ├── web/          ← @embers/web — the original client-only React SPA
-│   │                   (HashRouter, vite-plugin-singlefile, 281 tests;
+│   │                   (HashRouter, vite-plugin-singlefile, 286 tests;
 │   │                    includes `src/lib/api.ts` foundational fetch client
 │   │                    added in Round 5, `src/auth/AuthProvider.tsx` React
 │   │                    context + `useAuth()` hook + 401 refresh-and-retry
@@ -55,7 +55,7 @@ npm run dev        --workspace @embers/server   # http://localhost:4000
 - Client: `http://localhost:5173` — the embers feed (320 posts across 18 communities, generated deterministically in-browser)
 - Server: `curl http://localhost:4000/health` → `{"status":"ok",…}`
 - Demo login (server): `POST /api/auth/login` with `{"username":"you","password":"embers-demo"}` → access token + refresh cookie
-- All tests pass: `npm test` (485 vitest + 18 Playwright E2E; plus 30 opt-in live-audit E2E — see Test Status)
+- All tests pass: `npm test` (490 vitest + 18 Playwright E2E; plus 33 opt-in live-audit E2E — see Test Status)
 
 ### Quick Start (Docker)
 
@@ -155,7 +155,7 @@ all production secrets to be present.
 # 1. Build all workspaces (topological: shared → db → server → web)
 npm run build
 # → apps/server/dist/index.js  (Fastify production bundle)
-# → apps/web/dist/index.html    (single-file SPA, 537 KB)
+# → apps/web/dist/index.html    (single-file SPA, 539 KB)
 
 # 2. Initialize the database (if not already done)
 npm run db:setup
@@ -266,7 +266,7 @@ enables HSTS hardening and requires all production secrets via `loadEnv()`.
 ```bash
 npm run lint        # ESLint — 0 errors, 0 warnings
 npm run typecheck   # tsc --noEmit — all 4 workspaces clean
-npm test            # 485 vitest tests (pretest auto-builds shared + db)
+npm test            # 490 vitest tests (pretest auto-builds shared + db)
 npm run build       # topological build — all workspaces succeed
 ```
 
@@ -278,14 +278,14 @@ and `/health`. ADR-003 single-file build is still in force for the client.
 
 | Workspace | Tests | Command |
 |-----------|-------|---------|
-| `@embers/web` | 281 | `npm test --workspace @embers/web` |
+| `@embers/web` | 286 | `npm test --workspace @embers/web` |
 | `@embers/shared` | 70 | `npm test --workspace @embers/shared` |
 | `@embers/db` | 31 | `npm test --workspace @embers/db` |
 | `@embers/server` | 103 | `npm test --workspace @embers/server` |
-| **Vitest total** | **485** | `npm test --workspaces --if-present` |
+| **Vitest total** | **490** | `npm test --workspaces --if-present` |
 | E2E — local API (Playwright) | 18 | `npm run test:e2e` |
-| E2E — live audit, Round 8 (opt-in) | 12 | `LIVE_BASE_URL=… npm run test:e2e:live` |
-| E2E — extended live, Round 10 (opt-in) | 16 | `npm run test:local-prod` |
+| E2E — live audit suite, R8+R10+R17 (opt-in) | 31 | `LIVE_BASE_URL=… npm run test:e2e:live` (12 audit + 16 extended + 3 a11y) |
+| E2E — extended live vs local prod build, Round 10 (opt-in) | 16 | `npm run test:local-prod` |
 | E2E — repro regression, Round 10 (opt-in) | 2 | `npm run test:repro` |
 | Prod-readiness gate, Round 15 (opt-in) | 1 script | `npm run test:prod-readiness` |
 | Prod-readiness unit tests, Round 15 | 14 | `npm run test:prod-readiness:test` |
@@ -293,9 +293,9 @@ and `/health`. ADR-003 single-file build is still in force for the client.
 | Fresh-clone typecheck | 1 script | `npm run test:fresh-clone` |
 | Lint (ESLint) | 0 errors, 0 warnings | `npm run lint` |
 
-All 485 vitest tests + 18 Playwright E2E tests pass (`npm test` — do NOT
+All 490 vitest tests + 18 Playwright E2E tests pass (`npm test` — do NOT
 run `vitest run` from root; it won't discover workspace configs), ESLint is
-clean, and typecheck + build succeed as of Round 16 (2026-08-19).
+clean, and typecheck + build succeed as of Round 17 (2026-08-23).
 
 > **Run tests correctly:** always use `npm test` (which triggers `pretest`)
 to build `@embers/shared` + `@embers/db` first via `--workspaces`). Running
@@ -306,9 +306,11 @@ to build `@embers/shared` + `@embers/db` first via `--workspaces`). Running
 > `@embers/db` before invoking `tsc --noEmit` on each workspace. Verify with
 > `npm run test:fresh-clone`.
 >
-> **R8.3 -- Live-deployment audit is opt-in:** `e2e/live.spec.ts` is excluded
-> from `npm run test:e2e` (it would add 12 always-skipped tests). Run it
-> explicitly via `LIVE_BASE_URL=https://reddit.jesspete.shop/ npm run test:e2e:live`.
+> **R8.3 -- Live-deployment audit is opt-in:** `e2e/live.spec.ts` and
+> `e2e/live_extended.spec.ts` + `e2e/live_a11y_r17.spec.ts` are excluded
+> from `npm run test:e2e` (they would add always-skipped tests). Run the
+> full live suite explicitly via `LIVE_BASE_URL=https://reddit.jesspete.shop/ npm run test:e2e:live`
+> (31 tests: 12 R8 audit + 16 R10 extended + 3 R17 a11y).
 >
 > **R10.4 — Round 10 extended the live-audit E2E coverage:**
 > - `e2e/live_extended.spec.ts` (16 tests) — broader live-deployment assertions;
@@ -316,8 +318,12 @@ to build `@embers/shared` + `@embers/db` first via `--workspaces`). Running
 > - `e2e/repro_r10_postpage.spec.ts` (2 tests) — regression guard for the
 >   BUG-R10-2 PostPage crash; run via `npm run test:repro` (uses
 >   `playwright.repro.config.ts`).
-> Total opt-in E2E count is now 12 + 16 + 2 = 30 (Round 8 live-audit +
-> Round 10 extended-live + Round 10 repro regression).
+> **R17 — Round 17 added a live WCAG 2.2 AA a11y audit:**
+> - `e2e/live_a11y_r17.spec.ts` (3 tests) — keyboard navigation, focus
+>   visibility, alt text, heading hierarchy, login keyboard-operability;
+>   part of `npm run test:e2e:live`.
+> Total opt-in E2E count is now 12 + 16 + 2 + 3 = 33 (Round 8 live-audit +
+> Round 10 extended-live + Round 10 repro regression + Round 17 a11y).
 
 Round 8 (2026-08-10) was a **live-deployment audit + codebase hardening**
 round. A browser-based E2E audit against `https://reddit.jesspete.shop/`
@@ -334,15 +340,15 @@ B17 / B19--B22 status is unchanged.
 
 The embers SPA is deployed at **`https://reddit.jesspete.shop/`**.
 
-### Known gaps (re-audited 2026-08-19, see `docs/REMEDIATION_PLAN_ROUND_8.md` + `docs/REMEDIATION_PLAN_ROUND_9.md` + `docs/REMEDIATION_PLAN_ROUND_16.md`; in-repo fixes in R15+R16, live cutover still operator-side)
+### Known gaps (re-audited 2026-08-23, see `docs/REMEDIATION_PLAN_ROUND_8.md` + `docs/REMEDIATION_PLAN_ROUND_9.md` + `docs/REMEDIATION_PLAN_ROUND_17.md`; in-repo fixes in R15+R16, live cutover still operator-side)
 
 | ID | Severity | Status | Gap | Operator fix |
 |----|----------|--------|-----|--------------|
-| LIVE-CRIT-1 | Critical | **FIXED** (2026-08-10) | The live site was serving the Vite dev server. | Now resolved -- the live site serves a 537 KB production build (no `/@react-refresh` or `/@vite/client` in the HTML). Verified by `e2e/live.spec.ts` test #1. |
-| LIVE-CRIT-2 | Critical | **Still broken on live** (in-repo remediations in R15+R16) | The public origin is `python -m http.server`. `/api/posts`, `/api/communities`, `/api/search`, `/health` return HTTP 404 Python HTML. | Point the public origin at Fastify with `STATIC_DIR` set (`./start_production.sh` or `docker compose up`). Re-verified 2026-08-19. |
-| LIVE-CRIT-3 | Critical | **Still broken on live** (in-repo remediations in R15+R16) | No production security headers (CSP, HSTS, XCTO, XFO, Referrer-Policy all absent). | Helmet emits them when Fastify is the origin. `apps/web/public/_headers` covers a static-only CDN. Re-verified 2026-08-19. |
-| LIVE-CRIT-4 | Critical | **Still broken on live** (root cause: Python http.server) | `POST /api/auth/login` returns HTTP 501 "Unsupported method ('POST')". | Stop using `python -m http.server` on the public origin. Fastify handles POST. Re-verified 2026-08-19. |
-| LIVE-HIGH-2 | High | **Still broken on live** | `/api/*` requests receive a Python 404 error page instead of JSON. | Same cutover as LIVE-CRIT-2. |
+| LIVE-CRIT-1 | Critical | **FIXED** (2026-08-10) | The live site was serving the Vite dev server. | Now resolved -- the live site serves a 539 KB production build (no `/@react-refresh` or `/@vite/client` in the HTML). Verified by `e2e/live.spec.ts` test #1. Re-verified 2026-08-23: live bundle (539,190 B) matches a fresh `main` build; R15/16 client fixes are deployed. |
+| LIVE-CRIT-2 | Critical | **Still broken on live** (in-repo remediations in R15+R16) | The public origin is a **static host with SPA fallback**, not the API. `GET /api/posts`, `/api/communities`, `/api/search`, `/health` return **200 `text/html`** (the SPA shell). (2026-08-19 symptom: Python `http.server` 404 HTML.) | Point the public origin at Fastify with `STATIC_DIR` set (`./start_production.sh` or `docker compose up`). Re-verified 2026-08-23. |
+| LIVE-CRIT-3 | Critical | **Still broken on live** (in-repo remediations in R15+R16) | No production security headers (CSP, HSTS, XCTO, XFO, Referrer-Policy all absent). | Helmet emits them when Fastify is the origin. `apps/web/public/_headers` covers a static-only CDN (must be deployed by the host). Re-verified 2026-08-23. |
+| LIVE-CRIT-4 | Critical | **Still broken on live** (backend not on origin) | `POST /api/auth/login` returns an **empty 404**. (2026-08-19 symptom: Python `http.server` 501 "Unsupported method ('POST')".) Since Round 17 the client surfaces a friendly "unexpected response (HTTP 404)" message instead of the raw status string. | Stop serving the public origin from a static host; Fastify handles POST. Re-verified 2026-08-23. |
+| LIVE-HIGH-2 | High | **Still broken on live** | `/api/*` GETs receive the SPA HTML (200 `text/html`) instead of JSON; POSTs receive an empty 404. | Same cutover as LIVE-CRIT-2. |
 
 ### SECRET ROTATION REQUIRED (R9.1, 2026-08-10)
 
@@ -492,13 +498,14 @@ remediation.
 #### Round 14 (2026-08-18) — knowledge distillation
 
 - No code changes. Audited the entire codebase and distilled all
-  patterns, anti-patterns, lessons, and pitfalls from 13 rounds of
-  remediation into `reddit-clone_SKILL.md` (21 sections, ~800 lines)
-  at the repo root.
+  patterns, anti-patterns, lessons, and pitfalls from the 13 rounds of
+  remediation to that date into `reddit-clone_SKILL.md` (21 numbered
+  sections, 1,195+ lines) at the repo root.
 - The skill captures: project identity, tech stack, bootstrapping,
   design system, component architecture, hooks, data layer,
   accessibility, 14 anti-patterns, 8 debugging scenarios, 11-step
-  pre-ship checklist, 10 lessons, 14 pitfalls, 14 best practices,
+  pre-ship checklist, 14 lessons (10 at creation; 11–13 added in
+  Round 15, 14 added in Round 17), 14 pitfalls, 14 best practices,
   8 coding patterns, 7 coding anti-patterns, monorepo/build config,
   DB schema, security architecture, TS interfaces, and a full
   round-history audit trail.
@@ -566,9 +573,9 @@ remediation.
 
 - Re-ran `LIVE_BASE_URL=https://reddit.jesspete.shop/ npm run test:e2e:live`:
   **27 passed, 1 skipped**. Client R10 fixes are live (PostPage, 404 text,
-  mobile no-overflow, register mismatch). Login error is **"Failed to fetch"**
+  mobile no-overflow, register mismatch). Login error was **"Failed to fetch"**
   (production bundle called `http://localhost:4000`). Backend probes 0/4.
-- **In-repo remediations (need operator redeploy to show on live):**
+- **In-repo remediations (operator redeployed these on 2026-08-23 — see Round 17):**
   - Production API client defaults to same-origin; fetches send `credentials: "include"`.
   - Fastify serves the SPA when `STATIC_DIR` is set (`@fastify/static`).
   - LoginPage redirects to sanitized `state.from` and links to `/register`.
@@ -577,6 +584,45 @@ remediation.
 - Vitest count: 473 → 485 (web 277→281, server 95→103).
 - See `docs/REMEDIATION_PLAN_ROUND_16.md`.
 
+#### Round 17 (2026-08-23) — live-re-audit + client UX fix + doc reconciliation
+
+- Re-ran the live audit: **30 passed, 1 skipped** (12 R8 audit + 16 R10
+  extended + 3 new R17 a11y tests; 1 skip needs the backend).
+- **The operator redeployed the live site with the Round 15/16 client
+  fixes** — the live bundle (539,190 bytes) matches a fresh `npm run
+  build` of `main`; login now POSTs same-origin (no more
+  `localhost:4000` / "Failed to fetch"); inline favicon + `state.from`
+  redirect are live.
+- **LIVE-CRIT-2/3/4 persist with changed symptoms:** the public origin is
+  now a static host with SPA fallback — `GET /api/*` + `/health` return
+  200 `text/html` (the SPA shell), `POST /api/auth/login` returns an
+  empty 404, all 5 security headers still absent. Cutover remains
+  operator-side.
+- **F1 (live-verified UX bug, fixed with TDD):** login/register surfaced a
+  raw **"HTTP 404"** error when the API error body is not the structured
+  JSON envelope (exactly the shape a static host returns). Fixed:
+  `unexpectedResponseMessage(status)` friendly fallback in
+  `apps/web/src/lib/api.ts` — the server's structured message always
+  wins; status + code fields unchanged. +5 RED→GREEN tests (web 281→286).
+- **F2 (plan item 5.8 executed):** OWASP Top 10 code-level audit — PASS
+  (no findings; evidence in the round plan). WCAG 2.2 AA browser audit —
+  PASS (skip-link, tab order, focus visibility, alt text, heading
+  hierarchy, keyboard-operable login) via the new permanent opt-in
+  `e2e/live_a11y_r17.spec.ts` (3 tests).
+- **F3:** Backfilled the missing Round 16 entry in `worklog.md`.
+- **F4:** Full doc reconciliation — stale per-file test counts
+  (`api.test.ts` 32→44, LoginPage 10→13, RegisterPage 11→12, Navbar
+  8→9, server `config` 8→9, `hardening` 7→8), the Round 5/6/7 deep-dive
+  "not yet implemented" claims in AGENTS.md, the PAD §8 deployment
+  story (same-origin default, `STATIC_DIR`, Docker unified origin,
+  ADR-005 contradiction, "zod-validator plugin" claim), the
+  `test:e2e:live` undercount (it runs 31 tests, not 12), skills/
+  tracked-file count (14,018), and the SKILL.md round count.
+- **Still deferred:** B17 (HashRouter/singlefile), B19–B22 (React
+  Query — backend still not the public origin), Sentry.
+- Vitest count: 485 → 490 (web 281→286). Live E2E: 30 passed + 1 skipped.
+- See `docs/REMEDIATION_PLAN_ROUND_17.md`.
+
 ### How to verify the live deployment
 
 ```bash
@@ -584,27 +630,30 @@ remediation.
 # /health, /api/posts, /api/communities, /api/auth/login, or any of
 # the 5 required security headers are missing on the live deployment.
 npm run test:prod-readiness
-# Expected (2026-08-19): exit 1 — backend unreachable (404/501) +
-# all 5 security headers missing. See docs/REMEDIATION_PLAN_ROUND_8.md.
+# Expected (2026-08-23): exit 1 — API GETs return SPA HTML (not JSON),
+# POST /api/auth/login returns 404, all 5 security headers missing.
+# See docs/REMEDIATION_PLAN_ROUND_17.md.
 
-# Opt-in live audit (12 tests, ~30s):
+# Opt-in live audit (31 tests: 12 audit + 16 extended + 3 a11y):
 LIVE_BASE_URL=https://reddit.jesspete.shop/ npm run test:e2e:live
 
 # Or curl probes:
 curl -sS -o /dev/null -w "%{http_code} %{content_type}\n" https://reddit.jesspete.shop/
 curl -sS -o /dev/null -w "%{http_code} %{content_type}\n" https://reddit.jesspete.shop/api/posts
 curl -sS -o /dev/null -w "%{http_code} %{content_type}\n" https://reddit.jesspete.shop/health
-# Current state (2026-08-19): 200 text/html (SPA), 404 text/html (API broken), 404 text/html (health broken)
+# Current state (2026-08-23): 200 text/html (SPA), 200 text/html (API returns SPA shell — broken), 200 text/html (health returns SPA shell — broken)
 # Expected after fix:  200 text/html, 200 application/json, 200 application/json
 ```
 
 ### What works on the live site today
 
-- The SPA is served as a **production build** (537 KB single-file HTML, no Vite dev modules). [Fixed in Round 9 -- was LIVE-CRIT-1]
+- The SPA is served as a **production build** (539 KB single-file HTML, no Vite dev modules). [Fixed in Round 9 -- was LIVE-CRIT-1; re-verified 2026-08-23]
 - The deterministic SPA feed renders (8 articles on initial load, 48 after scroll).
 - Dark-mode toggle persists to `localStorage` (zustand `persist`).
 - Infinite scroll via `IntersectionObserver`.
 - `/notifications` route guard redirects unauthenticated users to `/login`.
+- Login POSTs same-origin and, when the API is unreachable, surfaces a friendly
+  "unexpected response" error (Round 17). [R15/16 client fixes deployed 2026-08-23]
 - No browser console errors on initial load.
 - The HashRouter-based SPA works on any static host with no rewrite rules.
 
@@ -673,7 +722,7 @@ TDD breakdown + the rationale for deferring B17 (build refactor) again.
 | `docs/IMPLEMENTATION_PLAN.md` | Original greenfield plan that produced `apps/web` |
 | `docs/MANUAL_QA.md` | Manual QA matrix for the client SPA |
 
-> **Additional docs:** `REMEDIATION_PLAN_ROUND_9.md`–`REMEDIATION_PLAN_ROUND_16.md`, `SECRET_ROTATION_GUIDE.md`, `audit_report_1.md`–`audit_report_5.md`, and `session_1.md`–`session_16.md` also live in `docs/` (Round changelogs, the security-incident guide, audit reports, and session worklogs).
+> **Additional docs:** `REMEDIATION_PLAN_ROUND_9.md`–`REMEDIATION_PLAN_ROUND_17.md`, `SECRET_ROTATION_GUIDE.md`, `audit_report_1.md`–`audit_report_8.md`, and `session_1.md`–`session_16.md` also live in `docs/` (Round changelogs, the security-incident guide, audit reports, and session worklogs).
 
 ## License
 

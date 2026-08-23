@@ -143,12 +143,13 @@
 >
 > **Round 14 (2026-08-18) — knowledge distillation:** No code changes.
 > Audited the entire codebase and distilled all patterns, anti-patterns,
-> lessons, and pitfalls from 13 rounds of remediation into
-> `reddit-clone_SKILL.md` (21 sections, ~800 lines) at the repo root.
-> Any future agent building a similar full-stack TypeScript monorepo
-> should read this skill first. Skills used: `distill-codebase-skill`
-> (reference template) + `to-distill-project-into-skill` (meta-skill
-> guiding the 6-phase distillation process).
+> lessons, and pitfalls from the 13 rounds of remediation to that date
+> into `reddit-clone_SKILL.md` (21 numbered sections, 1,195+ lines) at the
+> repo root. Any future agent building a similar full-stack TypeScript
+> monorepo should read this skill first. Skills used:
+> `distill-codebase-skill` (reference template) +
+> `to-distill-project-into-skill` (meta-skill guiding the 6-phase
+> distillation process).
 >
 > **Round 15 (2026-08-19) — live-audit-driven codebase + doc remediation:**
 > Six findings, five TDD code fixes + one doc reconciliation. No new
@@ -192,6 +193,24 @@
 > B17 / B19–B22 / Sentry still deferred. Tests: 473 → 485
 > (web 281, server 103, shared 70, db 31). See
 > `docs/REMEDIATION_PLAN_ROUND_16.md`.
+>
+> **Round 17 (2026-08-23) — live-re-audit + client UX fix + doc
+> reconciliation:** Operator redeployed with the R15/16 client fixes
+> (live bundle = fresh `main` build; login POSTs same-origin), but the
+> public origin is now a **static host with SPA fallback** —
+> `GET /api/*` + `/health` return 200 SPA HTML, `POST /api/auth/login`
+> returns an empty 404, all 5 security headers still absent
+> (LIVE-CRIT-2/3/4 persist, symptoms changed). Fixed a live-verified UX
+> bug: raw `"HTTP 404"` error surfaced on login/register when the API
+> error body is not the structured JSON envelope — new
+> `unexpectedResponseMessage(status)` friendly fallback in `api.ts`
+> (+5 RED→GREEN tests). Executed plan item 5.8: OWASP Top 10 code audit
+> (PASS, no findings) + WCAG 2.2 AA browser audit (PASS) with a new
+> permanent opt-in `e2e/live_a11y_r17.spec.ts` (3 tests). Backfilled
+> the missing Round 16 worklog entry. Tick 5.8 in REMEDIATION_PLAN.md.
+> B17 / B19–B22 / Sentry still deferred. Tests: 485 → 490
+> (web 286, server 103, shared 70, db 31); live E2E 30 passed + 1
+> skipped. See `docs/REMEDIATION_PLAN_ROUND_17.md`.
 
 ---
 
@@ -417,7 +436,7 @@ Tests use **Vitest** with **Fastify's `inject()`** — no port binding needed.
 ```bash
 npm run lint        # ESLint flat config — 0 errors, 0 warnings (Round 4)
 npm run typecheck   # tsc --noEmit — must pass clean (R8.1: pretypecheck hook builds shared+db first)
-npm test            # vitest run (all workspaces) — all 485 tests must pass (0 act() warnings, R8.2; R10 added +9 web tests; R11 added +4 tests; R13 added +1 db backup; R15 added +6 web tests; R16 added +12)
+npm test            # vitest run (all workspaces) — all 490 tests must pass (0 act() warnings, R8.2; R10 added +9 web tests; R11 added +4 tests; R13 added +1 db backup; R15 added +6 web tests; R16 added +12; R17 added +5 web tests)
 npm run test:e2e    # playwright run — 18 tests must pass (9 smoke + 9 auth lifecycle)
 npm run test:build  # R8.4: asserts dist/index.html is a production build (no Vite dev modules)
 npm run test:no-secrets  # R9.1: asserts no .env / env.bak / *.env files are tracked by git
@@ -433,22 +452,25 @@ git ls-files | grep -E '(^|/)dist/' | wc -l   # must be 0 (no dist/ tracked)
 
 > **Opt-in checks (not in pre-commit):**
 > - `npm run test:fresh-clone` — R8.1: simulates a fresh clone and asserts `npm run typecheck` succeeds.
-> - `LIVE_BASE_URL=https://reddit.jesspete.shop/ npm run test:e2e:live` — R8.3: opt-in live-deployment audit (12 tests). Skipped when `LIVE_BASE_URL` is unset.
+> - `LIVE_BASE_URL=https://reddit.jesspete.shop/ npm run test:e2e:live` — R8.3/R10/R17: opt-in live-deployment audit (12 + 16 + 3 a11y = 31 tests). Self-skips when `LIVE_BASE_URL` is unset.
 > - `npm run test:prod-readiness` — R15 F3: opt-in strict gate. Probes `/health`, `/api/posts`, `/api/communities`, `/api/auth/login` + checks 5 required security headers against `PROD_BASE_URL` (default: `https://reddit.jesspete.shop/`). Exits 1 when ANY probe fails. Set `PROD_READINESS=skip` to skip in local dev / CI without a live deployment.
 > - `npm run test:prod-readiness:test` — R15 F3: 14 unit tests via `node --test` for the prod-readiness pure helpers.
  
-> **Test count breakdown (485 vitest + 18 e2e + 30 opt-in live + 14 node:test):** `@embers/web` = 281
+> **Test count breakdown (490 vitest + 18 e2e + 33 opt-in live + 14 node:test):** `@embers/web` = 286
 > (incl. 23 in `src/lib/api.test.ts` from Round 5, 20 in
 > `src/auth/AuthProvider.test.tsx` + 9 api refresh-and-retry + 10 in
 > `src/pages/LoginPage.test.tsx` from Round 6, 12 in
 > `src/pages/RegisterPage.test.tsx` + 9 in `src/components/layout/Navbar.test.tsx`
 > + 5 in `src/auth/RequireAuth.test.tsx` + 1 api register-displayName from
 > Round 7, +9 from Round 10 covering PostPage / NotFoundPage / mobile
-> overflow / RegisterPage validation, +4 from Round 16 covering `resolveApiBaseUrl` / `credentials: include` / LoginPage `state.from` + register link), `@embers/server` = 103, `@embers/shared` = 70, `@embers/db` = 31.
+> overflow / RegisterPage validation, +4 from Round 16 covering `resolveApiBaseUrl` / `credentials: include` / LoginPage `state.from` + register link,
+> +5 from Round 17 covering the `unexpectedResponseMessage` friendly
+> fallback — `api.test.ts` now totals 44), `@embers/server` = 103, `@embers/shared` = 70, `@embers/db` = 31.
 > E2E = 18 local (9 smoke from Round 3 + 9 auth lifecycle from Round 7) +
 > 12 live-audit (Round 8, opt-in via `LIVE_BASE_URL`) + 16 extended-live
 > (Round 10, `npm run test:local-prod`) + 2 repro regression-guard
-> (Round 10, `npm run test:repro`) = 48 E2E total. Plus 14 `node --test`
+> (Round 10, `npm run test:repro`) + 3 live a11y audit (Round 17, opt-in
+> via `LIVE_BASE_URL`) = 51 E2E total. Plus 14 `node --test`
 > unit tests for `scripts/verify-prod-readiness.mjs` (Round 15 F3,
 > `npm run test:prod-readiness:test`).
 > The previously documented total of 428 (Round 6) was superseded when
@@ -460,6 +482,7 @@ git ls-files | grep -E '(^|/)dist/' | wc -l   # must be 0 (no dist/ tracked)
 > added +1 (db 30→31; total 466→467). Round 15 added +6 (web 271→277,
 > +3 LoginPage `state.from` + +3 api `NETWORK_ERROR`; total 467→473).
 > Round 16 added +12 vitest tests (web 277 → 281, server 95 → 103; total 473 → 485).
+> Round 17 added +5 vitest tests (web 281 → 286; total 485 → 490).
 
 **Build-before-test prerequisite (Round 5, extended in Round 8):** `@embers/server`'s test suites import
 `@embers/db` and `@embers/shared` as runtime packages, so their `dist/` builds
@@ -793,15 +816,15 @@ This is why vote keys are namespaced (`post:` / `comment:`) — to avoid collisi
 
 The embers SPA is deployed at **`https://reddit.jesspete.shop/`**.
 
-### Known gaps (re-audited 2026-08-19, see `docs/REMEDIATION_PLAN_ROUND_8.md` + `docs/REMEDIATION_PLAN_ROUND_9.md` + `docs/REMEDIATION_PLAN_ROUND_16.md`; in-repo fixes landed in R15+R16, live cutover still operator-side)
+### Known gaps (re-audited 2026-08-23, see `docs/REMEDIATION_PLAN_ROUND_8.md` + `docs/REMEDIATION_PLAN_ROUND_9.md` + `docs/REMEDIATION_PLAN_ROUND_17.md`; in-repo fixes landed in R15+R16, live cutover still operator-side)
 
 | ID | Severity | Status | Gap | Operator fix |
 |----|----------|--------|-----|--------------|
-| LIVE-CRIT-1 | Critical | **FIXED** (2026-08-10) | The live site was serving the Vite dev server. | Now resolved -- the live site serves a production build (no `/@react-refresh` or `/@vite/client`). |
-| LIVE-CRIT-2 | Critical | **Still broken on live** (in-repo fix in R15+R16) | Public origin is `python -m http.server` → `/api/*`, `/health` return 404. | Point public origin at Fastify with `STATIC_DIR` (`./start_production.sh` or Docker). Re-verified 2026-08-19. |
-| LIVE-CRIT-3 | Critical | **Still broken on live** (in-repo fix in R15+R16) | No security headers (CSP, HSTS, X-Content-Type-Options, X-Frame-Options, Referrer-Policy all absent) — `python -m http.server` emits none. | Helmet emits them when Fastify is origin; `apps/web/public/_headers` covers static-host CDN. Re-verified 2026-08-19. |
-| LIVE-CRIT-4 | Critical | **Still broken on live** (root cause: Python `http.server`) | `POST /api/auth/login` returns 501 “Unsupported method ('POST')”. | Stop using `python -m http.server` on public origin; Fastify handles POST. Re-verified 2026-08-19. |
-| LIVE-HIGH-2 | High | **Still broken on live** | `/api/*` returns Python 404 HTML instead of JSON. | Same cutover as LIVE-CRIT-2. |
+| LIVE-CRIT-1 | Critical | **FIXED** (2026-08-10) | The live site was serving the Vite dev server. | Now resolved -- the live site serves a production build (no `/@react-refresh` or `/@vite/client`). Re-verified 2026-08-23: live bundle (539,190 B) matches a fresh `main` build; R15/16 client fixes are deployed. |
+| LIVE-CRIT-2 | Critical | **Still broken on live** (in-repo fix in R15+R16) | Public origin is a **static host with SPA fallback**, not the API: `GET /api/*` + `/health` return 200 `text/html` (the SPA shell). (2026-08-19 symptom was Python `http.server` 404 HTML.) | Point public origin at Fastify with `STATIC_DIR` (`./start_production.sh` or Docker). Re-verified 2026-08-23. |
+| LIVE-CRIT-3 | Critical | **Still broken on live** (in-repo fix in R15+R16) | No security headers (CSP, HSTS, X-Content-Type-Options, X-Frame-Options, Referrer-Policy all absent) — the static host emits none. | Helmet emits them when Fastify is origin; `apps/web/public/_headers` covers static-host CDN (must be deployed by the host). Re-verified 2026-08-23. |
+| LIVE-CRIT-4 | Critical | **Still broken on live** (backend not on origin) | `POST /api/auth/login` returns an **empty 404** (2026-08-19 symptom: Python `http.server` 501). Login surfaces a friendly "unexpected response" error since Round 17 (was raw "HTTP 404"). | Same cutover as LIVE-CRIT-2 — Fastify handles POST. Re-verified 2026-08-23. |
+| LIVE-HIGH-2 | High | **Still broken on live** | `/api/*` GETs return the SPA HTML (200 `text/html`) instead of JSON; POSTs return empty 404. | Same cutover as LIVE-CRIT-2. |
 
 ### SECRET ROTATION REQUIRED (R9.1, 2026-08-10)
 

@@ -4,20 +4,20 @@ description: >
   Comprehensive engineering skill for building a production-grade Reddit-style
   community feed using npm-workspaces monorepo, React 19 + Vite SPA, Fastify
   REST API, Drizzle ORM + SQLite, JWT auth, and Zod schemas. Captures all
-  patterns, anti-patterns, lessons, and pitfalls from 15 rounds of
+  patterns, anti-patterns, lessons, and pitfalls from 17 rounds of
   audit-driven remediation. Use when building a full-stack TypeScript
   monorepo with deterministic client data + real backend, or when onboarding
   to the embers codebase.
-version: 1.1.0
-last_updated: 2026-08-19
-project_state: 485 vitest tests (web 281 + server 103 + shared 70 + db 31), 18 local E2E, 8 CI gates, 14 prod-readiness unit tests
+version: 1.2.0
+last_updated: 2026-08-23
+project_state: 490 vitest tests (web 286 + server 103 + shared 70 + db 31), 18 local E2E, 31 opt-in live E2E (incl. 3 a11y), 8 CI gates, 14 prod-readiness unit tests
 ---
 
 # reddit-clone SKILL — Engineering Reference for Full-Stack TypeScript Monorepos
 
 > **How to use this document:** This is the single-source-of-truth reference
 > for the embers (Reddit-clone) codebase. It captures every design decision,
-> anti-pattern, debugging procedure, and lesson learned across 15 remediation
+> anti-pattern, debugging procedure, and lesson learned across 17 remediation
 > rounds. Any coding agent working on a similar tech stack (React SPA +
 > Fastify API + Drizzle/SQLite + Zod + JWT auth) should read this before
 > writing code.
@@ -88,7 +88,7 @@ project_state: 485 vitest tests (web 281 + server 103 + shared 70 + db 31), 18 l
 | Validation | zod | 3.25.76 | All API boundaries, `*ResponseSchema` naming |
 | Logging | pino | 9.14.0 | Structured JSON, redacted secrets |
 | Test Runner | vitest | 2.1.9 | Per-workspace configs, `globals: true` |
-| E2E | Playwright | 1.62.1 | 5 config variants (local/live/repro/local-prod) |
+| E2E | Playwright | 1.62.1 | 4 config files (default/live/local-prod/repro) |
 | Linter | ESLint | 9.39.5 | Flat config, `no-explicit-any: error` |
 | CI | GitHub Actions | — | gitleaks → test → build → e2e |
 
@@ -439,7 +439,7 @@ The backend mirrors the client's data using:
 ### AP-8: Committing `.env` files to git (Critical)
 - **Symptom:** JWT secrets leak in git history
 - **Root cause:** `.env` was tracked before `.gitignore` was added
-- **Fix:** `git rm --cached .env` + add to `.gitignore` + **rotate all leaked secrets** + add `test:no-secrets` CI gate. (Round 9, R9.1 incident) **Bounded exception:** `skills/` is intentionally tracked (13,896 files) despite `.gitignore:skills/` — verifier `scripts/verify-gitignore-enforced.sh:12-20` excludes `^skills/` so the gate still passes; do not `git rm -r --cached skills/`.
+- **Fix:** `git rm --cached .env` + add to `.gitignore` + **rotate all leaked secrets** + add `test:no-secrets` CI gate. (Round 9, R9.1 incident) **Bounded exception:** `skills/` is intentionally tracked (14,018 files as of Round 17 — the operator re-added them via commit `40f3690` after Round 12's untrack) despite `.gitignore:skills/` — verifier `scripts/verify-gitignore-enforced.sh:12-20` excludes `^skills/` so the gate still passes; do not `git rm -r --cached skills/`.
 
 ### AP-9: Leaving stale `allowScripts` entries (Low)
 - **Symptom:** `package.json` `allowScripts` lists `better-sqlite3@11.10.0` but the actual dep is `13.0.3`
@@ -516,7 +516,7 @@ The backend mirrors the client's data using:
 ```bash
 npm run lint                    # 0 errors, 0 warnings
 npm run typecheck               # all 4 workspaces clean (pretypecheck builds shared+db first)
-npm test --workspaces --if-present  # 485 vitest tests pass
+npm test --workspaces --if-present  # 490 vitest tests pass
 npm run test:plan-alignment     # REMEDIATION_PLAN.md has no forbidden tokens
 npm run test:build              # dist/index.html is a valid production build (no Vite dev modules)
 npm run test:no-secrets         # no .env / env.bak tracked
@@ -556,13 +556,13 @@ npm run test:e2e                # 18 local Playwright tests pass (9 smoke + 9 au
 - **How to avoid:** Run a Mode-C audit (review existing code without fixing) before every major release. Validate every documentation claim against the actual source file at the exact line number.
 
 ### Lesson 2: TDD prevents regression
-- **What happened:** Every code change in Rounds 11–13 followed RED → GREEN → REFACTOR. The failing test was written BEFORE the implementation. Zero regressions across 485 tests.
+- **What happened:** Every code change in Rounds 11–13 followed RED → GREEN → REFACTOR. The failing test was written BEFORE the implementation. Zero regressions across 490 tests.
 - **Why it mattered:** When the migration `0001_add_performance_indexes.sql` was first written without `--> statement-breakpoint`, the test caught it immediately (RED). When the schema rename in Round 12 was applied, the test suite confirmed zero downstream breakage in minutes.
 - **How to avoid:** Never write implementation without a failing test first. Even for "trivial" changes like a rename — the test verifies the blast radius.
 
 ### Lesson 3: Pure functions are testable functions
 - **What happened:** The Zustand selectors in `apps/web/src/store/selectors.ts` were extracted from ad-hoc `useAppStore` call sites into pure functions that take plain state slices as input. This made them unit-testable without mocking zustand.
-- **Why it mattered:** 271 web tests (including selector tests) run in ~3 seconds with zero mocking infrastructure.
+- **Why it mattered:** 286 web tests (including selector tests) run in ~18 seconds with zero mocking infrastructure.
 - **How to avoid:** If a function can be pure (no framework imports, no side effects), make it pure. Extract it into its own file with a co-located test.
 
 ### Lesson 4: Type-only imports are erased at compile time
@@ -596,7 +596,7 @@ npm run test:e2e                # 18 local Playwright tests pass (9 smoke + 9 au
 - **How to avoid:** Always use `--> statement-breakpoint` between statements in Drizzle migration SQL files. See the existing `0000_greedy_major_mapleleaf.sql` for the correct pattern.
 
 ### Lesson 10: Documentation is a living artifact
-- **What happened:** Across 15 rounds, the docs (AGENTS.md, CLAUDE.md, README.md, docs/Project-Architecture-Document.md) were updated every single time code changed — test counts, file trees, commands, architecture notes.
+- **What happened:** Across 17 rounds, the docs (AGENTS.md, CLAUDE.md, README.md, docs/Project-Architecture-Document.md) were updated every single time code changed — test counts, file trees, commands, architecture notes.
 - **Why it mattered:** The `docs/ALIGNMENT_REVIEW.md` audit found only 6 minor doc-precision issues out of 24 verification areas. The docs are exceptionally well-aligned because they're treated as code.
 - **How to avoid:** After every code change, update the docs in the same commit. Test counts, file paths, commands, and architecture descriptions must match the code. Run `npm run test:plan-alignment` as a CI gate.
 
@@ -611,9 +611,14 @@ npm run test:e2e                # 18 local Playwright tests pass (9 smoke + 9 au
 - **How to avoid:** Any client-side `fetch` call should be wrapped in a normalizer that produces a domain-specific error type. Never let raw `TypeError` from `fetch` reach the UI layer.
 
 ### Lesson 13: Strict gates vs informational audits
-- **What happened:** Round 8 added `e2e/live.spec.ts` and `e2e/live_extended.spec.ts` to document the LIVE-CRIT-2/3/4 deployment gaps. The tests intentionally did NOT fail — they `console.log`'d the gaps so CI stayed green. As of Round 15 (2026-08-19) the gaps were STILL present, and there was still no gate that failed. Round 15 F3 added `scripts/verify-prod-readiness.mjs` as a separate strict gate (exits 1 on failure) that operators opt into via `npm run test:prod-readiness`.
+- **What happened:** Round 8 added `e2e/live.spec.ts` (and Round 10 added `e2e/live_extended.spec.ts`) to document the LIVE-CRIT-2/3/4 deployment gaps. The tests intentionally did NOT fail — they `console.log`'d the gaps so CI stayed green. As of Round 15 (2026-08-19) the gaps were STILL present, and there was still no gate that failed. Round 15 F3 added `scripts/verify-prod-readiness.mjs` as a separate strict gate (exits 1 on failure) that operators opt into via `npm run test:prod-readiness`.
 - **Why it mattered:** Informational audits document gaps; strict gates enforce them. Mixing the two creates ambiguity — operators don't know whether a green CI means "all good" or "all known gaps are documented but still present".
 - **How to avoid:** Keep informational audits (console.log) and strict gates (exit 1) as separate scripts with separate npm commands. Operators opt into strict gates when they're ready to block releases on the gaps.
+
+### Lesson 14: Friendly fallbacks for non-JSON error bodies
+- **What happened:** Round 15 F2 normalized `TypeError("Failed to fetch")` — but the 2026-08-23 live re-audit (Round 17) found the sibling case: when the SPA is deployed on an origin without the API behind it, a static host answers `POST /api/auth/login` with an **empty-body 404**. `parseErrorBody` returned `{}` and the fallback `errorBody.error?.message ?? \`HTTP ${res.status}\`` surfaced a raw **"HTTP 404"** string in the login/register `role="alert"` divs. The fix: `unexpectedResponseMessage(status)` returns "The server returned an unexpected response (HTTP 404). Please try again later." — applied at all three ApiError construction sites (standard, 401-refresh-fail, retry-fail).
+- **Why it mattered:** "HTTP 404" is meaningless to a non-engineer and looks like a crash. The server's structured message still wins whenever the backend IS reachable, so real errors ("Wrong username or password") are unaffected.
+- **How to avoid:** Treat EVERY fallback message a user might see as UX copy, not as a debug string. When you add an error-path fallback, test what it looks like with (a) a structured server error, (b) a non-JSON body, and (c) an empty body.
 
 ---
 
@@ -1164,6 +1169,7 @@ export interface Env {
 | 14 | 2026-08-18 | Knowledge distillation — distilled 13 rounds into reddit-clone_SKILL.md | 467 | No code changes; 21-section SKILL.md created |
 | 15 | 2026-08-19 | Live-audit-driven codebase + doc remediation (6 findings) | 473 vitest + 14 `node --test` | F1 (LoginPage `state.from`), F2 (NETWORK_ERROR), F3 (prod-readiness gate), F4 (PAD reconciliation), F5 (worklog backfill), F6 (Sentry annotation) |
 | 16 | 2026-08-19 | Live-E2E + production-origin remediations (9 items) | 485 vitest + 14 `node --test` | R15.1 same-origin + R15.2 STATIC_DIR + R15.3 CSP unsafe-inline + R15.4 LoginPage state.from + R15.5 register link + R15.6 favicon + R15.7 unified start/Docker + R15.8 _headers + R15.9 doc alignment |
+| 17 | 2026-08-23 | Live-re-audit + client UX fix + doc reconciliation (6 findings) | 490 vitest + 14 `node --test` | F1 (`unexpectedResponseMessage` friendly fallback, +5 tests), F2 (live a11y spec, 3 tests, plan 5.8 WCAG audit PASS), F3 (Round 16 worklog backfill), F4 (doc reconciliation incl. PAD §8 + `test:e2e:live` count fix), F5 (tick plan 5.8 + OWASP audit PASS), F6 (full verification ledger) |
 
 ### Audit Reports
 
@@ -1178,6 +1184,7 @@ export interface Env {
 | `docs/session_12.md` | Mode-C alignment audit + R11 re-validation | 6 findings (all remediated in R12) |
 | `docs/session_13.md` | Round 12 + 13 worklog | Accurate, faithful to codebase |
 | `docs/session_14.md` | Review of session_13.md | 5 discrepancies (all post-doc, none are doc errors) |
+| `docs/audit_report_5.md`–`audit_report_8.md` | Round 16 + post-R16 audits (docs, live E2E, SKILL.md, skills additions) | Findings remediated in R16 + R17 |
 
 ### Skills Referenced (from `skills/skills-catalog.md`)
 

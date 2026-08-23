@@ -3,7 +3,7 @@
 **Classification:** Internal Engineering Reference
 **Status:** DEFINITIVE, PRODUCTION-LOCKED BLUEPRINT
 **Companion Documents:** `AGENTS.md` (deep codebase reference), `CLAUDE.md` (daily implementation guide)
-**Last Updated:** 2026-08-19 (Round 16 — live-E2E + production-origin remediations: same-origin API default, Fastify `STATIC_DIR` SPA serving, LoginPage `state.from`, unified production start; test count 467 → 485)
+**Last Updated:** 2026-08-23 (Round 17 — live-re-audit + client UX fix + doc reconciliation: `unexpectedResponseMessage` friendly fallback, live a11y E2E spec, PAD §8 deployment story updated for the unified-origin era; test count 485 → 490)
 **Audience:** Senior Engineers, Tech Leads, DevOps, and Onboarding Engineers
 **Rule:** Every architectural decision in this document traces to a specific rationale.
            Nothing is here "because it's popular."
@@ -24,6 +24,7 @@
 10. [Known Issues & Outstanding Tasks](#10-known-issues--outstanding-tasks)
 11. [Key Files Reference](#11-key-files-reference)
 12. [Glossary](#12-glossary)
+13. [Part 2 — Enterprise Backend Layer](#13-part-2--enterprise-backend-layer)
 
 ---
 
@@ -98,7 +99,7 @@ for E2E smoke tests (added in Round 3).
 - **Context:** The app needs lightweight global state (votes, saves, theme, toasts) with localStorage persistence and minimal boilerplate.
 - **Decision:** Zustand with the `persist` middleware. Persisted to `localStorage` key `reddit-clone-state`. `partialize` whitelists exactly 8 fields; `toasts` is deliberately excluded.
 - **Rationale:** Zustand is 1/3 the boilerplate of Redux, has no provider wrapping, and the `persist` middleware handles hydration automatically. The overlay pattern maps naturally to zustand slices.
-- **Consequences:** (+) Minimal API surface. (+) No Provider component. (−) No built-in devtools (Redux DevTools). (−) No `version`/`migrate` — changed state shapes hydrate stale data.
+- **Consequences:** (+) Minimal API surface. (+) No Provider component. (+) `schemaVersion: 1` + custom `merge`/`migrate` in `store.ts` handle persisted-state shape changes (see §4.2). (−) No built-in devtools (Redux DevTools).
 - **Alternatives Rejected:** Redux Toolkit (overkill for this scale). React Context + useReducer (prop drilling, no persistence). Jotai (unnecessary atom complexity).
 
 ---
@@ -543,7 +544,7 @@ Dark mode: Custom variant `@custom-variant dark (&:where(.dark, .dark *));` — 
 | Linter | **ESLint 9 flat config** (`eslint.config.mjs` at repo root, added Round 4 — 0 errors, 0 warnings) |
 | Coverage | **`@vitest/coverage-v8`** in `@embers/server` (added Round 5 — informational, no CI gate yet) |
 | Typechecker | `npm run typecheck` (alias for `tsc --noEmit` across all 4 workspaces) |
-| Total tests | **485 vitest** (web=281, server=103, shared=70, db=31) + **18 Playwright E2E** (9 smoke + 9 auth lifecycle) |
+| Total tests | **490 vitest** (web=286, server=103, shared=70, db=31) + **18 Playwright E2E** (9 smoke + 9 auth lifecycle) + 31 opt-in live E2E (12 audit + 16 extended + 3 a11y, Round 17) |
 
 ### 7.2 Test layout
 
@@ -563,7 +564,7 @@ src/
 │   ├── selectors.test.ts    # getVisibleScore, isPostSaved, getUnreadNotificationCount, etc.
 │   └── themeBootstrap.test.ts # applyPersistedTheme
 ├── lib/
-│   └── api.test.ts          # foundational fetch client (Round 5) + 401 refresh-and-retry (Round 6) + register displayName (Round 7)
+│   └── api.test.ts          # foundational fetch client (Round 5) + 401 refresh-and-retry (Round 6) + register displayName (Round 7) + NETWORK_ERROR (Round 15) + same-origin/credentials (Round 16) + friendly fallback (Round 17) — 44 tests
 ├── auth/
 │   ├── AuthProvider.test.tsx # useAuth() context + login/logout + refresh wiring (Round 6 B18)
 │   └── RequireAuth.test.tsx # route guard redirect + state preservation (Round 7 B18)
@@ -573,8 +574,10 @@ src/
 ├── components/layout/
 │   └── Navbar.test.tsx      # auth-aware navbar: anonymous vs authenticated + logout (Round 7 B18)
 ├── pages/
-│   ├── LoginPage.test.tsx   # /login form submit, loading, error, navigation, a11y (Round 6 B18)
-│   └── RegisterPage.test.tsx # /register form submit, validation, login-after-register (Round 7 B18)
+│   ├── LoginPage.test.tsx   # /login form submit, loading, error, navigation, a11y, state.from redirect (Round 6 B18 + Round 15 F1) — 13 tests
+│   ├── RegisterPage.test.tsx # /register form submit, validation, login-after-register (Round 7 B18 + Round 10) — 12 tests
+│   ├── PostPage.test.tsx    # post detail crash regression (BUG-R10-2) — 3 tests (Round 10)
+│   └── NotFoundPage.test.tsx # 404 text + rendering — 4 tests (Round 10)
 └── test/
     ├── setup.ts             # jest-dom matchers + IntersectionObserver/matchMedia stubs
     └── utils.tsx            # renderWithRouter helper
@@ -622,17 +625,18 @@ See `docs/MANUAL_QA.md` for the full manual QA matrix covering feed, voting, pos
 
 ```bash
 npm install        # Install dependencies
-npm run build      # → dist/index.html (single file, ~528 KB)
-npm run preview    # Serve dist/ for verification
+npm run build      # → apps/web/dist/index.html (single file, ~539 KB)
 ```
 
-**Output:** `dist/index.html` — fully self-contained JS/CSS inlined. External deps: Google Fonts, `public/images/*.jpg` (referenced as `${import.meta.env.BASE_URL}images/...` so the build works under subpath hosting).
+**Output:** `apps/web/dist/index.html` — fully self-contained JS/CSS inlined. External deps: Google Fonts, `public/images/*.jpg` (referenced as `${import.meta.env.BASE_URL}images/...` so the build works under subpath hosting). The build also emits `apps/web/dist/_headers` (Cloudflare-style security headers for static-host deployments, Round 16).
+
+**Unified-origin serving (Round 16):** when `STATIC_DIR` is set, the Fastify server serves the SPA itself — one process owns `/`, `/api/*`, `/health`, and the Helmet headers. Use `./start_production.sh` (builds + starts Fastify on port 5000 with `STATIC_DIR=apps/web/dist`) or `docker compose up` (Dockerfile copies `apps/web/dist` and sets `STATIC_DIR=/app/apps/web/dist`).
 
 ### 8.2 Environment Variables
 
-**Client (`apps/web`):** Reads no environment variables at runtime. `import.meta.env.BASE_URL` is the only Vite env reference — used by `src/data/images.ts` for asset paths. `import.meta.env.VITE_API_URL` is used by `lib/api.ts` to configure the backend base URL (defaults to `http://localhost:4000`).
+**Client (`apps/web`):** Reads no environment variables at runtime. `import.meta.env.BASE_URL` is the only Vite env reference — used by `src/data/images.ts` for asset paths. `import.meta.env.VITE_API_URL` optionally overrides the API base URL in `lib/api.ts`; otherwise `resolveApiBaseUrl()` (Round 16) returns **same-origin (`""`) in production builds** and `http://localhost:4000` in dev. All fetches send `credentials: "include"` so the HttpOnly refresh cookie is forwarded.
 
-**Server (`apps/server`):** All config via `loadEnv()` (zod-validated). Required in production: `JWT_ACCESS_SECRET` (≥32 chars), `JWT_REFRESH_SECRET` (≥32 chars), `DATABASE_URL`, `CORS_ORIGIN`. Optional: `PORT` (default 4000), `HOST` (default 0.0.0.0), `LOG_LEVEL`, `RATE_LIMIT_MAX` (default 100), `AUTH_RATE_LIMIT_MAX` (default 5), `COOKIE_DOMAIN`. Tests inject overrides via `loadEnv({ ... })` — never touches `process.env`.
+**Server (`apps/server`):** All config via `loadEnv()` (zod-validated). Required in production: `JWT_ACCESS_SECRET` (≥32 chars), `JWT_REFRESH_SECRET` (≥32 chars), `DATABASE_URL`, `CORS_ORIGIN`. Optional: `PORT` (default 4000), `HOST` (default 0.0.0.0), `LOG_LEVEL`, `RATE_LIMIT_MAX` (default 100), `AUTH_RATE_LIMIT_MAX` (default 5), `COOKIE_DOMAIN`, `STATIC_DIR` (Round 16 — when set, Fastify serves that directory as the SPA; CSP then allows `'unsafe-inline'` scripts for the single-file bundle). Tests inject overrides via `loadEnv({ ... })` — never touches `process.env`.
 
 ### 8.3 Build Constraints
 
@@ -648,9 +652,10 @@ npm run preview    # Serve dist/ for verification
 
 | Target | Works? | Notes |
 |---|---|---|
-| Static file server (`python -m http.server`) | ✅ | Serve `dist/` from web root |
-| GitHub Pages | ✅ | Push `dist/` to `gh-pages` branch |
-| Netlify / Vercel (static) | ✅ | No redirects needed (HashRouter) |
+| Fastify unified origin (`STATIC_DIR`) | ✅ | **Recommended production path** (Round 16): `./start_production.sh` or Docker — one process serves SPA + API + health + Helmet headers |
+| Static file server (`python -m http.server`) | ✅ | SPA renders, but the API is unreachable — login/register will surface a friendly "unexpected response" error (Round 17). Not recommended as the public origin |
+| GitHub Pages | ✅ | Push `dist/` to `gh-pages` branch (API unreachable — see above) |
+| Netlify / Vercel (static) | ✅ | No redirects needed (HashRouter); deploy `_headers` for security headers |
 | `file://` protocol | ❌ | Breaks Google Fonts + images |
 | S3 / GCS / R2 | ✅ | Upload `dist/` contents |
 
@@ -790,18 +795,18 @@ The following previously-open issues are now resolved (see `docs/REMEDIATION_PLA
 | `src/components/notifications/NotificationsPanel.tsx` | Notification list with All/Unread tabs |
 | `src/pages/HomePage.tsx` | Feed with scope (home/popular/all/explore) |
 | `src/pages/PostPage.tsx` | Post detail + comment tree (500ms simulated load) |
-| `src/lib/api.ts` | Foundational fetch-based API client for the Fastify backend (Round 5) — basis for deferred B17–B22 frontend integration. Extended in Round 6 with `tryRefreshOn401` + `onTokenRefresh` for 401 refresh-and-retry. |
-| `src/lib/api.test.ts` | 32 tests for the API client: constructor defaults, every endpoint, auth header, cursor encoding, 4xx/5xx error mapping, 204 handling (22 original) + 401 refresh-and-retry path (9 new, Round 6) + register displayName (1 new, Round 7). |
+| `src/lib/api.ts` | Foundational fetch-based API client for the Fastify backend (Round 5). Wired into `AuthProvider` since Round 6 (`tryRefreshOn401` + `onTokenRefresh` for 401 refresh-and-retry); same-origin production default + `credentials: "include"` (Round 16); `NETWORK_ERROR` normalization (Round 15) + `unexpectedResponseMessage` friendly fallback (Round 17). |
+| `src/lib/api.test.ts` | 44 tests for the API client: constructor defaults, `resolveApiBaseUrl` (Round 16), every endpoint, auth header, `credentials: include`, cursor encoding, 4xx/5xx error mapping incl. the `unexpectedResponseMessage` friendly fallback (Round 17), 204 handling, and the 401 refresh-and-retry path (Round 6). |
 | `src/auth/AuthProvider.tsx` | React context + `useAuth()` hook holding the access token in a `useRef`. Exposes `{ user, status, error, login, register, logout }`. Wires `tryRefreshOn401: true` on the api client. (Round 6, B18; register method added Round 7) |
 | `src/auth/AuthProvider.test.tsx` | 20 TDD tests for AuthProvider — initial state, login flow, logout flow, refresh-path wiring. (Round 6, B18) |
 | `src/auth/RequireAuth.tsx` | Route guard. Anonymous → `<Navigate to="/login" state={{ from: location.pathname }} replace />`. Authenticated → children. Loading → null. (Round 7, B18) |
 | `src/auth/RequireAuth.test.tsx` | 5 TDD tests for RequireAuth — redirect, state preservation, authenticated rendering. (Round 7, B18) |
-| `src/pages/LoginPage.tsx` | Real `/login` form — username + password inputs, submit calls `useAuth().login`, navigates to `/` on success, error alert with `role="alert"`. WCAG 2.2 AA: labelled inputs, `type=password`, `aria-busy`. (Round 6, B18) |
-| `src/pages/LoginPage.test.tsx` | 10 TDD tests for LoginPage — form rendering, submit, loading, error, navigation, accessibility. (Round 6, B18) |
-| `src/pages/RegisterPage.tsx` | Real `/register` form — username + password + confirm-password + optional display-name. Client-side validation. On submit: `auth.register()` → `auth.login()` → navigate `/`. (Round 7, B18) |
-| `src/pages/RegisterPage.test.tsx` | 11 TDD tests for RegisterPage — form rendering, submit flow, validation, loading, navigation, accessibility. (Round 7, B18) |
-| `src/components/layout/Navbar.tsx` | Auth-aware navbar. Replaced hardcoded `CURRENT_USER` with `useAuth()`. Anonymous: "Log in" + "Sign up" links. Authenticated: avatar + username + karma + real "Log out". (Round 7, B18) |
-| `src/components/layout/Navbar.test.tsx` | 8 TDD tests for auth-aware Navbar — anonymous + authenticated states, logout flow. (Round 7, B18) |
+| `src/pages/LoginPage.tsx` | Real `/login` form — username + password inputs, submit calls `useAuth().login`, redirects to sanitized `state.from` on success (Round 15 F1 — open-redirect guard), error alert with `role="alert"`. WCAG 2.2 AA: labelled inputs, `type=password`, `aria-busy`. Links to `/register` (Round 16). (Round 6, B18) |
+| `src/pages/LoginPage.test.tsx` | 13 TDD tests for LoginPage — form rendering, submit, loading, error, navigation, accessibility, `state.from` redirect-back + open-redirect guard. (Round 6, B18; +3 Round 15) |
+| `src/pages/RegisterPage.tsx` | Real `/register` form — username + password + confirm-password + optional display-name. Client-side validation (submit disabled on mismatch — Round 10). On submit: `auth.register()` → `auth.login()` → navigate `/`. (Round 7, B18) |
+| `src/pages/RegisterPage.test.tsx` | 12 TDD tests for RegisterPage — form rendering, submit flow, validation, loading, navigation, accessibility. (Round 7, B18; +1 Round 10) |
+| `src/components/layout/Navbar.tsx` | Auth-aware navbar. Replaced hardcoded `CURRENT_USER` with `useAuth()`. Anonymous: "Log in" + "Sign up" links. Authenticated: avatar + username + karma + real "Log out". `min-w-0` on the SearchBar wrapper prevents mobile overflow (Round 10). (Round 7, B18) |
+| `src/components/layout/Navbar.test.tsx` | 9 TDD tests for auth-aware Navbar — anonymous + authenticated states, logout flow. (Round 7, B18; +1 Round 10) |
 | `e2e/auth.spec.ts` | 9 E2E auth lifecycle tests — register → login → access protected → logout → refresh revoked; 409/401/422 error paths; refresh rotation. (Round 7, B18) |
 | `vite.config.ts` | Vite + React + Tailwind + singlefile |
 | `tsconfig.json` | Strict TypeScript config |
@@ -875,7 +880,7 @@ apply to `apps/server` and the `packages/{shared,db}` workspaces.
 │  │ Argon2id + JWT   │  │ CRUD + cursor pg │  │ CRUD       │  │
 │  └──────────────────┘  └──────────────────┘  └────────────┘  │
 │  ┌──────────────────┐  ┌──────────────────┐  ┌────────────┐  │
-│  │ /api/votes/:id   │  │ /api/comments/*  │  │ /api/search│  │
+│  │ /api/votes/:tId  │  │ /posts/:id/cmnts │  │ /api/search│  │
 │  │ atomic tx        │  │ tree + notif.    │  │ FTS5 BM25  │  │
 │  └──────────────────┘  └──────────────────┘  └────────────┘  │
 └──────────────────────────────────────────────────────────────┘
@@ -893,26 +898,31 @@ apply to `apps/server` and the `packages/{shared,db}` workspaces.
 └──────────────────────────────────────────────────────────────┘
 ```
 
-### 13.3 Backend Test Coverage (95 tests)
+### 13.3 Backend Test Coverage (103 tests)
 
 | Suite | Tests | Coverage |
 |---|---|---|
-| `config.test.ts` | 8 | Env loader (dev defaults, prod-required vars) |
+| `config.test.ts` | 9 | Env loader (dev defaults, prod-required vars, `STATIC_DIR` optional — Round 16) |
 | `routes/health.test.ts` | 6 | /health shape, requestId header, 404 envelope, 500 stack suppression, CORS preflight |
 | `auth/password.test.ts` | 4 | Argon2id hash + verify round-trip |
 | `auth/jwt.test.ts` | 7 | Access/refresh token sign/verify, expiry, wrong-secret rejection |
 | `routes/auth.test.ts` | 14 | Register/login/refresh/logout + 401/409/422 paths |
 | `routes/api.test.ts` | 46 | Posts (CRUD + author enforcement), communities, votes (toggle/flip/zero), comments (tree + notifications), search (FTS5), notifications |
-| `routes/hardening.test.ts` | 7 | Helmet CSP, X-Frame-Options, etc.; auth route rate limit (5/min → 429) |
+| `routes/hardening.test.ts` | 8 | Helmet CSP, X-Frame-Options, etc.; auth route rate limit (5/min → 429); CSP `'unsafe-inline'` when `STATIC_DIR` set (Round 16) |
 | `routes/voteConcurrency.test.ts` | 3 | 100 concurrent upvotes → +100; same-user 100 votes → 0 net (toggle); concurrent flip integrity |
+| `routes/static.test.ts` | 6 | Optional SPA static serving via `STATIC_DIR`: `/` 200 HTML with dir, 404 JSON without dir, `/api/*` + `/health` unaffected (Round 16) |
 
 ### 13.4 Shared Package Schemas (70 tests)
 
 `packages/shared/src/` defines Zod schemas for every entity and API
-endpoint. These are the runtime contract — Fastify's zod-validator
-plugin uses them directly so the TS types and runtime validation
-cannot drift. Branded ID types (`UserId`, `PostId`, etc.) prevent
-accidental cross-assignment at compile time, erased at runtime.
+endpoint. These are the runtime contract — every Fastify route
+manually invokes `Schema.safeParse()` on request bodies and serializes
+responses against the shared `*ResponseSchema`s, so the TS types and
+runtime validation cannot drift (drift is additionally guarded at
+compile time by the `AssertExact` type assertions in
+`apps/web/src/lib/api.ts`, Round 13). Branded ID types (`UserId`,
+`PostId`, etc.) prevent accidental cross-assignment at compile time,
+erased at runtime.
 
 **Naming convention (Round 12, F5):** All response-body schemas use the
 `*ResponseSchema` convention (`loginResponseSchema`,
@@ -973,7 +983,7 @@ curl -X POST http://localhost:4000/api/auth/login \
 
 ✅ B0 Monorepo init — `npm install` at root works; `npm test --workspaces`
    runs all 4 workspace test suites.
-✅ B1 Shared types — `@embers/shared` builds to `dist/`; 61 schema tests green.
+✅ B1 Shared types — `@embers/shared` builds to `dist/`; 70 schema tests green.
 ✅ B2 Backend scaffold — `buildApp()` returns FastifyInstance; `/health`
    returns 200 with `{ status, timestamp, uptime }`.
 ✅ B3 DB scaffold — `openDb()` applies WAL pragma; verified by

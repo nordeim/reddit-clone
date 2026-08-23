@@ -223,12 +223,13 @@
 >
 > Round 14 (2026-08-18) was a **knowledge distillation** round. No code
 > changes — instead, the entire codebase was audited and all patterns,
-> anti-patterns, lessons, and pitfalls from 16 rounds of remediation
-> were distilled into a comprehensive `reddit-clone_SKILL.md` (21
-> sections, ~800 lines) at the repo root. The skill captures: project
-> identity, tech stack, bootstrapping, design system, component
+> anti-patterns, lessons, and pitfalls from the 13 rounds of remediation
+> to that date were distilled into a comprehensive `reddit-clone_SKILL.md`
+> (21 numbered sections, 1,195+ lines) at the repo root. The skill captures:
+> project identity, tech stack, bootstrapping, design system, component
 > architecture, hooks, data layer, accessibility, 14 anti-patterns,
-> 8 debugging scenarios, 11-step pre-ship checklist, 10 lessons, 14
+> 8 debugging scenarios, 11-step pre-ship checklist, 14 lessons (10 at
+> creation; 11–13 added in Round 15, 14 added in Round 17), 14
 > pitfalls, 14 best practices, 8 coding patterns, 7 coding anti-patterns,
 > monorepo/build config, DB schema, security architecture, TS interfaces,
 > and a full round-history audit trail. Any future agent building a
@@ -308,6 +309,29 @@
 > no longer start Python http.server. B17 / B19–B22 / Sentry remain
 > deferred. Test count: 473 → 485 (web 277→281, server 95→103). See
 > `docs/REMEDIATION_PLAN_ROUND_16.md`.
+>
+> Round 17 (2026-08-23) was a **live-re-audit + client UX fix + doc
+> reconciliation** round. The operator had redeployed the live site with
+> the Round 15/16 client fixes (live bundle byte-count matches a fresh
+> `npm run build` of `main`; login now POSTs same-origin), but the public
+> origin is a **static host with SPA fallback** — `GET /api/*` + `/health`
+> return 200 `text/html` (the SPA shell) and `POST /api/auth/login`
+> returns an empty 404; all 5 security headers still absent
+> (LIVE-CRIT-2/3/4 persist with changed symptoms). Live-verified UX bug:
+> login/register surfaced a raw **"HTTP 404"** error message when the API
+> error body is not the structured JSON envelope. Round 17: (1)
+> `unexpectedResponseMessage(status)` friendly fallback in `api.ts`
+> (server's structured message always wins; +5 RED→GREEN tests);
+> (2) new permanent opt-in `e2e/live_a11y_r17.spec.ts` (3 WCAG 2.2 AA
+> keyboard/a11y tests) executing plan item 5.8's accessibility audit —
+> PASS; (3) OWASP Top 10 code-level audit — PASS (no findings);
+> (4) ticked plan item 5.8 with audit evidence; (5) backfilled the
+> missing Round 16 worklog entry; (6) full doc reconciliation (stale
+> per-file test counts, Round 5/6/7 deep-dive sections, PAD §8
+> deployment story, `test:e2e:live` undercount — it runs 28+ tests, not
+> 12). B17 / B19–B22 / Sentry remain deferred (backend still not the
+> public origin). Test count: 485 → 490 (web 281→286). Live E2E:
+> 30 passed, 1 skipped. See `docs/REMEDIATION_PLAN_ROUND_17.md`.
 
 ---
 
@@ -325,7 +349,7 @@
 | Typecheck (all) | `npm run typecheck` | Same topological order. R8.1: a `pretypecheck` hook builds `@embers/shared` + `@embers/db` first, so this works on a fresh clone. |
 | Test (all) | `npm test` | Uses `--workspaces` — **do NOT run `vitest run` from root** (it won't discover workspace configs) |
 | E2E (local API) | `npm run test:e2e` | Playwright smoke + auth lifecycle (18 tests). Bootstraps a fresh seeded DB. |
-| E2E (live audit) | `LIVE_BASE_URL=… npm run test:e2e:live` | R8.3: opt-in live-deployment audit (12 tests). Skipped when `LIVE_BASE_URL` is unset. |
+| E2E (live audit) | `LIVE_BASE_URL=… npm run test:e2e:live` | R8.3/R10/R17: opt-in live-deployment audit — 31 tests (12 R8 audit + 16 R10 extended + 3 R17 a11y). Self-skips when `LIVE_BASE_URL` is unset. |
 | Build verification | `npm run test:build` | R8.4: asserts the built `dist/index.html` is a production bundle (no Vite dev modules). |
 | Fresh-clone check | `npm run test:fresh-clone` | R8.1: simulates a fresh clone (removes `dist/`) and asserts `npm run typecheck` succeeds. |
 | No-secrets check | `npm run test:no-secrets` | R9.1: asserts no secret-bearing files (`.env`, `env.bak`, `*.env`) are tracked by git. |
@@ -357,7 +381,7 @@
 
 ## Build & toolchain quirks
 
-- **`vite-plugin-singlefile`** inlines all JS and CSS into a single `dist/index.html` (537 kB). Do **not** add `React.lazy`, dynamic `import()`, or manual chunks — code splitting defeats the plugin.
+- **`vite-plugin-singlefile`** inlines all JS and CSS into a single `dist/index.html` (539 kB). Do **not** add `React.lazy`, dynamic `import()`, or manual chunks — code splitting defeats the plugin.
 - The build is **not** fully self-contained. `public/images/*.jpg` are copied to `dist/images/` and referenced by absolute URL `/images/...` (`src/data/images.ts`), and `src/index.css` `@import`s Inter from Google Fonts. Serve `dist/` from a web root; opening it over `file://` breaks images and fonts.
 - **`HashRouter`**, not `BrowserRouter` (`src/App.tsx`) — deliberate, so the single-file build works on any static host with no rewrite rules. Don't switch it.
 - **Tailwind CSS v4** via the `@tailwindcss/vite` plugin. There is no `tailwind.config.js` and no PostCSS config; the theme lives in `src/index.css` under `@theme`.
@@ -447,8 +471,8 @@ The server follows a **composition root** pattern — `buildApp(opts)` in `src/a
 - `buildApp({ env, db, rawDb })` wires repositories + routes for integration tests
 - **Helmet/rate-limit** can be skipped via `skipHelmet`/`skipRateLimit` options (rate-limit auto-disabled in `NODE_ENV=test`)
 - **Auth tests** use the seeded demo user; **vote concurrency tests** seed 100 users directly via Drizzle insert (bypassing Argon2id for speed)
-- Test files: 9 in `apps/server/src/` (6 in `routes/`, 2 in `auth/`, 1 `config.test.ts` in root), 2 in `packages/db/src/`, 3 in `packages/shared/src/`, 19 in `apps/web/src/` (including `lib/api.test.ts` from Round 5, `auth/AuthProvider.test.tsx` + `auth/RequireAuth.test.tsx` from Rounds 6-7, `pages/LoginPage.test.tsx` from Round 6, `pages/RegisterPage.test.tsx` + `components/layout/Navbar.test.tsx` from Round 7, `pages/PostPage.test.tsx` + `pages/NotFoundPage.test.tsx` from Round 10), 5 E2E specs (`e2e/smoke.spec.ts` + `e2e/auth.spec.ts` + `e2e/live.spec.ts` from Round 8 + `e2e/live_extended.spec.ts` + `e2e/repro_r10_postpage.spec.ts` from Round 10)
-- **Total vitest count: 485** = 103 (server) + 70 (shared) + 31 (db) + 281 (web). The previously documented total of 428 (Round 6) was superseded when Round 7 added 25 new web tests (11 RegisterPage + 8 Navbar + 5 RequireAuth + 1 api register-displayName) to reach 453; Round 10 added 9 new web tests (3 PostPage + 4 NotFoundPage + 1 Navbar min-w-0 + 1 RegisterPage mismatch + 1 RegisterPage regression - 1 replaced alert-on-mismatch test = net +9) to reach 462; Round 11 added 4 new tests (1 db performance-index + 3 shared `registerResponseSchema`) to reach 466; Round 13 added 1 new db test (`backupDb` online backup) to reach 467. Round 8 did not add vitest tests — it silenced 6 React `act()` warnings in `LoginPage` + `RegisterPage` tests. Round 12 was a pure rename + hygiene round (no test count change). Round 15 added 6 tests (web +6: 3 LoginPage state.from + 3 api NETWORK_ERROR) to reach 473 (web 277). Round 16 added 12 tests (web +4: 3 `resolveApiBaseUrl` + 1 `credentials: include`; server +8: 1 `STATIC_DIR` config + 1 CSP-when-STATIC_DIR + 6 static-serving) to reach 485 (web 281, server 103). **E2E: 18 local** (9 smoke + 9 auth lifecycle, added in Round 7) + **12 live-audit** (Round 8, opt-in via `LIVE_BASE_URL`) + **16 extended-live-audit** (Round 10, opt-in via `LIVE_BASE_URL` against the live site OR `PROD_BASE_URL` against a local prod build) + **2 R10 regression guard** (Round 10, opt-in via `PROD_BASE_URL`). Live re-audit 2026-08-19: 27 passed, 1 skipped.
+- Test files: 9 in `apps/server/src/` (6 in `routes/`, 2 in `auth/`, 1 `config.test.ts` in root), 2 in `packages/db/src/`, 3 in `packages/shared/src/`, 19 in `apps/web/src/` (including `lib/api.test.ts` from Round 5, `auth/AuthProvider.test.tsx` + `auth/RequireAuth.test.tsx` from Rounds 6-7, `pages/LoginPage.test.tsx` from Round 6, `pages/RegisterPage.test.tsx` + `components/layout/Navbar.test.tsx` from Round 7, `pages/PostPage.test.tsx` + `pages/NotFoundPage.test.tsx` from Round 10), 6 E2E specs (`e2e/smoke.spec.ts` + `e2e/auth.spec.ts` + `e2e/live.spec.ts` from Round 8 + `e2e/live_extended.spec.ts` + `e2e/repro_r10_postpage.spec.ts` from Round 10 + `e2e/live_a11y_r17.spec.ts` from Round 17)
+- **Total vitest count: 490** = 103 (server) + 70 (shared) + 31 (db) + 286 (web). The previously documented total of 428 (Round 6) was superseded when Round 7 added 25 new web tests (11 RegisterPage + 8 Navbar + 5 RequireAuth + 1 api register-displayName) to reach 453; Round 10 added 9 new web tests (3 PostPage + 4 NotFoundPage + 1 Navbar min-w-0 + 1 RegisterPage mismatch + 1 RegisterPage regression - 1 replaced alert-on-mismatch test = net +9) to reach 462; Round 11 added 4 new tests (1 db performance-index + 3 shared `registerResponseSchema`) to reach 466; Round 13 added 1 new db test (`backupDb` online backup) to reach 467. Round 8 did not add vitest tests — it silenced 6 React `act()` warnings in `LoginPage` + `RegisterPage` tests. Round 12 was a pure rename + hygiene round (no test count change). Round 15 added 6 tests (web +6: 3 LoginPage state.from + 3 api NETWORK_ERROR) to reach 473 (web 277). Round 16 added 12 tests (web +4: 3 `resolveApiBaseUrl` + 1 `credentials: include`; server +8: 1 `STATIC_DIR` config + 1 CSP-when-STATIC_DIR + 6 static-serving) to reach 485 (web 281, server 103). Round 17 added 5 tests (web +5: `unexpectedResponseMessage` friendly fallback — R17-F1a/b/c/d/e in `api.test.ts`) to reach 490 (web 286). **E2E: 18 local** (9 smoke + 9 auth lifecycle, added in Round 7) + **12 live-audit** (Round 8, opt-in via `LIVE_BASE_URL`) + **16 extended-live-audit** (Round 10, opt-in via `LIVE_BASE_URL` against the live site OR `PROD_BASE_URL` against a local prod build) + **2 R10 regression guard** (Round 10, opt-in via `PROD_BASE_URL`) + **3 live a11y audit** (Round 17, opt-in via `LIVE_BASE_URL`). Live re-audit 2026-08-23: 30 passed, 1 skipped.
 
 ### Backend Pitfalls
 
@@ -537,26 +561,27 @@ Local ids are timestamp-based (`local-${Date.now()}` for posts, `${postId}-c${Da
 
 ## Foundational API client (Round 5 — `apps/web/src/lib/api.ts`)
 
-A typed, fetch-based client for the Fastify backend. **Not yet wired into any
-page** — it is the foundation for the deferred B17–B22 frontend integration
-(auth provider, React Query, optimistic UI, notification polling). Existing
-Zustand store, `HashRouter`, and `src/data/*` deterministic layer are
-untouched.
+A typed, fetch-based client for the Fastify backend. Originally a
+Round-5 foundation; since Round 6 it is wired into `AuthProvider` (auth
+flow, 401 refresh-and-retry) and consumed by `LoginPage` / `RegisterPage`.
+The remaining B19–B22 integration (React Query, optimistic UI,
+notification polling) is still deferred. The existing Zustand store,
+`HashRouter`, and `src/data/*` deterministic layer are untouched.
 
 | Export | Purpose |
 | --- | --- |
 | `createApiClient(options)` | Factory; returns an object with `health`, `login`, `register`, `logout`, `refresh`, `getPosts`, `getPost`, `createPost`, `vote`, `getComments`, `createComment`, `search`, `getCommunities`, `getCommunity`, `getNotifications` methods |
 | `ApiClient` | `ReturnType<typeof createApiClient>` — pass to hooks / store actions |
 | `ApiError` | Thrown on non-2xx; carries `{ status, code, message, requestId }` mirroring the server's `errorHandler` plugin |
-| `ApiClientOptions` | `{ baseUrl?, fetch?, getToken? }` — `fetch` + `getToken` are dependency-injected so the 32 unit tests run with zero network |
+| `ApiClientOptions` | `{ baseUrl?, fetch?, getToken? }` — `fetch` + `getToken` are dependency-injected so the 44 unit tests run with zero network |
 
 **Conventions:**
 - The client is **pessimistic** by design. Optimistic UI (B21) will be added at the hook layer (`useVote`, `useCreateComment`) — this file stays rollback-free.
 - `getToken` is a function (`() => string | null`), not a stored string. B18's `AuthProvider` will pass `() => authCtx.accessToken`; for now it defaults to `() => null` and the `Authorization` header is omitted.
-- `baseUrl` defaults to `import.meta.env.VITE_API_URL ?? "http://localhost:4000"`. The `import.meta.env` access is cast through `unknown` so the file typechecks outside Vite (e.g. in unit tests).
+- `baseUrl` defaults to `resolveApiBaseUrl(import.meta.env)`: an explicit `VITE_API_URL` always wins; otherwise **same-origin (`""`) in production builds** (Round 16) and `http://localhost:4000` in dev. The `import.meta.env` access is cast through `unknown` so the file typechecks outside Vite (e.g. in unit tests). All requests send `credentials: "include"` so the HttpOnly refresh cookie is forwarded.
 - All paths use `encodeURIComponent` on dynamic segments — vote targets, post IDs, community slugs, search queries.
 
-**Test coverage:** `apps/web/src/lib/api.test.ts` — 23 tests covering constructor defaults, every endpoint, auth header injection, cursor encoding, 4xx/5xx error mapping, and 204 No Content handling. Plus 9 new tests added in Round 6 (Slice 4) covering the 401 refresh-and-retry path (32 total) (see "AuthProvider & LoginPage" below).
+**Test coverage:** `apps/web/src/lib/api.test.ts` — 44 tests covering constructor defaults, `resolveApiBaseUrl` (Round 16), every endpoint, auth header injection, `credentials: "include"`, cursor encoding, 4xx/5xx error mapping (incl. the Round 17 `unexpectedResponseMessage` friendly fallback), 204 No Content handling, and the 401 refresh-and-retry path (23 from Round 5 + 9 Round 6 + 3 Round 15 + 4 Round 16 + 5 Round 17).
 
 ## AuthProvider & LoginPage (Round 6 — B18)
 
@@ -579,7 +604,7 @@ Round 6 executes Phase B18 (Auth Provider) from the Round 5 TDD breakdown. It is
 
 1. **B18 before B17.** The Round 5 plan called for B17 (build refactor: remove singlefile, switch to BrowserRouter) first. Round 6 reverses this: B18 (auth provider) can be executed under the existing `HashRouter` + single-file build because `/login` works equally well as `#/login`. This trades a small amount of architectural purity for a much smaller blast radius. B17 becomes a future round that can lean on the auth context introduced here.
 2. **The AuthProvider owns the token ref, not the api client.** The api client is built ONCE via `useMemo` with stable deps `[apiClientFactory, getToken, onTokenRefresh]`. `getToken` reads `tokenRef.current`; `onTokenRefresh` writes to it. The client never needs to be rebuilt when the token changes — it sees the live value via the closure.
-3. **Refresh-and-retry is opt-in via `tryRefreshOn401`.** Defaults to `false` so all 22 pre-Round-6 api tests (which don't set the flag) continue to assert the original behavior. The AuthProvider sets it to `true` when wiring the factory.
+3. **Refresh-and-retry is opt-in via `tryRefreshOn401`.** Defaults to `false` so all 23 pre-Round-6 api tests (which don't set the flag) continue to assert the original behavior. The AuthProvider sets it to `true` when wiring the factory.
 4. **Refresh failure propagates the ORIGINAL 401.** If `POST /api/auth/refresh` itself returns 401 (refresh token revoked) or throws (network error), the original 401 is propagated to the caller — the refresh error is intentionally swallowed. The caller (a React Query hook, in B19+) decides whether to surface a re-login prompt. The AuthProvider does NOT intercept 401s on its own.
 5. **logout() is best-effort.** Always clears client-side state regardless of whether the server-side `/api/auth/logout` call succeeds. A failed server logout must NOT leave the user stuck authenticated client-side.
 6. **`/login` renders OUTSIDE AppShell.** No sidebar, no navbar, no right panel — just a centered form. The route is added before the `<Route element={<AppShell />}>` wrapper in `App.tsx`.
@@ -633,25 +658,27 @@ Round 7 closes the gap left by Round 6: the AuthProvider existed but the UI stil
 
 1. **`/api/auth/register` returns `{ user }` only (201)** — no access token, no refresh cookie. The client MUST call `/api/auth/login` afterwards to establish a session. `RegisterPage` orchestrates this: `await auth.register(...)` → `await auth.login(...)` → `navigate("/")`.
 2. **`AuthUser` is the full server shape** (id, username, displayName, bio, karma, createdAt, colorFrom, colorTo) — mirrors `authUserSchema` from `@embers/shared`. The Navbar uses `displayName` + `karma`.
-3. **`<RequireAuth>` preserves the intended destination** via `state: { from: location.pathname }`. LoginPage can read this via `useLocation().state.from` to redirect back after successful login (not yet implemented in LoginPage — deferred to a future round).
+3. **`<RequireAuth>` preserves the intended destination** via `state: { from: location.pathname }`. LoginPage reads this via `useLocation().state.from` (validated by `safePostLoginPath` — open-redirect guard) and redirects back after successful login (implemented in Round 15 F1).
 4. **`/notifications` is the first protected route.** Other routes (/, /r/:name, /comments/:id, /u/:username, /search) remain open — they render deterministic demo data when anonymous. B19/B20 will migrate them to React Query + API calls, at which point they'll also need `<RequireAuth>`.
 
 ### What Round 7 did NOT do (deferred)
 
 - **B17 (build refactor)** — deferred again. Removing `vite-plugin-singlefile` + switching to `BrowserRouter` would break the "deploy anywhere" story (GitHub Pages, `python -m http.server`, S3 without SPA fallback). Needs explicit user confirmation. See `docs/REMEDIATION_PLAN_ROUND_7.md` §1.2 for the full rationale.
 - **B19–B22** (React Query, feeds/search wiring, optimistic UI, notification polling) — depend on B17. Deferred.
-- **LoginPage post-login redirect back to `state.from`** — the `state.from` is preserved by `<RequireAuth>` but LoginPage currently always navigates to `/`. A future round can read `location.state?.from` and redirect back.
+- ~~LoginPage post-login redirect back to `state.from`~~ — implemented in Round 15 F1 (`safePostLoginPath` open-redirect guard + 3 tests).
 - **Browser-level E2E tests of the React auth flow** — the E2E setup only starts the Fastify server, not the Vite dev server. The 9 new E2E tests verify the server-side auth contract, not the React rendering. Browser-level tests would require adding the Vite dev server to `playwright.config.ts`'s `webServer` config.
 
-## Docker (B23 — Round 3)
+## Docker (B23 — Round 3; SPA serving added in Round 16)
 
 A multi-stage `Dockerfile` at the repo root builds a production image for
-`@embers/server` only. The client SPA is not containerised (ADR-003 single-file
-build is still in force).
+the **unified origin**: the Fastify server, which also serves the built SPA
+(`apps/web/dist` is copied into the image and `STATIC_DIR=/app/apps/web/dist`
+is set) so one process owns `/`, `/api/*`, `/health`, and the Helmet headers.
+Before Round 16 the image was server-only; the SPA is now containerised.
 
 | File | Purpose |
 | --- | --- |
-| `Dockerfile` | Multi-stage Node 20 build: builder stage runs `npm ci` + `npm run build` + `npm prune --omit=dev`; runner stage copies `dist/` + production `node_modules/`. `CMD ["node", "apps/server/dist/index.js"]`. |
+| `Dockerfile` | Multi-stage Node 20 build: builder stage runs `npm ci` + `npm run build` + `npm prune --omit=dev`; runner stage copies `apps/server/dist` + `apps/web/dist` + production `node_modules/` and sets `STATIC_DIR=/app/apps/web/dist`. `CMD ["node", "apps/server/dist/index.js"]`. |
 | `.dockerignore` | Excludes `node_modules`, `**/dist`, `*.db*`, `.git`, `skills/`, `docs/`, `e2e/` from the build context. |
 | `docker-compose.yml` | Single `embers-server` service: builds from `Dockerfile`, maps port 4000, mounts `embers-data` volume for `/data/dev.db`, requires `JWT_ACCESS_SECRET` + `JWT_REFRESH_SECRET` from `.env`. |
 | `.github/workflows/ci.yml` | GitHub Actions: `test` (typecheck + vitest) → `build` (all workspaces) → `e2e` (Playwright). Runs on push + PR to `main`. |
@@ -703,7 +730,7 @@ with `NODE_ENV=test` env vars. Playwright reports are uploaded as artifacts.
 ```bash
 npm run lint        # ESLint flat config — 0 errors, 0 warnings
 npm run typecheck   # tsc --noEmit — must pass clean (pretypecheck hook builds shared+db first)
-npm test            # vitest run (all workspaces) — all 485 tests must pass (R16: was 473; web 281 + server 103 + shared 70 + db 31)
+npm test            # vitest run (all workspaces) — all 490 tests must pass (R17: was 485; web 286 + server 103 + shared 70 + db 31)
 npm run test:e2e    # playwright run — 18 tests must pass (9 smoke + 9 auth lifecycle)
 npm run test:build  # asserts dist/index.html is a production build (no Vite dev modules)
 npm run test:no-secrets  # asserts no .env / env.bak / *.env files are tracked by git
@@ -716,7 +743,7 @@ git ls-files | grep -E '(^|/)dist/' | wc -l   # must be 0 (no dist/ tracked)
 
 > **Opt-in checks (not in pre-commit):**
 > - `npm run test:fresh-clone` — simulates a fresh clone and asserts `npm run typecheck` succeeds.
-> - `LIVE_BASE_URL=https://reddit.jesspete.shop/ npm run test:e2e:live` — opt-in live-deployment audit (12 + 16 tests). Skipped when `LIVE_BASE_URL` is unset.
+> - `LIVE_BASE_URL=https://reddit.jesspete.shop/ npm run test:e2e:live` — opt-in live-deployment audit (12 R8 + 16 R10 + 3 R17 a11y = 31 tests). Self-skips when `LIVE_BASE_URL` is unset.
 > - `PROD_BASE_URL=http://localhost:8765/ npm run test:local-prod` — R10: runs the extended audit suite against a locally-served prod build.
 > - `PROD_BASE_URL=http://localhost:8765/ npm run test:repro` — R10: runs the React-error-#185 regression guard against a local prod build.
 > - `npm run test:prod-readiness` — R15 F3: opt-in strict gate. Probes `/health`, `/api/posts`, `/api/communities`, `/api/auth/login` + checks 5 required security headers against `PROD_BASE_URL` (default: `https://reddit.jesspete.shop/`). Exits 1 when ANY probe fails. Set `PROD_READINESS=skip` to skip in local dev / CI without a live deployment.
