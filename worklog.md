@@ -164,3 +164,51 @@ Stage Summary:
 - Gates verified green: lint (0 errors/0 warnings), typecheck (all 4 workspaces clean), test (473 vitest), test:plan-alignment (no forbidden tokens + no root PAD), test:no-secrets (clean), test:gitignore (clean), test:prod-readiness:test (14 node:test pass).
 - Live E2E still passes 27/28 (1 skip — needs backend). No regression.
 - Live deployment gaps (LIVE-CRIT-2/3/4) remain operator-side. The new test:prod-readiness gate now surfaces them clearly: exits 1 with a summary table showing 0/4 API probes OK + 5/5 missing security headers.
+
+---
+Task ID: 16-live-e2e-prod-origin
+Agent: general-purpose (live-E2E + production-origin remediation)
+Task: Round 16 — production-serving remediations. Re-audit the live site, fix the production API-client origin bug, serve the SPA from Fastify (STATIC_DIR), and align docs. (Entry backfilled in Round 17 — the worklog entry was missed when Round 16 was committed.)
+
+Work Log:
+- Re-audited https://reddit.jesspete.shop/ (27 Playwright tests passed, 1 skipped): LIVE-CRIT-1 still fixed; LIVE-CRIT-2/3/4 still broken — public origin was `python -m http.server` (GET /api/* → 404 Python HTML, POST /api/auth/login → 501, all 5 security headers absent). Login surfaced "Failed to fetch" because the production bundle defaulted to `http://localhost:4000`.
+- (R15.1) Production API client is same-origin: `resolveApiBaseUrl({ PROD: true }) === ""`; all fetches send `credentials: "include"` (+3 web tests for resolveApiBaseUrl, +1 for credentials).
+- (R15.2) Fastify optionally serves the SPA via `STATIC_DIR` (`@fastify/static`, `wildcard: false`), registered AFTER API routes: new `apps/server/src/routes/static.test.ts` (6 tests), +1 config test, +1 hardening test.
+- (R15.3) Helmet CSP allows `'unsafe-inline'` scripts ONLY when `STATIC_DIR` is set (ADR-003 tradeoff, documented).
+- (R15.4/R15.5) LoginPage redirects to sanitized `state.from` (extracted `safePostLoginPath`) and links to `/register`.
+- (R15.6) Inline data-URI favicon in `apps/web/index.html` (fixes live /favicon.ico 404 noise).
+- (R15.7) `start_production.sh` + Dockerfile serve the SPA from Fastify (no Python http.server); `docker-compose.yml` CORS default same-origin.
+- (R15.8) `apps/web/public/_headers` (Cloudflare-style) for static-only deploys.
+- (R15.9) Doc alignment: AGENTS.md, CLAUDE.md, README.md, PAD, reddit-clone_SKILL.md + `docs/REMEDIATION_PLAN_ROUND_16.md` + `docs/audit_report_5.md`.
+- Commits: `c57ab6f` (round 16 code+docs), `53b5e6b`/`904ffce` (doc refinements + audit_report_6), `a2dbc28` (SKILL.md + audit_report_7_skill), `9dccc22` (REMEDIATION_PLAN_review.md), `40f3690` (new skills + audit_report_8 + docs/README), `f59526c` (ssh-key.txt rotation), `864c9f7` (README tweak).
+- Note: Round 16's own plan (docs/REMEDIATION_PLAN_ROUND_16.md) left Phase E checkboxes unticked; the gates were re-run and verified green in Round 17 (see Round 17 entry + docs/REMEDIATION_PLAN_ROUND_17.md).
+
+Stage Summary:
+- Test count: 473 → 485 vitest (web 277→281, server 95→103) + 14 node --test.
+- Code: apps/web/src/lib/api.ts (resolveApiBaseUrl + credentials), apps/server/src/{config,app}.ts (STATIC_DIR), routes/static.test.ts, hardening.test.ts, LoginPage.tsx, index.html favicon, _headers, Dockerfile, docker-compose.yml, start_production.sh.
+- Live gaps LIVE-CRIT-2/3/4 remain operator-side until the origin is repointed at Fastify (or Docker); in-repo path is complete.
+
+---
+Task ID: 17-live-reaudit-ux-fix
+Agent: Super Z (multi-phase TDD execution)
+Task: Round 17 — live-re-audit + client UX fix + doc reconciliation. Clone repo, review AGENTS/CLAUDE/README/PAD/SKILL, validate against codebase, run browser E2E against https://reddit.jesspete.shop/, create + validate the Round 17 remediation plan, execute via TDD, update docs, commit + push.
+
+Work Log:
+- Cloned https://github.com/nordeim/reddit-clone.git to /home/z/my-project/reddit-clone (HEAD 864c9f7, main).
+- Read AGENTS.md (756 lines), CLAUDE.md (816), README.md (863), reddit-clone_SKILL.md (1195), docs/Project-Architecture-Document.md (1002), docs/REMEDIATION_PLAN.md (300), docs/REMEDIATION_PLAN_ROUND_16.md (158), skills/skills-catalog.md, skills/how-to-git-push-using-ssh-wrapper/SKILL.md. Dispatched 3 parallel doc-review agents for structure + stale-claim extraction.
+- Validated codebase: npm install; 485 vitest pass (web 281 + server 103 + shared 70 + db 31); lint clean; typecheck clean; 18 local E2E pass; all 8 gates pass (plan-alignment, no-secrets, gitignore, ci-config, prod-readiness:test 14, build 526.6 KiB). skills/ = 14,018 tracked files (docs said 13,926/13,896 — stale).
+- Ran browser-based E2E against https://reddit.jesspete.shop/ (with PLAYWRIGHT_CHROMIUM_USE_HEADLESS_NEW=1 to work around a broken cached chromium_headless_shell-1234 in this sandbox): 27 passed + 1 skipped via the existing suites. Wrote an ad-hoc probe spec (login/register/security-headers/API probes) — KEY FINDINGS: (a) the operator REDEPLOYED with the R15/16 client fixes — live bundle = 539,190 bytes = exactly a fresh main build; login POSTs same-origin; (b) the public origin is now a static host with SPA fallback: GET /api/* + /health return 200 text/html (SPA shell), POST /api/auth/login returns empty 404, all 5 security headers absent (LIVE-CRIT-2/3/4 persist, symptoms changed from Python 404/501); (c) login/register surface raw "HTTP 404" error messages (new UX bug — the api.ts fallback `HTTP ${status}`).
+- Executed plan item 5.8: OWASP Top 10 code-level audit (PASS — parameterized queries, Argon2id + JWT rotation + rate limits, no innerHTML/XSS sinks, Bearer + SameSite=Strict cookie posture, token-in-memory, gates green) + WCAG 2.2 AA browser audit (PASS — skip-link first tab stop, logical tab order, visible focus, 5/5 images with alt, H1-first headings, keyboard-operable login).
+- Authored docs/REMEDIATION_PLAN_ROUND_17.md (6 findings F1-F6 + TDD ToDo + risk register + DoD). Re-validated every finding + fix path against the codebase (only api.ts produces the "HTTP <status>" string; all consumers render err.message verbatim; no string-matching consumers outside tests).
+- Executed F1 with TDD: RED — 5 new tests in api.test.ts (R17-F1a non-JSON 404 shape, F1b HTML gateway page, F1c structured-message-wins guard, F1d retry-path fallback, F1e 401-refresh-fail fallback) + updated the 2 tests locking in the old `HTTP <status>` behavior; verified 6 fail (RED). GREEN — added exported `unexpectedResponseMessage(status)` in api.ts and applied it at all 3 ApiError construction sites (standard, 401-refresh-fail, retry-fail); 286 web tests pass.
+- Executed F2: kept e2e/live_a11y_r17.spec.ts as a permanent opt-in spec (describeLive guard on LIVE_BASE_URL, 3 tests: keyboard nav + skip-link + focus visibility, alt text + headings, login keyboard-operability); deleted the ad-hoc probe spec (findings recorded in the plan). Default `npm run test:e2e` unaffected (18 passed, 19 self-skipped). Live run: 30 passed, 1 skipped.
+- Executed F3: backfilled the missing Round 16 worklog entry (commits c57ab6f..864c9f7).
+- Executed F4/F5: full doc reconciliation — AGENTS.md (Round 17 banner; Round 5/6/7 deep-dive stale claims: "not yet wired", api test counts 32→44, same-origin default, state.from shipped, Docker unified origin; Round 14 banner counts; pre-commit + opt-in checklists; E2E spec count 5→6), CLAUDE.md (Round 17 banner; test-count breakdown 485→490; live-deployment table re-audited 2026-08-23 with new symptoms), README.md (Test Status table: web 286/490 total, live-audit row 12→31 with breakdown, +3 a11y; Round 17 subsection; known-gaps table re-audit; bundle 537→539 KB; verify-the-live-deployment probes; what-works list; Documentation Map), reddit-clone_SKILL.md (frontmatter v1.2.0/2026-08-23/490 tests; 17 rounds; 14 configs→4; skills 14,018 files; Lesson 3 286 tests; Lesson 10 17 rounds; Lesson 13 Round 10 attribution fix; NEW Lesson 14 friendly fallbacks; round-history row 17; audit-reports table extended), PAD (Last Updated R17; ToC + §13; ADR-005 consequence fixed; §7.1 490; §7.2 test tree + PostPage/NotFoundPage; §8.1 unified-origin serving; §8.2 same-origin + STATIC_DIR; §8.4 deployment targets; §11 per-file counts (api 44, LoginPage 13, RegisterPage 12, Navbar 9); §13.3 103 tests + static.test.ts row; §13.4 zod-validator claim corrected to safeParse + AssertExact; B1 70 schema tests; topology route paths), docs/REMEDIATION_PLAN.md (5.1 95→103/9 files; 5.8 ticked with audit evidence).
+- Verification ledger (all Verified): lint 0/0; typecheck clean; 490 vitest (web 286 + server 103 + shared 70 + db 31); 18 local E2E + 19 self-skipped; plan-alignment, no-secrets, gitignore, ci-config, prod-readiness:test 14/14, build gate (526.6 KiB) all PASS; live E2E 30 passed + 1 skipped.
+
+Stage Summary:
+- TDD code changes: +5 vitest (api.test.ts 39→44). Test count: 485 → 490 (web 281→286). +3 live E2E (30→31 total in the live suite).
+- Code files: apps/web/src/lib/api.ts (+unexpectedResponseMessage, 3 fallback sites), apps/web/src/lib/api.test.ts (+5 tests, 2 updated), e2e/live_a11y_r17.spec.ts (new, 3 tests).
+- Doc files: AGENTS.md, CLAUDE.md, README.md, reddit-clone_SKILL.md, docs/Project-Architecture-Document.md, docs/REMEDIATION_PLAN.md (5.8 ticked + 5.1 count), docs/REMEDIATION_PLAN_ROUND_17.md (new), worklog.md (Round 16 backfill + this entry).
+- Live deployment state (2026-08-23): R15/16 client fixes ARE deployed; LIVE-CRIT-2/3/4 persist (static host with SPA fallback; backend not the public origin; headers absent) — operator-side cutover remains the fix (./start_production.sh or docker compose with STATIC_DIR).
+- Deferred (documented): B17 (needs explicit user confirmation per ADR-003/004), B19–B22 (backend still not the public origin), Sentry (operator decision).
